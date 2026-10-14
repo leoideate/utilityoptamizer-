@@ -7,6 +7,8 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { APPROVAL_LABELS, LEAD_SOURCE_LABELS, STAGES, type StageKey, isEnergyService, stageIndex } from "@uo/shared";
 import { ActivitiesTab } from "@/components/opportunity/activities";
+import { CallButton } from "@/components/opportunity/call";
+import { TeamChatTab } from "@/components/opportunity/team-chat";
 import { useRefreshOpportunity } from "@/components/opportunity/common";
 import { DocumentsTab } from "@/components/opportunity/documents";
 import { EnergyTab } from "@/components/opportunity/energy";
@@ -98,6 +100,7 @@ function OpportunityWorkspace() {
               <Check /> Move to {nextStage.name}
             </Button>
           )}
+          <CallButton opp={opp} />
           {canActivate && (
             <Button variant="accent" onClick={() => setDialog("activate")}>
               <PartyPopper /> Activate
@@ -190,6 +193,7 @@ function OpportunityWorkspace() {
           { value: "signatures", label: "Signatures" },
           { value: "activities", label: `Tasks (${opp._count.activities})` },
           { value: "timeline", label: "Timeline" },
+          { value: "chat", label: "Team chat" },
         ]}
       >
         <TabPanel value="overview">
@@ -215,6 +219,9 @@ function OpportunityWorkspace() {
         </TabPanel>
         <TabPanel value="timeline">
           <TimelineTab opp={opp} />
+        </TabPanel>
+        <TabPanel value="chat">
+          <TeamChatTab opp={opp} />
         </TabPanel>
       </Tabs>
 

@@ -9,12 +9,24 @@ const users = {
   admin: "admin@demo.utilityoptimizer.ie",
 };
 
+/** Sessions are reused per user: logging in for every test would trip the login rate limit (10/min per IP). */
+const sessions = new Map<string, Awaited<ReturnType<import("@playwright/test").BrowserContext["cookies"]>>>();
+
 async function signIn(page: Page, email: string) {
+  const saved = sessions.get(email);
+  if (saved) {
+    await page.context().clearCookies();
+    await page.context().addCookies(saved);
+    await page.goto("/");
+    await expect(page.getByRole("searchbox", { name: "Search" })).toBeVisible();
+    return;
+  }
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("searchbox", { name: "Search" })).toBeVisible();
+  sessions.set(email, await page.context().cookies());
 }
 
 /** Fails on serious or critical WCAG 2.1 AA violations. */
@@ -147,4 +159,64 @@ test("mobile layout keeps the menu and key figures usable @mobile", async ({ pag
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(overflow).toBe(false);
   await page.screenshot({ path: "e2e-report/mobile-dashboard.png", fullPage: true });
+});
+
+test("colleagues chat in real time, with mentions in deal discussions", async ({ browser }) => {
+  const sarahCtx = await browser.newContext();
+  const seanCtx = await browser.newContext();
+  const sarah = await sarahCtx.newPage();
+  const sean = await seanCtx.newPage();
+  await signIn(sarah, users.sales);
+  await signIn(sean, users.otherSales);
+
+  // Sarah opens a direct message with Sean.
+  await sarah.goto("/chat");
+  await sarah.getByRole("button", { name: "New direct message" }).click();
+  await sarah.getByLabel("Colleague").selectOption({ label: "Sean Sales" });
+  await sarah.getByRole("button", { name: "Start conversation" }).click();
+  await expectAccessible(sarah, "chat");
+
+  // Sean has the conversation open; Sarah's message appears without a reload.
+  await sean.goto("/chat");
+  await sean.getByRole("button", { name: /Sarah Sales/ }).click();
+  const text = `Can you cover my 3pm? ${Date.now()}`;
+  await sarah.getByLabel("Message", { exact: true }).fill(text);
+  await sarah.keyboard.press("Enter");
+  await expect(sean.getByText(text)).toBeVisible({ timeout: 10_000 });
+
+  // Deal discussion: the Team chat tab on an opportunity.
+  await sarah.goto("/opportunities?view=my_open");
+  await sarah.getByRole("link", { name: "Harbour Café – dual fuel" }).click();
+  await sarah.getByRole("tab", { name: "Team chat" }).click();
+  await sarah.getByLabel("Message", { exact: true }).fill("@Mich");
+  await sarah.getByRole("option", { name: "Michael Manager" }).click();
+  const ask = `can you approve this today? ${Date.now()}`;
+  await sarah.getByLabel("Message", { exact: true }).type(ask);
+  await sarah.keyboard.press("Enter");
+  await expect(sarah.getByText(ask)).toBeVisible();
+  await expect(sarah.getByText("@Michael Manager").last()).toBeVisible();
+  await sarahCtx.close();
+  await seanCtx.close();
+});
+
+test("calling a customer without a phone system opens the dialler and logs the outcome", async ({ page }) => {
+  await signIn(page, users.sales);
+  await page.goto("/opportunities?view=my_open");
+  await page.getByRole("link", { name: "Doyle Pharmacy – electricity" }).click();
+  await page.getByRole("button", { name: "Call", exact: true }).click();
+  await expect(page.getByLabel("Number")).toContainText("+353875550199");
+  await expectAccessible(page, "call dialog");
+  // Don't actually leave the page for tel: in the test browser.
+  await page.evaluate(() => {
+    Object.defineProperty(window, "location", { value: { ...window.location, set href(_v: string) {} }, configurable: true });
+  }).catch(() => undefined);
+  await page.getByRole("button", { name: "Dial on my phone" }).click();
+  await page.getByLabel("Outcome").selectOption("answered");
+  await page.getByLabel("Length (minutes)").fill("4");
+  const note = `Sending latest bill ${Date.now()}`;
+  await page.getByLabel("Notes").fill(note);
+  await page.getByRole("button", { name: "Save to timeline" }).click();
+  await page.getByRole("tab", { name: "Timeline" }).click();
+  await expect(page.getByText(note)).toBeVisible();
+  await expect(page.getByText(/Outbound call to \+353875550199 · Answered · 4 min 0 s\./).first()).toBeVisible();
 });

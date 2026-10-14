@@ -11,6 +11,7 @@ import { REDACT_PATHS } from "./common/redact";
 import { ConfigModule } from "./config/config.module";
 import { JobsModule } from "./jobs/jobs.module";
 import { FEATURE_MODULES } from "./modules";
+import { RealtimeModule } from "./realtime/realtime";
 import { StorageModule } from "./storage/storage.module";
 
 const logLevel = process.env.LOG_LEVEL ?? "info";
@@ -49,6 +50,7 @@ function prettyTransport() {
     StorageModule,
     JobsModule,
     AuthModule,
+    RealtimeModule,
     ...FEATURE_MODULES,
   ],
   providers: [

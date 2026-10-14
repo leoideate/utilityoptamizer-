@@ -11,6 +11,8 @@ These are deliberate gaps or follow-up work. Nothing here pretends to work when 
 | Supplier / Worldpay APIs | Not built | Submission is recorded by Operations; **Send submission pack** emails the approved documents (signed links) to the supplier's or Worldpay's submissions address. `SubmissionChannel` is the extension point for vendor APIs. |
 | Accounting integration | CSV only | `GET /api/reports/commissions.csv` (formula-safe) for import into the accounting system. |
 | Inbound email and WhatsApp | Manual logging | Staff log inbound messages on the timeline (which drives the unanswered-message reminders). Outbound email (SMTP) and WhatsApp (Meta Cloud API) are sent from the CRM. |
+| Inbound calls and call recording | Not built | Outbound click-to-call only (RingCentral RingOut, or manual). Inbound calls and RingCentral call-log sync aren't imported; recording is off (it needs consent notices). |
+| Staff audio/video calls | Not built | Internal chat only. |
 | Notifications by email or push | In-app only | Bell notifications, plus reminders for tasks with a reminder time. |
 | API keys for machine clients | Not built | Session-based API for users; HMAC-signed endpoints for website leads and e-signature events. |
 | Custom pipeline stages | Rename only | The 18 stages and their rules are fixed in code; names can be changed in Administration. |
@@ -19,6 +21,8 @@ These are deliberate gaps or follow-up work. Nothing here pretends to work when 
 ## Operational notes
 
 - **Single sign-on** signs in existing users only, and doesn't sync users or roles from Entra ID or Google (no SCIM). Microsoft SSO is single-tenant by design. SSO users keep a CRM password, which an administrator can't disable per user yet.
+- **RingCentral call length** is measured by the CRM from "connected" to "ended" (RingOut doesn't report duration), so it's shown as approximate. Salespeople can enter the exact length with their notes.
+- **Chat** messages are kept indefinitely (no chat retention setting yet) and have no threads, reactions, per-person read receipts or search. Live updates use Server-Sent Events; proxies must not buffer `/api/realtime/stream`.
 - **OCR** needs a provider behind the generic HTTP adapter (Azure, Google, AWS…). With the default `manual` setting, users type the details beside the photo. The local text parser is tuned for Irish and UK cards and may mis-assign unusual layouts; the review screen is there to catch that.
 - **Virus scanning** is a ClamAV (clamd) adapter. Without it, uploads are accepted and clearly marked "not virus-scanned".
 - **Encryption key rotation** re-encrypts values as they're edited. There's no bulk re-encryption job yet; keep the previous key configured until none of its values remain (see the administrator guide).

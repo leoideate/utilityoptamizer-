@@ -68,6 +68,9 @@ Every error has the same shape:
 | Messaging | `POST /opportunities/{id}/emails`, `…/whatsapp`, `…/submission-pack` (each takes an `idempotencyKey`) |
 | Reports | `GET /reports/dashboard` (`from`, `to`, `ownerId`, `serviceType`, `supplierId`, `outcome`), `GET /reports/commissions.csv`, `GET /search?q=` |
 | Admin | `/admin/users`, `/admin/suppliers`, `/admin/stages`, `/admin/settings/worldpay`, `/admin/retention`, `/admin/audit-log`, `/admin/integration-jobs` |
+| Chat | `GET /chat/channels`, `POST /chat/channels`, `POST /chat/direct/{userId}`, `GET /chat/opportunities/{id}` (deal discussion), `GET/POST /chat/channels/{id}/messages` (multipart `files`, fields `body` and `mentions` as a JSON array), `…/read`, `…/join`, `…/leave`, `…/mute`, `…/members`, `…/archive`, `…/mentionable`, `PATCH/DELETE /chat/messages/{id}`, `GET /chat/messages/{id}/revisions` (admin), `GET /chat/attachments/{id}/url` |
+| Calls | `GET /telephony`, `PUT /telephony/my-phone`, `GET /opportunities/{id}/call-numbers`, `GET/POST /opportunities/{id}/calls`, `GET /calls/{id}`, `POST /calls/{id}/cancel`, `POST /calls/{id}/outcome` |
+| Live updates | `GET /realtime/stream`: Server-Sent Events for the signed-in user (`chat.message`, `chat.message.updated`, `chat.read`, `call.updated`, `notification`). Events carry ids and short previews only; re-fetch through the API. |
 | Health | `GET /health` (public) |
 
 ## Inbound integrations

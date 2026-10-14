@@ -17,6 +17,7 @@ Generated from `apps/api/prisma/schema.prisma` (`node scripts/gen-field-dictiona
 | failed_logins | Int | ✓ | Default 0 |
 | locked_until | DateTime |  |  |
 | last_login_at | DateTime |  |  |
+| callback_phone | String |  | The user's own phone (E.164). Click-to-call rings this number first, then connects the customer |
 | created_at | DateTime | ✓ | Default now() |
 | updated_at | DateTime | ✓ |  |
 
@@ -619,4 +620,89 @@ Append-only (trigger). Never contains restricted values.
 | key | String | ✓ | Primary key |
 | value | Json | ✓ |  |
 | updated_at | DateTime | ✓ |  |
+
+## chat_channels
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| kind | Enum: direct, channel, deal | ✓ |  |
+| name | String |  |  |
+| description | String |  |  |
+| is_private | Boolean | ✓ | Private channels are visible to members only. Public channels can be joined by any staff member. Default false |
+| direct_key | String |  | For direct messages: the two user ids sorted and joined, so a pair has exactly one conversation. Unique |
+| opportunity_id | UUID |  | For deal discussions: access follows the opportunity's permissions. Unique |
+| archived | Boolean | ✓ | Default false |
+| created_by_id | UUID |  |  |
+| created_at | DateTime | ✓ | Default now() |
+| last_message_at | DateTime |  |  |
+
+## chat_members
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| channel_id | UUID | ✓ |  |
+| user_id | UUID | ✓ |  |
+| last_read_at | DateTime | ✓ | Default now() |
+| muted | Boolean | ✓ | Default false |
+| joined_at | DateTime | ✓ | Default now() |
+
+## chat_messages
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| channel_id | UUID | ✓ |  |
+| author_id | UUID |  |  |
+| body | String |  | Null once deleted (the text is kept in chat_message_revisions) |
+| mentions | UUID | ✓ | Default [] |
+| edited_at | DateTime |  |  |
+| deleted_at | DateTime |  |  |
+| created_at | DateTime | ✓ | Default now() |
+
+## chat_message_revisions
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| message_id | UUID | ✓ |  |
+| body | String | ✓ |  |
+| created_at | DateTime | ✓ | Default now() |
+
+## chat_attachments
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| message_id | UUID | ✓ |  |
+| storage_key | String | ✓ | Unique |
+| filename | String | ✓ |  |
+| mime_type | String | ✓ |  |
+| size | Int | ✓ |  |
+| sha256 | String | ✓ |  |
+| scan_status | Enum: pending, clean, infected, error, skipped | ✓ | Default pending |
+| created_at | DateTime | ✓ | Default now() |
+
+## call_logs
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| opportunity_id | UUID |  |  |
+| customer_id | UUID |  |  |
+| contact_id | UUID |  |  |
+| user_id | UUID | ✓ |  |
+| direction | String | ✓ | Default "outbound" |
+| to_number | String | ✓ | Customer number (E.164) |
+| agent_number | String |  | The staff phone that was rung first (E.164); null for manual calls |
+| provider | String | ✓ |  |
+| provider_call_id | String |  | Unique |
+| status | Enum: initiated, ringing_agent, ringing_customer, in_progress, completed, no_answer, busy, failed, canceled | ✓ | Default initiated |
+| started_at | DateTime | ✓ | Default now() |
+| answered_at | DateTime |  |  |
+| ended_at | DateTime |  |  |
+| duration_sec | Int |  |  |
+| outcome | String |  |  |
+| notes | String |  |  |
+| logged_at | DateTime |  | Set once the call has been written to the opportunity timeline (exactly once) |
 

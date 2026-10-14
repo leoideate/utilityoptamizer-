@@ -83,3 +83,17 @@ describe("dates", () => {
     expect(addMonths("2026-03-15", 24)).toBe("2028-03-15");
   });
 });
+
+describe("phone numbers", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { toE164 } = require("../src") as typeof import("../src");
+  it("normalises Irish and international formats to E.164", () => {
+    expect(toE164("087 123 4567")).toBe("+353871234567");
+    expect(toE164("(01) 234-5678")).toBe("+35312345678");
+    expect(toE164("+353 (0)87 123 4567")).toBe("+353871234567");
+    expect(toE164("0044 7700 900123")).toBe("+447700900123");
+    expect(toE164("+44 (0)7700 900123")).toBe("+447700900123");
+    expect(toE164("12")).toBeNull();
+    expect(toE164("call me")).toBeNull();
+  });
+});

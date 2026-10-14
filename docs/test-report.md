@@ -8,16 +8,16 @@ Run on 14 October 2026, Windows 10, Node 22.17, Docker Desktop (Postgres 16, Red
 |---|---|---|
 | Lint | `npm run lint` | ✅ 0 problems |
 | Type check (shared, API, web) | `npm run typecheck` | ✅ 0 errors |
-| Shared unit tests (rules, permissions, identifiers, percentages, dates) | `npm test -w @uo/shared` | ✅ 29 / 29 |
+| Shared unit tests (rules, permissions, identifiers, percentages, dates) | `npm test -w @uo/shared` | ✅ 30 / 30 |
 | API unit tests (encryption, scrypt, TOTP RFC 6238 vector, webhook HMAC and replay, OCR card parser, phone matching, address-history coverage, redaction, upload sniffing, env validation, CSV parsing) | `npm run test:unit -w @uo/api` | ✅ 17 / 17 |
-| API integration tests (real PostgreSQL, full NestJS app over HTTP) | `npm run test:integration -w @uo/api` | ✅ 49 / 49 (incl. 10 single sign-on tests against a mock OpenID provider) |
-| End-to-end + accessibility (Playwright, Chromium, axe WCAG 2.1 AA, desktop and Pixel 7) | `npm run test:e2e` | ✅ 9 / 9 |
+| API integration tests (real PostgreSQL, full NestJS app over HTTP) | `npm run test:integration -w @uo/api` | ✅ 61 / 61 (incl. 10 single sign-on tests against a mock OpenID provider, 7 call tests incl. a mock RingCentral platform, 5 chat tests) |
+| End-to-end + accessibility (Playwright, Chromium, axe WCAG 2.1 AA, desktop and Pixel 7) | `npm run test:e2e` | ✅ 11 / 11 (incl. real-time chat between two browsers and a logged call) |
 | Production builds | `npm run build`; `docker build` of API and web images | ✅ API container started in production mode, `/api/health` = ok (database, Redis, storage), `prisma migrate status` = up to date |
 | Migrations | `prisma migrate deploy` on the dev and test databases | ✅ |
 | Dependency audit (runtime) | `npm audit --omit=dev` | ✅ 0 vulnerabilities |
 | Dependency audit (all) | `npm audit` | ⚠️ 31 high, all from `braces` in Jest and ESLint tooling. No fixed version exists yet; not shipped in production images. |
 
-**Total automated tests: 104, all passing.**
+**Total automated tests: 119, all passing.**
 
 ## Essential scenarios → tests
 
@@ -41,7 +41,7 @@ Run on 14 October 2026, Windows 10, Node 22.17, Docker Desktop (Postgres 16, Red
 | 19 | Role restrictions | `security.test.ts`: principal masking, compliance-only notes, restricted documents and bank details, admin-only audit log, CSRF/Origin/session; `misc.test.ts` permission matrix |
 | 20 | Audit logs | `security.test.ts` "records who changed what…" (append-only triggers, corrections) and "never writes passwords or restricted values into the audit log" |
 
-Also covered: single sign-on (PKCE S256 and state/nonce on the authorize URL; Google and Microsoft sign-in; unknown and inactive users refused, never created; unverified email and disallowed domain refused; forged state, tampered signature, wrong audience, issuer or nonce, and expired tokens rejected; cancelled sign-in; open-redirect protection; CRM two-factor still required unless Microsoft asserts MFA), background jobs (idempotent reminders, lead assignment, unanswered messages, virus-scan enqueue), integration dead-lettering and idempotency, signature webhook HMAC, replay and idempotency, website lead intake (signed, de-duplicated), CSV import with per-line errors, idempotent stage migration (legacy names adopted, "Lost" left untouched), account lockout, upload content sniffing.
+Also covered: internal chat (one DM per pair, unread counts and read markers, public/private channel access, deal discussions following opportunity permissions and losing access on reassignment, mentions limited to people who can see the conversation, edit/delete history kept append-only, attachments content-checked, scanned and access-controlled, real-time delivery); click-to-call (only saved numbers dialable, own phone required and normalised, RingOut request body, status followed from ringing to connected to finished, timeline written exactly once, unanswered calls not counted as contact, cancelling, permissions, manual mode); single sign-on (PKCE S256 and state/nonce on the authorize URL; Google and Microsoft sign-in; unknown and inactive users refused, never created; unverified email and disallowed domain refused; forged state, tampered signature, wrong audience, issuer or nonce, and expired tokens rejected; cancelled sign-in; open-redirect protection; CRM two-factor still required unless Microsoft asserts MFA), background jobs (idempotent reminders, lead assignment, unanswered messages, virus-scan enqueue), integration dead-lettering and idempotency, signature webhook HMAC, replay and idempotency, website lead intake (signed, de-duplicated), CSV import with per-line errors, idempotent stage migration (legacy names adopted, "Lost" left untouched), account lockout, upload content sniffing.
 
 ## Defects found and fixed during testing
 
@@ -51,6 +51,8 @@ Also covered: single sign-on (PKCE S256 and state/nonce on the authorize URL; Go
 - The legacy "Proposition" stage name wasn't recognised by the stage migration. Alias added.
 - Scrollable tables weren't keyboard-focusable (axe `scrollable-region-focusable`). Fixed across the app.
 - `.dockerignore`/`.gitignore` excluded the `src/storage` module. Narrowed to the upload folder.
+- People added to a deal discussion by an @mention didn't see that message as unread (their read marker matched the message time). Fixed.
+- The login rate-limit error was shown to users as "ThrottlerException: Too Many Requests". It now reads "Too many attempts. Please wait a minute and try again."
 - The production container crashed when `NODE_ENV=development` selected a dev-only log formatter. Now only used when installed.
 
 ## How to reproduce

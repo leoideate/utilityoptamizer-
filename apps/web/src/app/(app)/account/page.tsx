@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button, Card, CardHeader, Field, Input, IssueList, PageHeader } from "@/components/ui/primitives";
 import { type ApiError, api } from "@/lib/api";
@@ -30,7 +30,8 @@ export default function AccountPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <PageHeader title="Security" description={me.name} />
+      <PageHeader title="Security & phone" description={me.name} />
+      <PhoneCard />
       <Card>
         <CardHeader title="Two-factor authentication" description="Adds a 6-digit code from an authenticator app (Microsoft Authenticator, Google Authenticator…) when you sign in." />
         <div className="space-y-4 p-5 text-sm">
@@ -69,5 +70,39 @@ export default function AccountPage() {
       </Card>
       <IssueList issues={issues} title="Please check:" />
     </div>
+  );
+}
+
+/** The user's own phone: click-to-call rings it first, then connects the customer. */
+function PhoneCard() {
+  const tel = useQuery({ queryKey: ["telephony"], queryFn: () => api.get<{ provider: string; bridged: boolean; myPhone: string | null }>("/telephony") });
+  const [phone, setPhone] = useState<string | null>(null);
+  const [issues, setIssues] = useState<string[]>([]);
+  const save = useMutation({
+    meta: { silent: true },
+    mutationFn: () => api.put<{ phone: string | null }>("/telephony/my-phone", { phone: phone?.trim() || null }),
+    onSuccess: (r) => (setIssues([]), setPhone(r.phone ?? ""), tel.refetch()),
+    onError: (e) => setIssues((e as ApiError).issues.length ? (e as ApiError).issues : [(e as ApiError).message]),
+  });
+  const value = phone ?? tel.data?.myPhone ?? "";
+  return (
+    <Card>
+      <CardHeader
+        title="My phone for calls"
+        description={tel.data?.bridged ? "When you press Call, RingCentral rings this phone first, then connects you to the customer. Use your RingCentral desk phone, app or mobile number." : "Used when the phone system is connected. Until then, Call opens your device's dialler."}
+      />
+      <div className="flex flex-wrap items-end gap-3 p-5">
+        <Field label="Phone number" className="min-w-64 flex-1" hint="e.g. 01 555 1234 or +353 87 123 4567">
+          {(p) => <Input {...p} type="tel" autoComplete="tel" value={value} onChange={(e) => setPhone(e.target.value)} />}
+        </Field>
+        <Button onClick={() => save.mutate()} loading={save.isPending}>
+          Save
+        </Button>
+        {save.isSuccess && <p className="w-full text-sm text-success">Saved.</p>}
+        <div className="w-full">
+          <IssueList issues={issues} title="Please check:" />
+        </div>
+      </div>
+    </Card>
   );
 }

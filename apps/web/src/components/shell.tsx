@@ -1,13 +1,14 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, Building2, CalendarCheck, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Menu as MenuIcon, ScanLine, Search, Settings, Zap } from "lucide-react";
+import { Bell, Building2, CalendarCheck, MessagesSquare, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Menu as MenuIcon, ScanLine, Search, Settings, Zap } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ROLE_LABELS } from "@uo/shared";
 import { api } from "@/lib/api";
 import { cn, ref, relative } from "@/lib/format";
+import { useChannels } from "@/lib/chat";
 import { useUser } from "@/lib/session";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "./ui/overlays";
 import { Button } from "./ui/primitives";
@@ -18,6 +19,7 @@ const NAV = [
   { href: "/opportunities", label: "Opportunities", icon: ListChecks },
   { href: "/customers", label: "Customers", icon: Building2 },
   { href: "/activities", label: "My tasks", icon: CalendarCheck },
+  { href: "/chat", label: "Chat", icon: MessagesSquare },
   { href: "/scan", label: "Scan business card", icon: ScanLine },
 ];
 
@@ -26,6 +28,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const isAdmin = user.capabilities.some((c) => c.startsWith("admin."));
+  const unread = useChannels().data?.totalUnread ?? 0;
   useEffect(() => setOpen(false), [pathname]);
 
   const nav = (
@@ -41,6 +44,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Icon className="size-4" aria-hidden />
             {label}
+            {href === "/chat" && unread > 0 && (
+              <span className="ml-auto rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-5 text-primary-fg" aria-label={`${unread} unread`}>
+                {unread > 99 ? "99+" : unread}
+              </span>
+            )}
           </Link>
         );
       })}
@@ -258,7 +266,7 @@ function UserMenu() {
           {user.roles.map((r) => ROLE_LABELS[r]).join(", ")}
         </MenuLabel>
         <MenuSeparator />
-        <MenuItem onSelect={() => router.push("/account")}>Security &amp; two-factor</MenuItem>
+        <MenuItem onSelect={() => router.push("/account")}>Security, 2FA &amp; phone</MenuItem>
         <MenuItem onSelect={() => setTheme("light")}>Light theme</MenuItem>
         <MenuItem onSelect={() => setTheme("dark")}>Dark theme</MenuItem>
         <MenuItem onSelect={() => setTheme("system")}>Use system theme</MenuItem>

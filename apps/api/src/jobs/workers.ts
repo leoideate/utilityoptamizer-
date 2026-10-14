@@ -4,6 +4,8 @@ import { type Job, Queue, Worker } from "bullmq";
 import { ENV, type Env } from "../config/env";
 import { RetentionService } from "../admin/retention.service";
 import { AutomationsService } from "../automations/automations.service";
+import { CallsService } from "../calls/calls.service";
+import { ChatService } from "../chat/chat.service";
 import { DocumentsService } from "../documents/documents.service";
 import { IntegrationsService } from "../integrations/integrations.service";
 import { redisConnection } from "./jobs.module";
@@ -32,6 +34,8 @@ export async function startWorkers(app: INestApplicationContext): Promise<() => 
   const documents = app.get(DocumentsService);
   const integrations = app.get(IntegrationsService);
   const retention = app.get(RetentionService);
+  const calls = app.get(CallsService);
+  const chat = app.get(ChatService);
 
   await registerSchedules(env);
 
@@ -54,10 +58,17 @@ export async function startWorkers(app: INestApplicationContext): Promise<() => 
       },
       { connection, concurrency: 1 },
     ),
-    new Worker(QUEUES.documents, async (job: Job<{ versionId: string }>) => documents.scan(job.data.versionId), { connection, concurrency: 2 }),
+    new Worker(
+      QUEUES.documents,
+      async (job: Job<{ versionId?: string; attachmentId?: string }>) => (job.name === "chat-scan" ? chat.scanAttachment(job.data.attachmentId!) : documents.scan(job.data.versionId!)),
+      { connection, concurrency: 2 },
+    ),
     new Worker(
       QUEUES.integrations,
-      async (job: Job<{ integrationJobId: string }>) => integrations.execute(job.data.integrationJobId, job.attemptsMade + 1, job.opts.attempts ?? DEFAULT_ATTEMPTS),
+      async (job: Job<{ integrationJobId?: string; callId?: string; attempt?: number }>) =>
+        job.name === "call.poll"
+          ? calls.poll(job.data.callId!, job.data.attempt ?? 0)
+          : integrations.execute(job.data.integrationJobId!, job.attemptsMade + 1, job.opts.attempts ?? DEFAULT_ATTEMPTS),
       { connection, concurrency: 4 },
     ),
   ];

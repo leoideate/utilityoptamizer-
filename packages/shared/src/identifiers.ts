@@ -49,3 +49,17 @@ export function percentError(label: string, value: number | null | undefined): s
   if (Number.isNaN(value) || value < 0 || value > 100) return `${label} must be between 0 and 100.`;
   return null;
 }
+
+/**
+ * Normalises a phone number to E.164 (+353871234567). Numbers without a country code are
+ * treated as Irish ("087…" → "+35387…"). Returns null if it can't be a real number.
+ */
+export function toE164(raw: string | null | undefined, defaultCountryCode = "353"): string | null {
+  if (!raw) return null;
+  let s = raw.trim().replace(/[\s().-]/g, "");
+  if (s.startsWith("00")) s = `+${s.slice(2)}`;
+  if (!s.startsWith("+")) s = s.startsWith("0") ? `+${defaultCountryCode}${s.slice(1)}` : `+${defaultCountryCode}${s}`;
+  if (s.startsWith("+3530")) s = `+353${s.slice(5)}`;
+  if (s.startsWith("+440")) s = `+44${s.slice(4)}`;
+  return /^\+[1-9]\d{7,14}$/.test(s) ? s : null;
+}

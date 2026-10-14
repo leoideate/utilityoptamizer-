@@ -27,6 +27,8 @@ Generated from `packages/shared/src/permissions.ts`, the single source of truth 
 | `commission.read` | View commission figures and export the commissions CSV | ✓ | ✓ |  |  |  | ✓ |
 | `commission.write` | Record and update commissions | ✓ |  |  |  |  | ✓ |
 | `report.read` | Business-wide dashboard (others see their own figures) | ✓ | ✓ |  | ✓ | ✓ | ✓ |
+| `chat.manage_channels` | Create, archive and add people to team channels (anyone can DM and join public channels) | ✓ | ✓ |  |  |  |  |
+| `chat.moderate` | Remove other people's chat messages and view edit/delete history (audit-logged) | ✓ |  |  |  |  |  |
 | `admin.users` | Manage users, roles, passwords and 2FA resets | ✓ |  |  |  |  |  |
 | `admin.pipeline` | Rename pipeline stages, run the stage check, manage suppliers | ✓ |  |  |  |  |  |
 | `admin.integrations` | Integration settings, outbound job queue and retries, signature templates | ✓ |  |  |  |  |  |

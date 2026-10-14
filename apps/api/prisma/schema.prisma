@@ -276,6 +276,8 @@ model User {
   failedLogins   Int        @default(0) @map("failed_logins")
   lockedUntil    DateTime?  @map("locked_until")
   lastLoginAt    DateTime?  @map("last_login_at")
+  /// The user's own phone (E.164). Click-to-call rings this number first, then connects the customer.
+  callbackPhone  String?    @map("callback_phone")
   createdAt      DateTime   @default(now()) @map("created_at")
   updatedAt      DateTime   @updatedAt @map("updated_at")
 
@@ -1049,4 +1051,138 @@ model Setting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("settings")
+}
+
+// ---------------------------------------------------------------------------
+// Internal chat
+// ---------------------------------------------------------------------------
+
+enum ChatChannelKind {
+  direct
+  channel
+  deal
+}
+
+/// A conversation: a direct message between two users, a team channel, or the internal discussion on one opportunity.
+model ChatChannel {
+  id            String          @id @default(uuid()) @db.Uuid
+  kind          ChatChannelKind
+  name          String?
+  description   String?
+  /// Private channels are visible to members only. Public channels can be joined by any staff member.
+  isPrivate     Boolean         @default(false) @map("is_private")
+  /// For direct messages: the two user ids sorted and joined, so a pair has exactly one conversation.
+  directKey     String?         @unique @map("direct_key")
+  /// For deal discussions: access follows the opportunity's permissions.
+  opportunityId String?         @unique @map("opportunity_id") @db.Uuid
+  archived      Boolean         @default(false)
+  createdById   String?         @map("created_by_id") @db.Uuid
+  createdAt     DateTime        @default(now()) @map("created_at")
+  lastMessageAt DateTime?       @map("last_message_at")
+
+  members  ChatMember[]
+  messages ChatMessage[]
+
+  @@map("chat_channels")
+}
+
+model ChatMember {
+  channelId  String      @map("channel_id") @db.Uuid
+  channel    ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  userId     String      @map("user_id") @db.Uuid
+  lastReadAt DateTime    @default(now()) @map("last_read_at")
+  muted      Boolean     @default(false)
+  joinedAt   DateTime    @default(now()) @map("joined_at")
+
+  @@id([channelId, userId])
+  @@index([userId])
+  @@map("chat_members")
+}
+
+model ChatMessage {
+  id          String           @id @default(uuid()) @db.Uuid
+  channelId   String           @map("channel_id") @db.Uuid
+  channel     ChatChannel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  authorId    String?          @map("author_id") @db.Uuid
+  /// Null once deleted (the text is kept in chat_message_revisions).
+  body        String?
+  mentions    String[]         @default([]) @db.Uuid
+  editedAt    DateTime?        @map("edited_at")
+  deletedAt   DateTime?        @map("deleted_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  attachments ChatAttachment[]
+  revisions   ChatMessageRevision[]
+
+  @@index([channelId, createdAt])
+  @@map("chat_messages")
+}
+
+/// Previous text of edited or deleted messages (append-only), for administrators and disputes.
+model ChatMessageRevision {
+  id        String      @id @default(uuid()) @db.Uuid
+  messageId String      @map("message_id") @db.Uuid
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  @@map("chat_message_revisions")
+}
+
+model ChatAttachment {
+  id         String      @id @default(uuid()) @db.Uuid
+  messageId  String      @map("message_id") @db.Uuid
+  message    ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  storageKey String      @unique @map("storage_key")
+  filename   String
+  mimeType   String      @map("mime_type")
+  size       Int
+  sha256     String
+  scanStatus ScanStatus  @default(pending) @map("scan_status")
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  @@map("chat_attachments")
+}
+
+// ---------------------------------------------------------------------------
+// Customer calls (click-to-call)
+// ---------------------------------------------------------------------------
+
+enum CallStatus {
+  initiated
+  ringing_agent
+  ringing_customer
+  in_progress
+  completed
+  no_answer
+  busy
+  failed
+  canceled
+}
+
+model CallLog {
+  id             String       @id @default(uuid()) @db.Uuid
+  opportunityId  String?      @map("opportunity_id") @db.Uuid
+  customerId     String?      @map("customer_id") @db.Uuid
+  contactId      String?      @map("contact_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  direction      String       @default("outbound")
+  /// Customer number (E.164).
+  toNumber       String       @map("to_number")
+  /// The staff phone that was rung first (E.164); null for manual calls.
+  agentNumber    String?      @map("agent_number")
+  provider       String
+  providerCallId String?      @unique @map("provider_call_id")
+  status         CallStatus   @default(initiated)
+  startedAt      DateTime     @default(now()) @map("started_at")
+  answeredAt     DateTime?    @map("answered_at")
+  endedAt        DateTime?    @map("ended_at")
+  durationSec    Int?         @map("duration_sec")
+  outcome        String?
+  notes          String?
+  /// Set once the call has been written to the opportunity timeline (exactly once).
+  loggedAt       DateTime?    @map("logged_at")
+
+  @@index([opportunityId, startedAt])
+  @@index([userId, startedAt])
+  @@map("call_logs")
 }

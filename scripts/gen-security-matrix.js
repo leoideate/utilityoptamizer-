@@ -29,6 +29,8 @@ const desc = {
   "document.request": "Request documents from the customer",
   "commission.read": "View commission figures and export the commissions CSV",
   "commission.write": "Record and update commissions",
+  "chat.manage_channels": "Create, archive and add people to team channels (anyone can DM and join public channels)",
+  "chat.moderate": "Remove other people's chat messages and view edit/delete history (audit-logged)",
   "report.read": "Business-wide dashboard (others see their own figures)",
   "admin.users": "Manage users, roles, passwords and 2FA resets",
   "admin.pipeline": "Rename pipeline stages, run the stage check, manage suppliers",

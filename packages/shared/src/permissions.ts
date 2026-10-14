@@ -42,6 +42,12 @@ export const CAPABILITIES = {
   // Reporting
   "report.read": ["administrator", "manager", "operations", "compliance", "finance"],
 
+  // Internal chat
+  /** Create, rename and archive team channels (anyone can send direct messages and join public channels). */
+  "chat.manage_channels": ["administrator", "manager"],
+  /** Remove other people's chat messages and read message history (moderation). */
+  "chat.moderate": ["administrator"],
+
   // Administration
   "admin.users": ["administrator"],
   "admin.pipeline": ["administrator"],

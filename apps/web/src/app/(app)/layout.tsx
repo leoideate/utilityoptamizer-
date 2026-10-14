@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
 import { AppShell } from "@/components/shell";
 import { Skeleton } from "@/components/ui/primitives";
+import { RealtimeProvider } from "@/lib/realtime";
 import { SessionProvider, useMe } from "@/lib/session";
 
 export default function AuthedLayout({ children }: { children: ReactNode }) {
@@ -41,7 +42,9 @@ export default function AuthedLayout({ children }: { children: ReactNode }) {
   }
   return (
     <SessionProvider user={me.data}>
-      <AppShell>{children}</AppShell>
+      <RealtimeProvider userId={me.data.id}>
+        <AppShell>{children}</AppShell>
+      </RealtimeProvider>
     </SessionProvider>
   );
 }

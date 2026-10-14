@@ -76,6 +76,19 @@ const envSchema = z
     /** Comma-separated email domains allowed to sign in with SSO (e.g. utilityoptimizer.com). Empty = any domain of an existing user. */
     SSO_ALLOWED_DOMAINS: z.string().optional(),
 
+    /** Click-to-call: "manual" (opens the phone's dialler) or "ringcentral" (RingOut: rings the salesperson's phone, then the customer). */
+    TELEPHONY_PROVIDER: z.enum(["manual", "ringcentral"]).default("manual"),
+    /** https://platform.ringcentral.com (production) or https://platform.devtest.ringcentral.com (sandbox). */
+    RINGCENTRAL_SERVER_URL: z.string().url().default("https://platform.ringcentral.com"),
+    RINGCENTRAL_CLIENT_ID: z.string().optional(),
+    RINGCENTRAL_CLIENT_SECRET: z.string().optional(),
+    /** JWT credential of the RingCentral user the app places calls as. */
+    RINGCENTRAL_JWT: z.string().optional(),
+    /** Company number shown to customers (E.164, must belong to that RingCentral user). Optional. */
+    RINGCENTRAL_CALLER_ID: z.string().optional(),
+    /** Ask the salesperson to press 1 before the customer is dialled (avoids calls connecting to voicemail). */
+    RINGCENTRAL_PLAY_PROMPT: bool,
+
     /** HMAC secret for POST /api/public/leads (website and API lead intake). Endpoint is disabled when unset. */
     LEAD_WEBHOOK_SECRET: z.string().min(16).optional(),
 
@@ -99,6 +112,9 @@ const envSchema = z
     }
     if (e.WHATSAPP_PROVIDER === "meta_cloud" && (!e.WHATSAPP_ACCESS_TOKEN || !e.WHATSAPP_PHONE_NUMBER_ID)) {
       ctx.addIssue({ code: "custom", path: ["WHATSAPP_ACCESS_TOKEN"], message: "WhatsApp credentials are required when WHATSAPP_PROVIDER=meta_cloud." });
+    }
+    if (e.TELEPHONY_PROVIDER === "ringcentral" && (!e.RINGCENTRAL_CLIENT_ID || !e.RINGCENTRAL_CLIENT_SECRET || !e.RINGCENTRAL_JWT)) {
+      ctx.addIssue({ code: "custom", path: ["RINGCENTRAL_JWT"], message: "RingCentral needs RINGCENTRAL_CLIENT_ID, RINGCENTRAL_CLIENT_SECRET and RINGCENTRAL_JWT." });
     }
     if (e.SSO_MICROSOFT_CLIENT_ID && (!e.SSO_MICROSOFT_CLIENT_SECRET || (!e.SSO_MICROSOFT_TENANT_ID && !e.SSO_MICROSOFT_ISSUER))) {
       ctx.addIssue({ code: "custom", path: ["SSO_MICROSOFT_TENANT_ID"], message: "Microsoft SSO needs SSO_MICROSOFT_CLIENT_SECRET and your Entra tenant id (SSO_MICROSOFT_TENANT_ID)." });

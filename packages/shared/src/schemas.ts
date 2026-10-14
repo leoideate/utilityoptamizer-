@@ -410,6 +410,36 @@ export const ocrConfirmSchema = z.object({
   opportunityName: optText(200),
 });
 
+// --- Internal chat & calls ----------------------------------------------------
+
+export const chatMessageSchema = z.object({
+  body: z.string().trim().max(4000, "Messages can be up to 4,000 characters.").default(""),
+  /** User ids mentioned with @. The server keeps only people who can see the conversation. */
+  mentions: z.array(id).max(20).default([]),
+});
+export const chatChannelSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9][a-z0-9-]{1,39}$/, "Use 2–40 lowercase letters, numbers or dashes, e.g. sales-team."),
+  description: optText(300),
+  isPrivate: z.boolean().default(false),
+  memberIds: z.array(id).max(200).default([]),
+});
+export const startCallSchema = z.object({
+  /** One of the numbers listed for the opportunity (customer, contacts or captured phone). */
+  number: z.string().trim().min(6).max(40),
+  contactId: id.nullable().optional(),
+});
+export const CALL_OUTCOMES = ["answered", "no_answer", "busy", "voicemail", "wrong_number", "call_back_requested"] as const;
+export const callOutcomeSchema = z.object({
+  outcome: z.enum(CALL_OUTCOMES),
+  durationMinutes: z.number().int().min(0).max(600).nullable().optional(),
+  notes: optText(5000),
+});
+export const callbackPhoneSchema = z.object({ phone: z.string().trim().max(40).nullable() });
+
 export type CreateOpportunityInput = z.infer<typeof createOpportunitySchema>;
 export type UpdateOpportunityInput = z.infer<typeof updateOpportunitySchema>;
 export type CustomerInput = z.infer<typeof customerSchema>;

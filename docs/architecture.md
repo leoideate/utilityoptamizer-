@@ -15,6 +15,8 @@ flowchart LR
   worker -->|SMTP| mail["Email"]
   worker -->|Graph API| wa["WhatsApp Cloud API"]
   api --> ocr["OCR provider<br/>(HTTP adapter)"]
+  api -->|"RingOut REST"| rc["RingCentral"]
+  api -.->|"Server-Sent Events<br/>(via Redis pub/sub)"| browser
   esign["E-signature provider"] -->|"HMAC-signed webhook"| api
   shared["packages/shared<br/>enums · pipeline · permissions · rules · Zod schemas"] -.-> web
   shared -.-> api
@@ -34,6 +36,7 @@ flowchart LR
 - **History is never overwritten.** Live and ended contracts and live Worldpay applications are read-only. Renewals create new draft records with `previous_contract_id` / `previous_application_id`. Documents keep every upload as a numbered version.
 - **Append-only audit.** `audit_logs` and `timeline_entries` are protected by triggers that block `UPDATE`/`DELETE` (only the retention job may purge old audit rows, via a transaction-local flag). Corrections are new timeline entries pointing at the original.
 - **Idempotent automations.** Reminders use an `automation_key` with a partial unique index (one *open* reminder per kind per opportunity). Renewals use a unique `renewal_source_key`. Outbound jobs use a unique `idempotency_key`; inbound webhooks a unique `(provider, event_id)`. Jobs can therefore be retried or run concurrently safely.
+- **Live updates without a second protocol.** `RealtimeService` keeps each user's Server-Sent Events streams; services publish small, addressed events (`chat.message`, `call.updated`…) through Redis pub/sub so any API instance can deliver them. Events never carry restricted data; clients re-fetch via the normal, permission-checked API.
 - **Adapters for every vendor.** OCR (`OcrProvider`), e-signature (`SignatureProvider`), object storage (`ObjectStorage`), virus scanning (`VirusScanner`), email, WhatsApp and submissions (`SubmissionChannel`) are interfaces with configuration-selected implementations, so no vendor is hard-wired.
 
 ## Request lifecycle
@@ -55,6 +58,8 @@ flowchart LR
 | automations | `hourly` | :05 each hour | Activity reminders → notifications; expired session purge |
 | automations | `retention` | Sundays 02:30 | Applies the retention policy |
 | documents | `scan` | on upload | Virus scan; infected files are deleted and the item reset |
+| integrations | `call.poll` | every 4 s while a RingCentral call is live | Follows the call's status, then logs it to the timeline exactly once |
+| documents | `chat-scan` | on chat upload | Virus scan for chat attachments |
 | integrations | `email.send`, `whatsapp.send`, `submission.send` | on demand | Exponential backoff (6 attempts from 30 s). After the last attempt the job is marked `dead` and administrators are notified. |
 
 ## Data model
@@ -98,6 +103,12 @@ erDiagram
   AUDIT_LOG }o--|| USER : "actor (append-only)"
   BUSINESS_CARD_SCAN }o--o| OPPORTUNITY : "creates"
   INTEGRATION_JOB }o--o| OPPORTUNITY : "about"
+  CHAT_CHANNEL ||--o{ CHAT_MEMBER : has
+  CHAT_CHANNEL ||--o{ CHAT_MESSAGE : contains
+  CHAT_MESSAGE ||--o{ CHAT_ATTACHMENT : has
+  CHAT_MESSAGE ||--o{ CHAT_MESSAGE_REVISION : "history (append-only)"
+  OPPORTUNITY |o--o| CHAT_CHANNEL : "deal discussion"
+  OPPORTUNITY ||--o{ CALL_LOG : "calls"
 ```
 
 Full column definitions: [field-dictionary.md](field-dictionary.md). Schema: `apps/api/prisma/schema.prisma`. Constraints Prisma can't express (append-only triggers, the opportunity-permanence trigger, the partial unique index and percentage checks) are in `apps/api/prisma/migrations/20261014000100_integrity/migration.sql`.

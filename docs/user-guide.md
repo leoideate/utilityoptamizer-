@@ -24,6 +24,14 @@ Other ways in:
 - **Scan business card**: take a photo, check the details the scan read, pick an existing customer if one is suggested, then confirm. Nothing is saved until you confirm.
 - Leads from the website or API arrive **unassigned** and are given to the least-busy salesperson within 15 minutes.
 
+## Calling customers
+
+Press **Call** on an opportunity and choose the number. With RingCentral connected, your own phone rings first: answer it and you're connected to the customer. The dialog shows each step, and the call is added to the timeline automatically when it ends. You can add notes or an outcome afterwards. Without RingCentral, your phone's dialler opens; afterwards, record the outcome, length and notes. Set your own phone number once under **Account → Security, 2FA & phone**.
+
+## Chat with colleagues
+
+**Chat** in the menu shows team channels, direct messages and deal discussions, with a badge for unread messages. Type `@` to mention someone (they get a notification), press **Enter** to send and **Shift+Enter** for a new line, and attach files with the paperclip or by dragging them in. Every opportunity has a **Team chat** tab for internal discussion about that deal; customers never see it. Don't put dates of birth, bank details or ID numbers in chat: they belong in the restricted parts of the record.
+
 ## Customers
 
 From the opportunity's **Overview**, use **Create from these details** or **Link existing**. This never changes the opportunity's stage, salesperson or status.

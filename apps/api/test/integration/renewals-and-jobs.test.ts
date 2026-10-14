@@ -209,3 +209,17 @@ describe("lead intake", () => {
     expect(note?.direction).toBe("inbound");
   });
 });
+
+describe("manual calls (no phone system configured)", () => {
+  it("opens the dialler, then logs the outcome the user records", async () => {
+    const opp = await createOpportunity(team.sales, "gas", { phone: "087 765 4321" });
+    const started = expectStatus(await team.sales.post(`/opportunities/${opp}/calls`, { number: "0877654321" }), 201).body;
+    expect(started).toMatchObject({ mode: "manual", telUri: "tel:+353877654321" });
+    expect(await t.prisma.timelineEntry.count({ where: { opportunityId: opp, kind: "call" } })).toBe(0);
+    expectStatus(await team.sales.post(`/calls/${started.call.id}/outcome`, { outcome: "answered", durationMinutes: 6, notes: "Sending bill photo tonight" }), 201);
+    const entry = await t.prisma.timelineEntry.findFirstOrThrow({ where: { opportunityId: opp, kind: "call" } });
+    expect(entry.body).toBe("Outbound call to +353877654321 · Answered · 6 min 0 s.\nSending bill photo tonight");
+    const o = await t.prisma.opportunity.findUniqueOrThrow({ where: { id: opp } });
+    expect(o.firstContactAt).not.toBeNull();
+  });
+});

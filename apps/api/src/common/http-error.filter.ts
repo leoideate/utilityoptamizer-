@@ -1,4 +1,5 @@
 import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, Logger } from "@nestjs/common";
+import { ThrottlerException } from "@nestjs/throttler";
 import { Prisma } from "@prisma/client";
 import { randomBytes } from "node:crypto";
 import type { Response } from "express";
@@ -26,6 +27,7 @@ export class HttpErrorFilter implements ExceptionFilter {
     if (err instanceof Forbidden) return send(403, err.message);
     if (err instanceof NotFound) return send(404, err.message);
     if (err instanceof Conflict) return send(409, err.message);
+    if (err instanceof ThrottlerException) return send(429, "Too many attempts. Please wait a minute and try again.");
     if (err instanceof HttpException) {
       const body = err.getResponse();
       const message = typeof body === "string" ? body : ((body as { message?: string | string[] }).message ?? err.message);

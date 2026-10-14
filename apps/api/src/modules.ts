@@ -11,6 +11,8 @@ import { AdminController } from "./admin/admin.controller";
 import { AdminService } from "./admin/admin.service";
 import { RetentionService } from "./admin/retention.service";
 import { AuditService } from "./audit/audit.service";
+import { CallsModule } from "./calls/calls.module";
+import { ChatModule } from "./chat/chat.module";
 import { AutomationsService } from "./automations/automations.service";
 import { RenewalsService } from "./automations/renewals.service";
 import { CustomersController } from "./customers/customers.controller";
@@ -143,4 +145,6 @@ export const FEATURE_MODULES = [
   AdminModule,
   AutomationsModule,
   HealthModule,
+  CallsModule,
+  ChatModule,
 ];

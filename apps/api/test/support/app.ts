@@ -35,6 +35,7 @@ process.env.LEAD_WEBHOOK_SECRET = "test-lead-secret-test-lead-secret";
 const { AppModule } = require("../../src/app.module") as typeof import("../../src/app.module");
 const { configureApp } = require("../../src/bootstrap") as typeof import("../../src/bootstrap");
 const { JOB_QUEUE, RecordingJobQueue } = require("../../src/jobs/queue") as typeof import("../../src/jobs/queue");
+const { REALTIME_BUS, LocalRealtimeBus } = require("../../src/realtime/realtime") as typeof import("../../src/realtime/realtime");
 const { PrismaService } = require("../../src/common/prisma.service") as typeof import("../../src/common/prisma.service");
 const { StagesService } = require("../../src/opportunities/stages.service") as typeof import("../../src/opportunities/stages.service");
 const { hashPassword } = require("../../src/auth/passwords") as typeof import("../../src/auth/passwords");
@@ -54,7 +55,7 @@ export interface TestApp {
 
 export async function createTestApp(): Promise<TestApp> {
   const queue = new RecordingJobQueue();
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(JOB_QUEUE).useValue(queue).compile();
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(JOB_QUEUE).useValue(queue).overrideProvider(REALTIME_BUS).useValue(new LocalRealtimeBus()).compile();
   const app = moduleRef.createNestApplication({ rawBody: true, logger: process.env.TEST_LOG_ERRORS ? ["error"] : false });
   configureApp(app);
   await app.init();

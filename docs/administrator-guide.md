@@ -29,6 +29,23 @@ How it works and what's checked: authorization code flow with PKCE (S256), a ran
 
 Two-factor: a user who has CRM two-factor turned on is asked for their authenticator code after SSO, unless Microsoft reports that MFA was performed during sign-in (`amr` contains `mfa`). If your Entra conditional access already enforces MFA, staff won't be asked twice. Google doesn't report this, so Google users with CRM two-factor always enter their code.
 
+## Calling customers with RingCentral
+
+The **Call** button on an opportunity uses RingCentral **RingOut**. RingCentral rings the salesperson's own phone first (desk phone, the RingCentral app or a mobile), and when they answer it dials the customer, showing your company number. No softphone or browser plug-in is needed.
+
+1. In the RingCentral Developer Console, create a **REST API app** with authentication **JWT auth flow** and the app permission **RingOut**.
+2. As the RingCentral user the CRM should place calls as (typically an admin or a dedicated "CRM" user), create a **JWT credential** and authorise it for the app.
+3. Set `TELEPHONY_PROVIDER=ringcentral`, `RINGCENTRAL_CLIENT_ID`, `RINGCENTRAL_CLIENT_SECRET` and `RINGCENTRAL_JWT`. Optionally set `RINGCENTRAL_CALLER_ID` (a number on that RingCentral user that customers should see) and `RINGCENTRAL_PLAY_PROMPT=true` (the salesperson presses 1 before the customer is dialled, so calls never connect to their voicemail). For the RingCentral sandbox, set `RINGCENTRAL_SERVER_URL=https://platform.devtest.ringcentral.com`.
+4. Restart the API and worker. Each salesperson enters their own phone number under **Account → Security, 2FA & phone**.
+
+Only numbers saved on the opportunity, its customer or its contacts can be dialled, so the CRM can't be used as an open dialler. The worker follows each call every few seconds. When it ends, the call is written to the opportunity timeline once (outcome and approximate duration), and an answered call counts as contact with the customer. Recording is not enabled.
+
+Without RingCentral (`TELEPHONY_PROVIDER=manual`, the default), **Call** opens the device's dialler (`tel:` link) and then asks the user for the outcome, length and notes.
+
+## Internal chat
+
+Chat needs no configuration. Anyone can send direct messages and join public channels; managers and administrators create, archive and add people to channels (`chat.manage_channels`). Each opportunity has a **Team chat** tab, visible to everyone who can see that opportunity; if a deal is reassigned, the previous salesperson loses access to its discussion as well. Messages can be edited or deleted by their author; the earlier text is kept and administrators can view it (each view is audit-logged). Files shared in chat are limited to PDF, images, Word and Excel, stored in the private bucket and virus-scanned. Live updates use one Server-Sent Events connection per browser tab; if a proxy in front of the CRM buffers responses, disable buffering for `/api/realtime/stream` (screens fall back to polling every 10–30 seconds).
+
 ## Users and roles (Administration → Users & roles)
 
 | Role | Typical person |
