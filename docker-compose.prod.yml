@@ -1,0 +1,28 @@
+# Example production stack. Managed Postgres/Redis/S3 are recommended instead of the bundled ones;
+# see docs/deployment.md. Secrets come from .env.production (never commit it).
+name: utility-optimizer-crm-prod
+
+services:
+  api:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    env_file: .env.production
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+  worker:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    command: ["node", "dist/worker.js"]
+    env_file: .env.production
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+  migrate:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    command: ["npx", "prisma", "migrate", "deploy"]
+    env_file: .env.production
+    restart: "no"
+  web:
+    build: { context: ., dockerfile: apps/web/Dockerfile, args: { API_ORIGIN: "http://api:4000" } }
+    restart: unless-stopped
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on: [api]

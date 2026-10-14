@@ -1,0 +1,241 @@
+import { Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
+import { STAGES, addDays, can, today } from "@uo/shared";
+import { z } from "zod";
+import type { Actor } from "../common/actor";
+import { PrismaService } from "../common/prisma.service";
+import { dateOnly } from "../common/values";
+import { OpportunityAccess } from "../opportunities/access.service";
+
+export const reportFilterSchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  ownerId: z.string().uuid().optional(),
+  serviceType: z.enum(["electricity", "gas", "dual_fuel", "merchant_services"]).optional(),
+  supplierId: z.string().uuid().optional(),
+  outcome: z.enum(["open", "won", "lost"]).optional(),
+});
+export type ReportFilter = z.infer<typeof reportFilterSchema>;
+
+const pct = (a: number, b: number) => (b === 0 ? null : Math.round((a / b) * 1000) / 10);
+
+/**
+ * Dashboard metrics. Every figure respects the viewer's visibility (salespeople see their own
+ * pipeline) and the filters. Commission figures need commission.read.
+ */
+@Injectable()
+export class ReportsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly access: OpportunityAccess,
+  ) {}
+
+  private base(actor: Actor, f: ReportFilter): Prisma.OpportunityWhereInput {
+    return {
+      AND: [
+        this.access.visibleWhere(actor),
+        f.ownerId ? { ownerId: f.ownerId } : {},
+        f.serviceType ? { serviceType: f.serviceType } : {},
+        f.supplierId ? { selectedSupplierId: f.supplierId } : {},
+        f.outcome ? { outcome: f.outcome } : {},
+      ],
+    };
+  }
+
+  private range(f: ReportFilter) {
+    const to = f.to ?? today();
+    const from = f.from ?? addDays(to, -90);
+    return { from: new Date(`${from}T00:00:00Z`), to: new Date(`${addDays(to, 1)}T00:00:00Z`), fromIso: from, toIso: to };
+  }
+
+  async dashboard(actor: Actor, f: ReportFilter) {
+    const base = this.base(actor, f);
+    const r = this.range(f);
+    const inRange = (field: "createdAt" | "wonAt" | "lostAt") => ({ AND: [base, { [field]: { gte: r.from, lt: r.to } }] });
+    const openWhere: Prisma.OpportunityWhereInput = { AND: [base, { outcome: "open" }] };
+
+    const [newLeads, bySource, byService, wonInRange, lostInRange, createdCohortWon, open, stageGroups, owners] = await Promise.all([
+      this.prisma.opportunity.count({ where: inRange("createdAt") }),
+      this.prisma.opportunity.groupBy({ by: ["leadSource"], where: inRange("createdAt"), _count: { _all: true } }),
+      this.prisma.opportunity.groupBy({ by: ["serviceType", "outcome"], where: base, _count: { _all: true }, _sum: { expectedRevenue: true } }),
+      this.prisma.opportunity.count({ where: inRange("wonAt") }),
+      this.prisma.opportunity.count({ where: inRange("lostAt") }),
+      this.prisma.opportunity.count({ where: { AND: [inRange("createdAt"), { outcome: "won" }] } }),
+      this.prisma.opportunity.findMany({ where: openWhere, select: { expectedRevenue: true, probability: true } }),
+      this.prisma.opportunity.groupBy({ by: ["stageId"], where: openWhere, _count: { _all: true }, _sum: { expectedRevenue: true } }),
+      this.prisma.opportunity.groupBy({ by: ["ownerId", "outcome"], where: base, _count: { _all: true }, _sum: { expectedRevenue: true } }),
+    ]);
+
+    const stages = await this.prisma.stage.findMany({ orderBy: { sequence: "asc" } });
+    const users = await this.prisma.user.findMany({ where: { id: { in: owners.map((o) => o.ownerId).filter((x): x is string => !!x) } }, select: { id: true, name: true } });
+
+    const pipelineValue = open.reduce((s, o) => s + Number(o.expectedRevenue ?? 0), 0);
+    const weightedValue = open.reduce((s, o) => s + (Number(o.expectedRevenue ?? 0) * o.probability) / 100, 0);
+
+    const ownerMap = new Map<string, { ownerId: string | null; name: string; open: number; won: number; lost: number; value: number }>();
+    for (const o of owners) {
+      const key = o.ownerId ?? "none";
+      const row = ownerMap.get(key) ?? { ownerId: o.ownerId, name: users.find((u) => u.id === o.ownerId)?.name ?? "Unassigned", open: 0, won: 0, lost: 0, value: 0 };
+      row[o.outcome] += o._count._all;
+      if (o.outcome === "open") row.value += Number(o._sum.expectedRevenue ?? 0);
+      ownerMap.set(key, row);
+    }
+
+    const [avgStage, avgActivation, supplierPerf, worldpay, outstandingDocs, complianceQueries, renewalsDue, commissions] = await Promise.all([
+      this.averageTimeInStage(actor, f),
+      this.averageDaysToActivation(actor, f),
+      this.supplierPerformance(actor, f),
+      this.worldpayApproval(actor, f),
+      this.prisma.documentItem.count({ where: { required: true, received: false, opportunity: openWhere } }),
+      this.prisma.opportunity.count({ where: { AND: [openWhere, { OR: [{ stage: { key: "compliance_query" } }, { merchantApps: { some: { risk: { complianceStatus: "query_raised" } } } }] }] } }),
+      this.renewalsDue(actor, f),
+      can(actor, "commission.read") ? this.commissions(actor, f) : Promise.resolve(null),
+    ]);
+
+    return {
+      range: { from: r.fromIso, to: r.toIso },
+      newLeads,
+      leadsBySource: bySource.map((s) => ({ source: s.leadSource, count: s._count._all })).sort((a, b) => b.count - a.count),
+      opportunitiesByStage: stages
+        .map((s) => {
+          const g = stageGroups.find((x) => x.stageId === s.id);
+          return { key: s.key, name: s.name, count: g?._count._all ?? 0, value: Number(g?._sum.expectedRevenue ?? 0) };
+        })
+        .filter((s) => s.key !== "live_won"),
+      opportunitiesBySalesperson: [...ownerMap.values()].sort((a, b) => b.open + b.won - (a.open + a.won)),
+      opportunitiesByService: (["electricity", "gas", "dual_fuel", "merchant_services"] as const).map((s) => {
+        const rows = byService.filter((x) => x.serviceType === s);
+        const get = (o: string) => rows.find((x) => x.outcome === o)?._count._all ?? 0;
+        return { serviceType: s, open: get("open"), won: get("won"), lost: get("lost") };
+      }),
+      won: wonInRange,
+      lost: lostInRange,
+      winRate: pct(wonInRange, wonInRange + lostInRange),
+      conversionRate: pct(createdCohortWon, newLeads),
+      pipelineValue,
+      weightedPipelineValue: Math.round(weightedValue * 100) / 100,
+      averageDaysInStage: avgStage,
+      averageDaysToActivation: avgActivation,
+      supplierPerformance: supplierPerf,
+      worldpay,
+      outstandingDocuments: outstandingDocs,
+      complianceQueries,
+      renewalsDue,
+      commission: commissions,
+    };
+  }
+
+  /** Visible opportunity ids as SQL, for raw aggregate queries. */
+  private async visibleIds(actor: Actor, f: ReportFilter): Promise<string[] | null> {
+    const where = this.base(actor, f);
+    const unrestricted = can(actor, "opportunity.read_all") && !f.ownerId && !f.serviceType && !f.supplierId && !f.outcome;
+    if (unrestricted) return null;
+    return (await this.prisma.opportunity.findMany({ where, select: { id: true } })).map((o) => o.id);
+  }
+
+  private idFilter(ids: string[] | null, column: string) {
+    if (ids === null) return Prisma.sql``;
+    if (!ids.length) return Prisma.sql` AND false`;
+    return Prisma.sql` AND ${Prisma.raw(column)} = ANY(${ids}::uuid[])`;
+  }
+
+  async averageTimeInStage(actor: Actor, f: ReportFilter) {
+    const ids = await this.visibleIds(actor, f);
+    const r = this.range(f);
+    const rows = await this.prisma.$queryRaw<{ key: string; name: string; days: number; visits: bigint }[]>`
+      SELECT s.key, s.name, AVG(EXTRACT(EPOCH FROM (h.left_at - h.entered_at)) / 86400)::float AS days, COUNT(*) AS visits
+      FROM stage_history h JOIN stages s ON s.id = h.stage_id
+      WHERE h.left_at IS NOT NULL AND h.left_at >= ${r.from} AND h.left_at < ${r.to} ${this.idFilter(ids, "h.opportunity_id")}
+      GROUP BY s.key, s.name, s.sequence ORDER BY s.sequence`;
+    return rows.map((x) => ({ key: x.key, name: x.name, days: Math.round(x.days * 10) / 10, visits: Number(x.visits) }));
+  }
+
+  async averageDaysToActivation(actor: Actor, f: ReportFilter) {
+    const won = await this.prisma.opportunity.findMany({
+      where: { AND: [this.base(actor, f), { outcome: "won", wonAt: { gte: this.range(f).from, lt: this.range(f).to } }] },
+      select: { createdAt: true, wonAt: true },
+    });
+    if (!won.length) return null;
+    const avg = won.reduce((s, o) => s + (o.wonAt!.getTime() - o.createdAt.getTime()), 0) / won.length / 86_400_000;
+    return Math.round(avg * 10) / 10;
+  }
+
+  async supplierPerformance(actor: Actor, f: ReportFilter) {
+    const groups = await this.prisma.opportunity.groupBy({
+      by: ["selectedSupplierId", "outcome"],
+      where: { AND: [this.base(actor, f), { selectedSupplierId: { not: null } }] },
+      _count: { _all: true },
+    });
+    const suppliers = await this.prisma.supplier.findMany({ where: { id: { in: groups.map((g) => g.selectedSupplierId!) } } });
+    return suppliers
+      .map((s) => {
+        const get = (o: string) => groups.find((g) => g.selectedSupplierId === s.id && g.outcome === o)?._count._all ?? 0;
+        return { supplierId: s.id, name: s.name, kind: s.kind, open: get("open"), won: get("won"), lost: get("lost"), winRate: pct(get("won"), get("won") + get("lost")) };
+      })
+      .sort((a, b) => b.won - a.won);
+  }
+
+  async worldpayApproval(actor: Actor, f: ReportFilter) {
+    const r = this.range(f);
+    const apps = await this.prisma.merchantApplication.groupBy({
+      by: ["status"],
+      where: { submissionDate: { gte: dateOnly(r.fromIso), lte: dateOnly(r.toIso) }, opportunity: this.base(actor, f) },
+      _count: { _all: true },
+    });
+    const get = (s: string) => apps.find((a) => a.status === s)?._count._all ?? 0;
+    const approved = get("approved") + get("live");
+    const declined = get("declined");
+    const submitted = apps.reduce((s, a) => s + a._count._all, 0);
+    return { submitted, approved, declined, pending: submitted - approved - declined, approvalRate: pct(approved, approved + declined) };
+  }
+
+  async renewalsDue(actor: Actor, f: ReportFilter) {
+    const horizon = dateOnly(addDays(today(), 120));
+    const [openRenewals, contractsEnding] = await Promise.all([
+      this.prisma.opportunity.count({ where: { AND: [this.base(actor, f), { saleType: "renewal", outcome: "open", renewalDate: { lte: horizon } }] } }),
+      this.prisma.opportunity.count({ where: { AND: [this.base(actor, f), { outcome: "won", renewalDate: { lte: horizon, gte: dateOnly(today()) }, renewals: { none: {} } }] } }),
+    ]);
+    return { openRenewals, contractsEndingWithoutRenewal: contractsEnding };
+  }
+
+  async commissions(actor: Actor, f: ReportFilter) {
+    const rows = await this.prisma.commission.groupBy({ by: ["status"], where: { opportunity: this.base(actor, f) }, _sum: { amount: true } });
+    const get = (s: string) => Number(rows.find((r) => r.status === s)?._sum.amount ?? 0);
+    return { expected: get("expected"), confirmed: get("confirmed"), paid: get("paid"), clawedBack: get("clawed_back") };
+  }
+
+  /** Commission export for accounting (CSV). */
+  async commissionCsv(actor: Actor, f: ReportFilter): Promise<string> {
+    const rows = await this.prisma.commission.findMany({
+      where: { opportunity: this.base(actor, f) },
+      include: { opportunity: { include: { customer: true, owner: true, selectedSupplier: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    const esc = (v: unknown) => {
+      const s = v == null ? "" : String(v);
+      // Neutralise spreadsheet formulas and quote everything.
+      return `"${(/^[=+\-@]/.test(s) ? `'${s}` : s).replace(/"/g, '""')}"`;
+    };
+    const header = ["Opportunity", "Customer", "Salesperson", "Service", "Supplier", "Status", "Amount", "Activation date", "Created"];
+    const lines = rows.map((c) =>
+      [
+        `UO-${String(c.opportunity.number).padStart(6, "0")}`,
+        c.opportunity.customer?.legalName ?? c.opportunity.companyName,
+        c.opportunity.owner?.name,
+        c.opportunity.serviceType,
+        c.opportunity.selectedSupplier?.name,
+        c.status,
+        Number(c.amount).toFixed(2),
+        c.opportunity.activationDate?.toISOString().slice(0, 10),
+        c.createdAt.toISOString().slice(0, 10),
+      ]
+        .map(esc)
+        .join(","),
+    );
+    return [header.map(esc).join(","), ...lines].join("\r\n");
+  }
+
+  stageNames() {
+    return STAGES.map((s) => ({ key: s.key, name: s.name }));
+  }
+}

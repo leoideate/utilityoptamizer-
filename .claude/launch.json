@@ -1,0 +1,8 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "api", "runtimeExecutable": "npm", "runtimeArgs": ["run", "start", "-w", "@uo/api"], "port": 4000 },
+    { "name": "web", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "-w", "@uo/web"], "port": 3000 },
+    { "name": "web-prod", "runtimeExecutable": "npm", "runtimeArgs": ["run", "start", "-w", "@uo/web"], "port": 3000 }
+  ]
+}

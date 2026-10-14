@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "uo_local",
+      "credentials": [{ "accessKey": "uo_s3", "secretKey": "uo_s3_local_dev" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

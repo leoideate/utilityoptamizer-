@@ -1,0 +1,41 @@
+{
+  "name": "utility-optimizer-crm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Utility Optimizer CRM: energy switching and Worldpay merchant-services sales, renewals and compliance.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build -w @uo/shared && npm run build -w @uo/api && npm run build -w @uo/web",
+    "dev:api": "npm run build -w @uo/shared && npm run start:dev -w @uo/api",
+    "dev:web": "npm run dev -w @uo/web",
+    "db:migrate": "npm run db:migrate -w @uo/api",
+    "db:seed": "npm run db:seed -w @uo/api",
+    "lint": "eslint .",
+    "typecheck": "npm run build -w @uo/shared && npm run typecheck -w @uo/api && npm run typecheck -w @uo/web",
+    "test": "npm run test -w @uo/shared && npm run test -w @uo/api",
+    "test:unit": "npm run test -w @uo/shared && npm run test:unit -w @uo/api",
+    "test:e2e": "npm run test:e2e -w @uo/web"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@next/eslint-plugin-next": "15.5.28",
+    "eslint": "9.39.5",
+    "eslint-plugin-react-hooks": "5.2.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.2"
+  },
+  "overrides": {
+    "deepmerge-ts": "8.0.2",
+    "postcss": "8.5.30",
+    "js-yaml": "4.3.2",
+    "@nestjs/swagger": {
+      "js-yaml": "5.4.3"
+    }
+  }
+}

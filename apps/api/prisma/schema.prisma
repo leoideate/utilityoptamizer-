@@ -1,0 +1,1052 @@
+// Utility Optimizer CRM — database schema.
+// Conventions: UUID primary keys, snake_case tables/columns, money and rates as Decimal.
+// Columns ending in `Enc` hold AES-256-GCM ciphertext (see src/common/crypto.service.ts).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums (values mirror packages/shared/src/enums.ts)
+// ---------------------------------------------------------------------------
+
+enum Role {
+  administrator
+  manager
+  salesperson
+  operations
+  compliance
+  finance
+}
+
+enum ServiceType {
+  electricity
+  gas
+  dual_fuel
+  merchant_services
+}
+
+enum SaleType {
+  new_sale
+  renewal
+}
+
+enum Outcome {
+  open
+  won
+  lost
+}
+
+enum LeadSource {
+  manual
+  telephone
+  email
+  website
+  whatsapp
+  referral
+  existing_customer
+  business_card
+  csv_import
+  api
+  renewal
+}
+
+enum ApprovalState {
+  not_requested
+  pending
+  approved
+  rejected
+}
+
+enum VatStatus {
+  yes
+  no
+  pending
+}
+
+enum AddressKind {
+  registered
+  trading
+  billing
+  postal
+}
+
+enum OccupancyType {
+  owner_occupied
+  rented
+  landlord_supply
+  other
+}
+
+enum Fuel {
+  electricity
+  gas
+}
+
+enum ReadingType {
+  actual
+  estimated
+  customer
+  smart
+}
+
+enum ContractStatus {
+  draft
+  quoted
+  selected
+  signed
+  submitted
+  live
+  ended
+  cancelled
+}
+
+enum SupplierKind {
+  energy
+  merchant
+}
+
+enum LegalEntity {
+  sole_trader
+  partnership
+  limited_company
+  plc
+  charity_club
+  other
+}
+
+enum PrincipalRole {
+  owner
+  partner
+  director
+  shareholder
+  trustee
+  signatory
+}
+
+enum MerchantStatus {
+  draft
+  ready
+  submitted
+  compliance_query
+  approved
+  declined
+  live
+  cancelled
+}
+
+enum ComplianceStatus {
+  not_started
+  in_review
+  query_raised
+  approved
+  rejected
+}
+
+enum DocumentApproval {
+  pending
+  approved
+  rejected
+}
+
+enum ScanStatus {
+  pending
+  clean
+  infected
+  error
+  skipped
+}
+
+enum SignatureStatus {
+  draft
+  sent
+  partially_signed
+  completed
+  declined
+  expired
+  cancelled
+}
+
+enum SignerRole {
+  customer
+  broker
+}
+
+enum SignerStatus {
+  pending
+  signed
+  declined
+}
+
+enum ActivityType {
+  call
+  email
+  whatsapp
+  meeting
+  request_documents
+  review_documents
+  prepare_comparison
+  prepare_proposal
+  obtain_signature
+  internal_review
+  submit_application
+  follow_up_supplier
+  follow_up_worldpay
+  renewal_review
+  compliance_review
+  todo
+}
+
+enum Priority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum ActivityStatus {
+  open
+  done
+  cancelled
+}
+
+enum TimelineKind {
+  call
+  note
+  email
+  whatsapp
+  stage_change
+  assignment
+  activity
+  document
+  approval
+  signature
+  submission
+  compliance
+  activation
+  outcome
+  system
+}
+
+enum OcrStatus {
+  uploaded
+  processing
+  processed
+  failed
+  confirmed
+  discarded
+}
+
+enum CommissionStatus {
+  expected
+  confirmed
+  paid
+  clawed_back
+}
+
+enum JobStatus {
+  pending
+  running
+  succeeded
+  failed
+  dead
+}
+
+// ---------------------------------------------------------------------------
+// Users, sessions, teams
+// ---------------------------------------------------------------------------
+
+model User {
+  id             String     @id @default(uuid()) @db.Uuid
+  name           String
+  email          String     @unique
+  passwordHash   String     @map("password_hash")
+  active         Boolean    @default(true)
+  roles          UserRole[]
+  teamId         String?    @map("team_id") @db.Uuid
+  team           SalesTeam? @relation(fields: [teamId], references: [id])
+  /// TOTP secret (encrypted). MFA is enforced at login when mfaEnabled is true.
+  mfaSecretEnc   String?    @map("mfa_secret_enc")
+  mfaEnabled     Boolean    @default(false) @map("mfa_enabled")
+  failedLogins   Int        @default(0) @map("failed_logins")
+  lockedUntil    DateTime?  @map("locked_until")
+  lastLoginAt    DateTime?  @map("last_login_at")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  sessions         Session[]
+  ownedOpps        Opportunity[]  @relation("OppOwner")
+  activities       Activity[]     @relation("ActivityOwner")
+  notifications    Notification[]
+
+  @@map("users")
+}
+
+model UserRole {
+  userId String @map("user_id") @db.Uuid
+  role   Role
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+  @@map("user_roles")
+}
+
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  /// SHA-256 of the session token; the token itself is only ever in the cookie.
+  tokenHash  String   @unique @map("token_hash")
+  csrfToken  String   @map("csrf_token")
+  userId     String   @map("user_id") @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model SalesTeam {
+  id    String        @id @default(uuid()) @db.Uuid
+  name  String        @unique
+  users User[]
+  opps  Opportunity[]
+
+  @@map("sales_teams")
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline & reference data
+// ---------------------------------------------------------------------------
+
+model Stage {
+  id          String        @id @default(uuid()) @db.Uuid
+  /// Stable key used by code and migrations. Null for admin-created extra stages.
+  key         String?       @unique
+  name        String
+  sequence    Int
+  probability Int           @default(10)
+  active      Boolean       @default(true)
+  opps        Opportunity[]
+
+  @@map("stages")
+}
+
+model Supplier {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String
+  kind      SupplierKind
+  /// Where "Send submission pack" emails applications. Optional.
+  submissionEmail String? @map("submission_email")
+  active    Boolean      @default(true)
+  opps      Opportunity[]
+  contracts EnergyContract[] @relation("SelectedSupplier")
+  quotes    ComparisonQuote[]
+
+  @@unique([name, kind])
+  @@map("suppliers")
+}
+
+// ---------------------------------------------------------------------------
+// Customers
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id                     String     @id @default(uuid()) @db.Uuid
+  legalName              String     @map("legal_name")
+  tradingName            String?    @map("trading_name")
+  businessType           String?    @map("business_type")
+  industry               String?
+  companyRegNumber       String?    @map("company_reg_number")
+  vatRegistered          VatStatus? @map("vat_registered")
+  vatNumber              String?    @map("vat_number")
+  incorporationDate      DateTime?  @map("incorporation_date") @db.Date
+  countryOfIncorporation String?    @map("country_of_incorporation")
+  website                String?
+  phone                  String?
+  /// Last 9 digits of phone, for duplicate detection.
+  phoneKey               String?    @map("phone_key")
+  email                  String?
+  advertisingMethod      String?    @map("advertising_method")
+  active                 Boolean    @default(true)
+  /// Set when this record was merged into another. The record is kept, never deleted.
+  mergedIntoId           String?    @map("merged_into_id") @db.Uuid
+  createdById            String?    @map("created_by_id") @db.Uuid
+  createdAt              DateTime   @default(now()) @map("created_at")
+  updatedAt              DateTime   @updatedAt @map("updated_at")
+
+  addresses   CustomerAddress[]
+  contacts    CustomerContact[]
+  bankAccounts BankAccount[]
+  opps        Opportunity[]
+  sites       SupplySite[]
+
+  @@index([email])
+  @@index([phoneKey])
+  @@index([companyRegNumber])
+  @@index([vatNumber])
+  @@index([legalName])
+  @@map("customers")
+}
+
+model CustomerAddress {
+  id         String      @id @default(uuid()) @db.Uuid
+  customerId String      @map("customer_id") @db.Uuid
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  kind       AddressKind @default(trading)
+  line1      String
+  line2      String?
+  city       String?
+  county     String?
+  postcode   String?
+  country    String      @default("IE")
+
+  @@index([customerId])
+  @@index([postcode])
+  @@map("customer_addresses")
+}
+
+model CustomerContact {
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  firstName  String   @map("first_name")
+  lastName   String?  @map("last_name")
+  jobTitle   String?  @map("job_title")
+  email      String?
+  phone      String?
+  mobile     String?
+  phoneKey   String?  @map("phone_key")
+  mobileKey  String?  @map("mobile_key")
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([customerId])
+  @@index([email])
+  @@index([phoneKey])
+  @@index([mobileKey])
+  @@map("customer_contacts")
+}
+
+/// Restricted (bank.read). Values encrypted; only the IBAN's last four digits are stored in clear.
+model BankAccount {
+  id             String   @id @default(uuid()) @db.Uuid
+  customerId     String   @map("customer_id") @db.Uuid
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  accountNameEnc String   @map("account_name_enc")
+  ibanEnc        String   @map("iban_enc")
+  ibanLast4      String   @map("iban_last4")
+  bicEnc         String?  @map("bic_enc")
+  createdById    String?  @map("created_by_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("bank_accounts")
+}
+
+// ---------------------------------------------------------------------------
+// Opportunities
+// ---------------------------------------------------------------------------
+
+model Opportunity {
+  id                    String        @id @default(uuid()) @db.Uuid
+  /// Human-friendly number shown as UO-000123.
+  number                Int           @unique @default(autoincrement())
+  name                  String
+  customerId            String?       @map("customer_id") @db.Uuid
+  customer              Customer?     @relation(fields: [customerId], references: [id])
+  // Captured before a Customer exists.
+  contactName           String?       @map("contact_name")
+  companyName           String?       @map("company_name")
+  email                 String?
+  phone                 String?
+  ownerId               String?       @map("owner_id") @db.Uuid
+  owner                 User?         @relation("OppOwner", fields: [ownerId], references: [id])
+  teamId                String?       @map("team_id") @db.Uuid
+  team                  SalesTeam?    @relation(fields: [teamId], references: [id])
+  stageId               String        @map("stage_id") @db.Uuid
+  stage                 Stage         @relation(fields: [stageId], references: [id])
+  stageEnteredAt        DateTime      @default(now()) @map("stage_entered_at")
+  /// Opportunities are permanent records. No code path sets this to false.
+  active                Boolean       @default(true)
+  outcome               Outcome       @default(open)
+  probability           Int           @default(5)
+  expectedRevenue       Decimal?      @map("expected_revenue") @db.Decimal(14, 2)
+  serviceType           ServiceType   @map("service_type")
+  saleType              SaleType      @default(new_sale) @map("sale_type")
+  leadSource            LeadSource    @default(manual) @map("lead_source")
+  leadSourceDetail      String?       @map("lead_source_detail")
+  campaign              String?
+  nextAction            String?       @map("next_action")
+  followUpDate          DateTime?     @map("follow_up_date") @db.Date
+  internalApproval      ApprovalState @default(not_requested) @map("internal_approval")
+  internalApprovalById  String?       @map("internal_approval_by_id") @db.Uuid
+  internalApprovalAt    DateTime?     @map("internal_approval_at")
+  selectedSupplierId    String?       @map("selected_supplier_id") @db.Uuid
+  selectedSupplier      Supplier?     @relation(fields: [selectedSupplierId], references: [id])
+  applicationStatus     String?       @map("application_status")
+  wonAt                 DateTime?     @map("won_at")
+  lostAt                DateTime?     @map("lost_at")
+  lostReason            String?       @map("lost_reason")
+  activationDate        DateTime?     @map("activation_date") @db.Date
+  renewalDate           DateTime?     @map("renewal_date") @db.Date
+  previousOpportunityId String?       @map("previous_opportunity_id") @db.Uuid
+  previousOpportunity   Opportunity?  @relation("Renewals", fields: [previousOpportunityId], references: [id])
+  renewals              Opportunity[] @relation("Renewals")
+  /// Identifies the contract(s) a renewal came from. Unique, so renewals can't be duplicated.
+  renewalSourceKey      String?       @unique @map("renewal_source_key")
+  firstContactAt        DateTime?     @map("first_contact_at")
+  lastContactAt         DateTime?     @map("last_contact_at")
+  convertedAt           DateTime?     @map("converted_at")
+  createdById           String?       @map("created_by_id") @db.Uuid
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+
+  stageHistory   StageHistory[]
+  sites          SupplySite[]
+  contracts      EnergyContract[]
+  quotes         ComparisonQuote[]
+  merchantApps   MerchantApplication[]
+  documents      DocumentItem[]
+  signatures     SignatureRequest[]
+  activities     Activity[]
+  timeline       TimelineEntry[]
+  commissions    Commission[]
+
+  @@index([stageId])
+  @@index([ownerId])
+  @@index([customerId])
+  @@index([outcome])
+  @@index([serviceType])
+  @@index([renewalDate])
+  @@map("opportunities")
+}
+
+/// One row per stage visit; drives "average time in each stage".
+model StageHistory {
+  id            String      @id @default(uuid()) @db.Uuid
+  opportunityId String      @map("opportunity_id") @db.Uuid
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id])
+  stageId       String      @map("stage_id") @db.Uuid
+  enteredAt     DateTime    @default(now()) @map("entered_at")
+  leftAt        DateTime?   @map("left_at")
+  userId        String?     @map("user_id") @db.Uuid
+
+  @@index([opportunityId])
+  @@map("stage_history")
+}
+
+// ---------------------------------------------------------------------------
+// Energy
+// ---------------------------------------------------------------------------
+
+model SupplySite {
+  id                   String         @id @default(uuid()) @db.Uuid
+  customerId           String?        @map("customer_id") @db.Uuid
+  customer             Customer?      @relation(fields: [customerId], references: [id])
+  opportunityId        String?        @map("opportunity_id") @db.Uuid
+  opportunity          Opportunity?   @relation(fields: [opportunityId], references: [id])
+  label                String?
+  line1                String
+  line2                String?
+  city                 String?
+  county               String?
+  postcode             String?
+  country              String         @default("IE")
+  serviceType          ServiceType    @map("service_type")
+  occupancyType        OccupancyType? @map("occupancy_type")
+  landlordName         String?        @map("landlord_name")
+  landlordContact      String?        @map("landlord_contact")
+  customerSector       String?        @map("customer_sector")
+  annualConsumptionKwh Decimal?       @map("annual_consumption_kwh") @db.Decimal(14, 2)
+  createdAt            DateTime       @default(now()) @map("created_at")
+
+  meterPoints MeterPoint[]
+  contracts   EnergyContract[]
+
+  @@index([customerId])
+  @@index([opportunityId])
+  @@map("supply_sites")
+}
+
+model MeterPoint {
+  id                    String         @id @default(uuid()) @db.Uuid
+  siteId                String         @map("site_id") @db.Uuid
+  site                  SupplySite     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  fuel                  Fuel
+  meterType             String?        @map("meter_type")
+  mprn                  String?
+  gprn                  String?
+  meterNumber           String?        @map("meter_number")
+  mccCode               String?        @map("mcc_code")
+  /// Why an identifier doesn't match the standard format (new connection, NI site...).
+  formatExceptionReason String?        @map("format_exception_reason")
+  readings              MeterReading[]
+
+  @@index([siteId])
+  @@index([mprn])
+  @@index([gprn])
+  @@map("meter_points")
+}
+
+model MeterReading {
+  id                String      @id @default(uuid()) @db.Uuid
+  meterPointId      String      @map("meter_point_id") @db.Uuid
+  meterPoint        MeterPoint  @relation(fields: [meterPointId], references: [id], onDelete: Cascade)
+  readingType       ReadingType @map("reading_type")
+  register          String?
+  value             Decimal     @db.Decimal(14, 2)
+  readingDate       DateTime    @map("reading_date") @db.Date
+  /// Bill or photo the reading came from.
+  documentItemId    String?     @map("document_item_id") @db.Uuid
+  createdById       String?     @map("created_by_id") @db.Uuid
+  createdAt         DateTime    @default(now()) @map("created_at")
+
+  @@index([meterPointId])
+  @@map("meter_readings")
+}
+
+model EnergyContract {
+  id                       String         @id @default(uuid()) @db.Uuid
+  opportunityId            String         @map("opportunity_id") @db.Uuid
+  opportunity              Opportunity    @relation(fields: [opportunityId], references: [id])
+  customerId               String?        @map("customer_id") @db.Uuid
+  siteId                   String?        @map("site_id") @db.Uuid
+  site                     SupplySite?    @relation(fields: [siteId], references: [id])
+  fuel                     Fuel
+  existingSupplierName     String?        @map("existing_supplier_name")
+  existingSupplierAccount  String?        @map("existing_supplier_account")
+  selectedSupplierId       String?        @map("selected_supplier_id") @db.Uuid
+  selectedSupplier         Supplier?      @relation("SelectedSupplier", fields: [selectedSupplierId], references: [id])
+  currentContractStartDate DateTime?      @map("current_contract_start_date") @db.Date
+  currentContractEndDate   DateTime?      @map("current_contract_end_date") @db.Date
+  proposedActivationDate   DateTime?      @map("proposed_activation_date") @db.Date
+  activationDate           DateTime?      @map("activation_date") @db.Date
+  termMonths               Int?           @map("term_months")
+  /// End of the contract we placed; set at activation and drives renewals.
+  contractEndDate          DateTime?      @map("contract_end_date") @db.Date
+  pricingPlan              String?        @map("pricing_plan")
+  dayRate                  Decimal?       @map("day_rate") @db.Decimal(10, 4)
+  nightRate                Decimal?       @map("night_rate") @db.Decimal(10, 4)
+  peakRate                 Decimal?       @map("peak_rate") @db.Decimal(10, 4)
+  otherRate                Decimal?       @map("other_rate") @db.Decimal(10, 4)
+  gasRate                  Decimal?       @map("gas_rate") @db.Decimal(10, 4)
+  standingCharge           Decimal?       @map("standing_charge") @db.Decimal(10, 4)
+  supplierReference        String?        @map("supplier_reference")
+  status                   ContractStatus @default(draft)
+  /// The contract this one renews. Historical contracts are never modified.
+  previousContractId       String?        @map("previous_contract_id") @db.Uuid
+  createdAt                DateTime       @default(now()) @map("created_at")
+  updatedAt                DateTime       @updatedAt @map("updated_at")
+
+  @@index([opportunityId])
+  @@index([status, contractEndDate])
+  @@map("energy_contracts")
+}
+
+model ComparisonQuote {
+  id                  String      @id @default(uuid()) @db.Uuid
+  opportunityId       String      @map("opportunity_id") @db.Uuid
+  opportunity         Opportunity @relation(fields: [opportunityId], references: [id])
+  supplierId          String      @map("supplier_id") @db.Uuid
+  supplier            Supplier    @relation(fields: [supplierId], references: [id])
+  fuel                Fuel
+  termMonths          Int         @map("term_months")
+  dayRate             Decimal?    @map("day_rate") @db.Decimal(10, 4)
+  nightRate           Decimal?    @map("night_rate") @db.Decimal(10, 4)
+  gasRate             Decimal?    @map("gas_rate") @db.Decimal(10, 4)
+  standingCharge      Decimal?    @map("standing_charge") @db.Decimal(10, 4)
+  estimatedAnnualCost Decimal?    @map("estimated_annual_cost") @db.Decimal(14, 2)
+  estimatedCommission Decimal?    @map("estimated_commission") @db.Decimal(14, 2)
+  notes               String?
+  selected            Boolean     @default(false)
+  createdById         String?     @map("created_by_id") @db.Uuid
+  createdAt           DateTime    @default(now()) @map("created_at")
+
+  @@index([opportunityId])
+  @@map("comparison_quotes")
+}
+
+// ---------------------------------------------------------------------------
+// Worldpay
+// ---------------------------------------------------------------------------
+
+model MerchantApplication {
+  id                      String          @id @default(uuid()) @db.Uuid
+  opportunityId           String          @map("opportunity_id") @db.Uuid
+  opportunity             Opportunity     @relation(fields: [opportunityId], references: [id])
+  customerId              String?         @map("customer_id") @db.Uuid
+  campaign                String?
+  legalEntity             LegalEntity?    @map("legal_entity")
+  natureOfBusiness        String?         @map("nature_of_business")
+  estimatedAnnualTurnover Decimal?        @map("estimated_annual_turnover") @db.Decimal(14, 2)
+  cardTurnoverPct         Decimal?        @map("card_turnover_pct") @db.Decimal(5, 2)
+  averageTransactionValue Decimal?        @map("average_transaction_value") @db.Decimal(12, 2)
+  settlementPeriod        String?         @map("settlement_period")
+  dashboardRequested      Boolean         @default(false) @map("dashboard_requested")
+  website                 String?
+  advertisingMethod       String?         @map("advertising_method")
+  applicationReference    String?         @map("application_reference")
+  customerAcceptedAt      DateTime?       @map("customer_accepted_at")
+  submissionDate          DateTime?       @map("submission_date") @db.Date
+  approvalDate            DateTime?       @map("approval_date") @db.Date
+  activationDate          DateTime?       @map("activation_date") @db.Date
+  termMonths              Int?            @map("term_months")
+  contractEndDate         DateTime?       @map("contract_end_date") @db.Date
+  status                  MerchantStatus  @default(draft)
+  previousApplicationId   String?         @map("previous_application_id") @db.Uuid
+  createdAt               DateTime        @default(now()) @map("created_at")
+  updatedAt               DateTime        @updatedAt @map("updated_at")
+
+  pricing    MerchantPricing[]
+  principals Principal[]
+  risk       MerchantRisk?
+
+  @@index([opportunityId])
+  @@index([status, contractEndDate])
+  @@map("merchant_applications")
+}
+
+model MerchantPricing {
+  id                   String              @id @default(uuid()) @db.Uuid
+  applicationId        String              @map("application_id") @db.Uuid
+  application          MerchantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  product              String
+  quantity             Int                 @default(1)
+  minimumMonthlyCharge Decimal?            @map("minimum_monthly_charge") @db.Decimal(10, 2)
+  productMonthlyFee    Decimal?            @map("product_monthly_fee") @db.Decimal(10, 2)
+  debitRate            Decimal?            @map("debit_rate") @db.Decimal(6, 3)
+  creditRate           Decimal?            @map("credit_rate") @db.Decimal(6, 3)
+  commercialRate       Decimal?            @map("commercial_rate") @db.Decimal(6, 3)
+  amexRate             Decimal?            @map("amex_rate") @db.Decimal(6, 3)
+  authorisationFee     Decimal?            @map("authorisation_fee") @db.Decimal(8, 4)
+  offerType            String?             @map("offer_type")
+
+  @@map("merchant_pricing")
+}
+
+/// Restricted. Date of birth and nationality are encrypted; presence flags let rules run without decrypting.
+model Principal {
+  id             String              @id @default(uuid()) @db.Uuid
+  applicationId  String              @map("application_id") @db.Uuid
+  application    MerchantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  role           PrincipalRole
+  title          String?
+  firstName      String              @map("first_name")
+  middleName     String?             @map("middle_name")
+  lastName       String              @map("last_name")
+  dobEnc         String?             @map("dob_enc")
+  nationalityEnc String?             @map("nationality_enc")
+  hasDob         Boolean             @default(false) @map("has_dob")
+  hasNationality Boolean             @default(false) @map("has_nationality")
+  ownershipPct   Decimal?            @map("ownership_pct") @db.Decimal(5, 2)
+  email          String?
+  phone          String?
+  addresses      PrincipalAddress[]
+  createdAt      DateTime            @default(now()) @map("created_at")
+
+  @@index([applicationId])
+  @@map("principals")
+}
+
+/// Residential address history (restricted, address encrypted).
+model PrincipalAddress {
+  id          String    @id @default(uuid()) @db.Uuid
+  principalId String    @map("principal_id") @db.Uuid
+  principal   Principal @relation(fields: [principalId], references: [id], onDelete: Cascade)
+  addressEnc  String    @map("address_enc")
+  fromDate    DateTime  @map("from_date") @db.Date
+  toDate      DateTime? @map("to_date") @db.Date
+
+  @@index([principalId])
+  @@map("principal_addresses")
+}
+
+model MerchantRisk {
+  id                     String              @id @default(uuid()) @db.Uuid
+  applicationId          String              @unique @map("application_id") @db.Uuid
+  application            MerchantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  thirdPartyFulfilment   Boolean             @default(false) @map("third_party_fulfilment")
+  stockStoredElsewhere   Boolean             @default(false) @map("stock_stored_elsewhere")
+  depositsAccepted       Boolean             @default(false) @map("deposits_accepted")
+  depositTxnPct          Decimal?            @map("deposit_txn_pct") @db.Decimal(5, 2)
+  depositValuePct        Decimal?            @map("deposit_value_pct") @db.Decimal(5, 2)
+  depositLeadDays        Int?                @map("deposit_lead_days")
+  balanceLeadDays        Int?                @map("balance_lead_days")
+  fullPrepaymentAccepted Boolean             @default(false) @map("full_prepayment_accepted")
+  fullPrepaymentPct      Decimal?            @map("full_prepayment_pct") @db.Decimal(5, 2)
+  fullPaymentLeadDays    Int?                @map("full_payment_lead_days")
+  complianceStatus       ComplianceStatus    @default(not_started) @map("compliance_status")
+  restrictedNotesEnc     String?             @map("restricted_notes_enc")
+  reviewedById           String?             @map("reviewed_by_id") @db.Uuid
+  reviewedAt             DateTime?           @map("reviewed_at")
+
+  @@map("merchant_risk")
+}
+
+// ---------------------------------------------------------------------------
+// Documents & signatures
+// ---------------------------------------------------------------------------
+
+model DocumentItem {
+  id                    String           @id @default(uuid()) @db.Uuid
+  opportunityId         String           @map("opportunity_id") @db.Uuid
+  opportunity           Opportunity      @relation(fields: [opportunityId], references: [id])
+  customerId            String?          @map("customer_id") @db.Uuid
+  merchantApplicationId String?          @map("merchant_application_id") @db.Uuid
+  energyContractId      String?          @map("energy_contract_id") @db.Uuid
+  documentType          String           @map("document_type")
+  required              Boolean          @default(true)
+  sensitive             Boolean          @default(false)
+  requestedAt           DateTime?        @map("requested_at")
+  received              Boolean          @default(false)
+  receivedAt            DateTime?        @map("received_at")
+  approval              DocumentApproval @default(pending)
+  reviewerId            String?          @map("reviewer_id") @db.Uuid
+  reviewedAt            DateTime?        @map("reviewed_at")
+  reviewNotes           String?          @map("review_notes")
+  expiryDate            DateTime?        @map("expiry_date") @db.Date
+  createdAt             DateTime         @default(now()) @map("created_at")
+  versions              DocumentVersion[]
+
+  @@index([opportunityId])
+  @@index([expiryDate])
+  @@map("document_items")
+}
+
+/// Every upload is a new version; nothing is overwritten.
+model DocumentVersion {
+  id           String       @id @default(uuid()) @db.Uuid
+  itemId       String       @map("item_id") @db.Uuid
+  item         DocumentItem @relation(fields: [itemId], references: [id])
+  version      Int
+  storageKey   String       @unique @map("storage_key")
+  filename     String
+  mimeType     String       @map("mime_type")
+  size         Int
+  sha256       String
+  scanStatus   ScanStatus   @default(pending) @map("scan_status")
+  uploadedById String?      @map("uploaded_by_id") @db.Uuid
+  uploadedAt   DateTime     @default(now()) @map("uploaded_at")
+
+  @@unique([itemId, version])
+  @@map("document_versions")
+}
+
+model SignatureTemplate {
+  id                 String             @id @default(uuid()) @db.Uuid
+  name               String
+  provider           String
+  providerTemplateId String?            @map("provider_template_id")
+  serviceType        ServiceType?       @map("service_type")
+  active             Boolean            @default(true)
+  requests           SignatureRequest[]
+
+  @@map("signature_templates")
+}
+
+model SignatureRequest {
+  id                String             @id @default(uuid()) @db.Uuid
+  opportunityId     String             @map("opportunity_id") @db.Uuid
+  opportunity       Opportunity        @relation(fields: [opportunityId], references: [id])
+  templateId        String?            @map("template_id") @db.Uuid
+  template          SignatureTemplate? @relation(fields: [templateId], references: [id])
+  documentItemId    String?            @map("document_item_id") @db.Uuid
+  title             String
+  provider          String
+  providerRequestId String?            @unique @map("provider_request_id")
+  status            SignatureStatus    @default(draft)
+  requestedAt       DateTime?          @map("requested_at")
+  lastReminderAt    DateTime?          @map("last_reminder_at")
+  completedAt       DateTime?          @map("completed_at")
+  /// The signed document, stored as a DocumentVersion.
+  signedVersionId   String?            @map("signed_version_id") @db.Uuid
+  createdById       String?            @map("created_by_id") @db.Uuid
+  createdAt         DateTime           @default(now()) @map("created_at")
+  signers           Signer[]
+
+  @@index([opportunityId])
+  @@map("signature_requests")
+}
+
+model Signer {
+  id        String           @id @default(uuid()) @db.Uuid
+  requestId String           @map("request_id") @db.Uuid
+  request   SignatureRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  role      SignerRole
+  name      String
+  email     String
+  status    SignerStatus     @default(pending)
+  signedAt  DateTime?        @map("signed_at")
+
+  @@map("signers")
+}
+
+// ---------------------------------------------------------------------------
+// Activities, timeline, audit, notifications
+// ---------------------------------------------------------------------------
+
+model Activity {
+  id             String         @id @default(uuid()) @db.Uuid
+  type           ActivityType
+  summary        String
+  note           String?
+  dueDate        DateTime       @map("due_date") @db.Date
+  priority       Priority       @default(normal)
+  status         ActivityStatus @default(open)
+  reminderAt     DateTime?      @map("reminder_at")
+  reminderSentAt DateTime?      @map("reminder_sent_at")
+  ownerId        String?        @map("owner_id") @db.Uuid
+  owner          User?          @relation("ActivityOwner", fields: [ownerId], references: [id])
+  opportunityId  String?        @map("opportunity_id") @db.Uuid
+  opportunity    Opportunity?   @relation(fields: [opportunityId], references: [id])
+  customerId     String?        @map("customer_id") @db.Uuid
+  /// Set by automations: at most one OPEN activity per (opportunity, key). Enforced by a partial unique index.
+  automationKey  String?        @map("automation_key")
+  createdById    String?        @map("created_by_id") @db.Uuid
+  createdAt      DateTime       @default(now()) @map("created_at")
+  completedAt    DateTime?      @map("completed_at")
+
+  @@index([ownerId, status, dueDate])
+  @@index([opportunityId])
+  @@map("activities")
+}
+
+/// Append-only (a database trigger blocks UPDATE and DELETE). Corrections are new entries with `correctsId`.
+model TimelineEntry {
+  id            String       @id @default(uuid()) @db.Uuid
+  opportunityId String?      @map("opportunity_id") @db.Uuid
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+  customerId    String?      @map("customer_id") @db.Uuid
+  kind          TimelineKind
+  body          String
+  direction     String?
+  data          Json?
+  actorId       String?      @map("actor_id") @db.Uuid
+  occurredAt    DateTime     @default(now()) @map("occurred_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  correctsId    String?      @map("corrects_id") @db.Uuid
+
+  @@index([opportunityId, occurredAt])
+  @@index([customerId, occurredAt])
+  @@map("timeline_entries")
+}
+
+/// Append-only security/audit log (trigger-protected). Never contains sensitive values.
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  summary    String
+  data       Json?
+  ip         String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// OCR, commissions, integrations, settings
+// ---------------------------------------------------------------------------
+
+model BusinessCardScan {
+  id            String    @id @default(uuid()) @db.Uuid
+  storageKey    String    @unique @map("storage_key")
+  filename      String
+  mimeType      String    @map("mime_type")
+  provider      String
+  status        OcrStatus @default(uploaded)
+  confidence    Decimal?  @db.Decimal(4, 3)
+  rawText       String?   @map("raw_text")
+  parsed        Json?
+  error         String?
+  customerId    String?   @map("customer_id") @db.Uuid
+  opportunityId String?   @map("opportunity_id") @db.Uuid
+  createdById   String?   @map("created_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("business_card_scans")
+}
+
+model Commission {
+  id            String           @id @default(uuid()) @db.Uuid
+  opportunityId String           @map("opportunity_id") @db.Uuid
+  opportunity   Opportunity      @relation(fields: [opportunityId], references: [id])
+  amount        Decimal          @db.Decimal(14, 2)
+  status        CommissionStatus @default(expected)
+  note          String?
+  createdById   String?          @map("created_by_id") @db.Uuid
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  @@index([opportunityId])
+  @@map("commissions")
+}
+
+/// Outbound integration work (supplier/Worldpay submission, email, WhatsApp, accounting).
+/// Executed by BullMQ with retries; jobs that exhaust retries become `dead` (dead-letter).
+model IntegrationJob {
+  id             String    @id @default(uuid()) @db.Uuid
+  kind           String
+  opportunityId  String?   @map("opportunity_id") @db.Uuid
+  payload        Json
+  status         JobStatus @default(pending)
+  attempts       Int       @default(0)
+  lastError      String?   @map("last_error")
+  result         Json?
+  idempotencyKey String    @unique @map("idempotency_key")
+  createdById    String?   @map("created_by_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("integration_jobs")
+}
+
+/// Inbound webhooks, recorded once per provider event id (idempotency).
+model WebhookEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  provider    String
+  eventId     String    @map("event_id")
+  payload     Json
+  status      JobStatus @default(pending)
+  error       String?
+  receivedAt  DateTime  @default(now()) @map("received_at")
+  processedAt DateTime? @map("processed_at")
+
+  @@unique([provider, eventId])
+  @@map("webhook_events")
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
