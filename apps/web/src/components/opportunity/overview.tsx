@@ -23,9 +23,11 @@ const GATE_LABELS: Record<keyof Workspace["gates"], string> = {
 
 export function OverviewTab({ opp, onGoTo }: { opp: Workspace; onGoTo: (tab: string) => void }) {
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-      <DetailsCard opp={opp} />
-      <div className="space-y-6">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="order-2 min-w-0 lg:order-1">
+        <DetailsCard opp={opp} />
+      </div>
+      <div className="order-1 min-w-0 space-y-6 lg:order-2">
         <CustomerCard opp={opp} />
         <Card>
           <CardHeader title="Checklist" description="What's needed for the next milestones." />
@@ -262,7 +264,7 @@ function CustomerCard({ opp }: { opp: Workspace }) {
           }
         />
         <div className="space-y-2 p-5 text-sm">
-          <Link href={`/customers/${c.id}`} className="flex items-center gap-2 font-medium hover:underline">
+          <Link href={`/customers/${c.id}`} className="flex min-h-6 items-center gap-2 font-medium hover:underline">
             <Building2 className="size-4 text-muted" aria-hidden /> {c.legalName}
           </Link>
           {c.tradingName && <p className="text-muted">Trading as {c.tradingName}</p>}

@@ -45,14 +45,31 @@ export default function CustomersPage() {
           </Button>
         }
       />
-      <Input className="mb-4 max-w-md" type="search" placeholder="Search name, email, phone, VAT or company number" aria-label="Search customers" value={q} onChange={(e) => setQ(e.target.value)} />
+      <Input className="mb-4 sm:max-w-md" type="search" placeholder="Search name, email, phone, VAT or company number" aria-label="Search customers" value={q} onChange={(e) => setQ(e.target.value)} />
       <Card className="overflow-hidden">
         {isLoading ? (
           <Skeleton className="m-4 h-48" />
         ) : !data?.items.length ? (
           <EmptyState icon={<Building2 />} title={debounced ? "No customers match" : "No customers yet"} />
         ) : (
-          <div className="overflow-x-auto" tabIndex={0}>
+          <>
+          <ul className="divide-y divide-border md:hidden">
+            {data.items.map((c) => (
+              <li key={c.id}>
+                <Link href={`/customers/${c.id}`} className="block px-4 py-3 active:bg-surface-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="min-w-0 font-medium">{c.legalName}</span>
+                    <span className="shrink-0 text-xs text-muted">
+                      {c._count.opps} opportunit{c._count.opps === 1 ? "y" : "ies"}
+                    </span>
+                  </div>
+                  {c.tradingName && <p className="text-xs text-muted">t/a {c.tradingName}</p>}
+                  {(c.email || c.phone) && <p className="mt-0.5 truncate text-xs text-muted">{c.email ?? c.phone}</p>}
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto md:block" tabIndex={0}>
             <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-surface-2 text-left text-muted">
                 <tr>
@@ -67,7 +84,7 @@ export default function CustomersPage() {
                 {data.items.map((c) => (
                   <tr key={c.id} className="border-t border-border hover:bg-surface-2/60">
                     <td className="px-4 py-2.5">
-                      <Link href={`/customers/${c.id}`} className="font-medium hover:underline">
+                      <Link href={`/customers/${c.id}`} className="inline-block py-0.5 font-medium hover:underline">
                         {c.legalName}
                       </Link>
                       {c.tradingName && <span className="block text-xs text-muted">t/a {c.tradingName}</span>}
@@ -81,6 +98,7 @@ export default function CustomersPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
       {data && data.total > data.pageSize && (

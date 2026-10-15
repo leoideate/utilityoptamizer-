@@ -11,13 +11,13 @@ Run on 14 October 2026, Windows 10, Node 22.17, Docker Desktop (Postgres 16, Red
 | Shared unit tests (rules, permissions, identifiers, percentages, dates) | `npm test -w @uo/shared` | ✅ 30 / 30 |
 | API unit tests (encryption, scrypt, TOTP RFC 6238 vector, webhook HMAC and replay, OCR card parser, phone matching, address-history coverage, redaction, upload sniffing, env validation, CSV parsing) | `npm run test:unit -w @uo/api` | ✅ 17 / 17 |
 | API integration tests (real PostgreSQL, full NestJS app over HTTP) | `npm run test:integration -w @uo/api` | ✅ 61 / 61 (incl. 10 single sign-on tests against a mock OpenID provider, 7 call tests incl. a mock RingCentral platform, 5 chat tests) |
-| End-to-end + accessibility (Playwright, Chromium, axe WCAG 2.1 AA, desktop and Pixel 7) | `npm run test:e2e` | ✅ 11 / 11 (incl. real-time chat between two browsers and a logged call) |
+| End-to-end + accessibility (Playwright, Chromium, axe WCAG 2.1 AA, desktop and Pixel 7) | `npm run test:e2e` | ✅ 12 / 12 (incl. real-time chat between two browsers, a logged call, and a responsive check of 15 screens at 6 widths from 320 to 1920px) |
 | Production builds | `npm run build`; `docker build` of API and web images | ✅ API container started in production mode, `/api/health` = ok (database, Redis, storage), `prisma migrate status` = up to date |
 | Migrations | `prisma migrate deploy` on the dev and test databases | ✅ |
 | Dependency audit (runtime) | `npm audit --omit=dev` | ✅ 0 vulnerabilities |
 | Dependency audit (all) | `npm audit` | ⚠️ 31 high, all from `braces` in Jest and ESLint tooling. No fixed version exists yet; not shipped in production images. |
 
-**Total automated tests: 119, all passing.**
+**Total automated tests: 120, all passing.**
 
 ## Essential scenarios → tests
 
@@ -53,6 +53,7 @@ Also covered: internal chat (one DM per pair, unread counts and read markers, pu
 - `.dockerignore`/`.gitignore` excluded the `src/storage` module. Narrowed to the upload folder.
 - People added to a deal discussion by an @mention didn't see that message as unread (their read marker matched the message time). Fixed.
 - The login rate-limit error was shown to users as "ThrottlerException: Too Many Requests". It now reads "Too many attempts. Please wait a minute and try again."
+- On phones the dashboard scrolled sideways (a wide table stretched its grid column), some badges and stage labels were 10–11px, several tap targets were under 24px, and chat message actions only appeared on hover (unreachable on touch). Fixed; the opportunity and customer lists now become cards on phones.
 - The production container crashed when `NODE_ENV=development` selected a dev-only log formatter. Now only used when installed.
 
 ## How to reproduce

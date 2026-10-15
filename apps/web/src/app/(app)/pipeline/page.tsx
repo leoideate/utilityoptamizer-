@@ -122,7 +122,7 @@ export default function PipelinePage() {
                       className={cn("rounded-lg border border-border bg-surface p-3 shadow-sm", c.outcome === "open" && "cursor-grab active:cursor-grabbing", dragging === c.id && "opacity-50")}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <Link href={`/opportunities/${c.id}`} className="min-w-0 text-sm font-medium hover:underline">
+                        <Link href={`/opportunities/${c.id}`} className="-my-0.5 min-w-0 py-0.5 text-sm font-medium hover:underline">
                           {c.name}
                         </Link>
                         {c.outcome === "open" && <MoveMenu card={c} current={col.stage.key} onMove={(stage) => move.mutate({ id: c.id, stage, name: c.name })} />}
@@ -165,7 +165,7 @@ function MoveMenu({ card, current, onMove }: { card: Card; current: StageKey; on
   return (
     <Menu>
       <MenuTrigger asChild>
-        <button className="rounded p-0.5 text-muted hover:bg-surface-2" aria-label={`Move ${card.name}`}>
+        <button className="-m-1.5 shrink-0 rounded p-1.5 text-muted hover:bg-surface-2" aria-label={`Move ${card.name}`}>
           <MoreHorizontal className="size-4" />
         </button>
       </MenuTrigger>

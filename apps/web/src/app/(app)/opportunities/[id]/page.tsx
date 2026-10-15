@@ -75,14 +75,14 @@ function OpportunityWorkspace() {
 
   return (
     <>
-      <Link href="/opportunities" className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-text">
+      <Link href="/opportunities" className="mb-3 inline-flex min-h-6 items-center gap-1 py-1 text-sm text-muted hover:text-text">
         <ArrowLeft className="size-4" /> Opportunities
       </Link>
 
       <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{opp.name}</h1>
+            <h1 className="text-[clamp(1.375rem,1.1rem+1.1vw,1.75rem)] font-semibold leading-tight tracking-tight">{opp.name}</h1>
             <OutcomeBadge outcome={opp.outcome} />
             {opp.saleType === "renewal" && <Badge tone="accent">Renewal</Badge>}
           </div>
@@ -252,7 +252,7 @@ function StageProgress({ current, outcome }: { current: StageKey; outcome: strin
               aria-current={here ? "step" : undefined}
               title={s.name}
               className={cn(
-                "h-7 rounded-md px-2 text-[11px] font-medium leading-7 whitespace-nowrap",
+                "h-7 rounded-md px-2 text-xs font-medium leading-7 whitespace-nowrap",
                 here ? "bg-primary text-primary-fg" : done ? "bg-primary-soft text-primary" : "bg-surface-2 text-muted",
                 outcome === "lost" && here && "bg-danger text-white",
               )}

@@ -216,7 +216,7 @@ export function Conversation({ channelId, compact }: { channelId: string; compac
                 {mine && !m.deleted && !editing && (
                   <Menu>
                     <MenuTrigger asChild>
-                      <button className="h-6 rounded p-0.5 text-muted opacity-0 hover:bg-surface-2 focus:opacity-100 group-hover:opacity-100" aria-label="Message options">
+                      <button className="flex size-7 shrink-0 items-center justify-center rounded text-muted hover:bg-surface-2 focus:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100" aria-label="Message options">
                         <MoreHorizontal className="size-4" />
                       </button>
                     </MenuTrigger>

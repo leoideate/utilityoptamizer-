@@ -65,7 +65,7 @@ export function BarList({ rows, format = (n: number) => String(n), empty = "No d
       {rows.map((r) => (
         <li key={r.label}>
           <div className="mb-1 flex items-baseline justify-between gap-2 text-sm">
-            <span className="truncate">{r.href ? <a className="hover:underline" href={r.href}>{r.label}</a> : r.label}</span>
+            <span className="min-w-0 truncate">{r.href ? <a className="inline-block py-0.5 hover:underline" href={r.href}>{r.label}</a> : r.label}</span>
             <span className="tabular shrink-0 font-medium">
               {format(r.value)}
               {r.hint && <span className="ml-1 text-xs font-normal text-muted">{r.hint}</span>}

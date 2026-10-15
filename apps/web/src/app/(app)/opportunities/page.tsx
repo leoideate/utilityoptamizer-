@@ -105,9 +105,9 @@ function OpportunitiesList() {
         </nav>
 
         <div className="min-w-0 space-y-4">
-          <div className="flex flex-wrap gap-2">
-            <Input className="max-w-xs" type="search" placeholder="Search name, company, UO number…" aria-label="Search opportunities" value={search} onChange={(e) => setSearch(e.target.value)} />
-            <Select className="w-auto" value={filters.serviceType} onChange={(e) => setParam({ serviceType: e.target.value })} aria-label="Service">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <Input className="col-span-2 sm:max-w-xs" type="search" placeholder="Search name, company, UO number…" aria-label="Search opportunities" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Select className="sm:w-auto" value={filters.serviceType} onChange={(e) => setParam({ serviceType: e.target.value })} aria-label="Service">
               <option value="">All services</option>
               {Object.entries(SERVICE_TYPE_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>
@@ -115,7 +115,7 @@ function OpportunitiesList() {
                 </option>
               ))}
             </Select>
-            <Select className="w-auto" value={filters.stage} onChange={(e) => setParam({ stage: e.target.value })} aria-label="Stage">
+            <Select className="sm:w-auto" value={filters.stage} onChange={(e) => setParam({ stage: e.target.value })} aria-label="Stage">
               <option value="">All stages</option>
               {STAGES.map((s) => (
                 <option key={s.key} value={s.key}>
@@ -124,7 +124,7 @@ function OpportunitiesList() {
               ))}
             </Select>
             {seesAll && (
-              <div className="w-auto">
+              <div className="col-span-2 sm:w-auto">
                 <UserSelect value={filters.ownerId} onChange={(v) => setParam({ ownerId: v })} />
               </div>
             )}
@@ -153,7 +153,30 @@ function OpportunitiesList() {
                 No opportunities match this view and filters. Try another view or reset the filters.
               </EmptyState>
             ) : (
-              <div className="overflow-x-auto" tabIndex={0}>
+              <>
+              {/* Phones: one card per opportunity, everything visible without sideways scrolling. */}
+              <ul className="divide-y divide-border md:hidden">
+                {data.items.map((o) => (
+                  <li key={o.id}>
+                    <Link href={`/opportunities/${o.id}`} className="block px-4 py-3 active:bg-surface-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="min-w-0 font-medium">{o.name}</span>
+                        <span className="tabular shrink-0 text-sm">{money(o.expectedRevenue)}</span>
+                      </div>
+                      <p className="mt-0.5 truncate text-xs text-muted">
+                        {ref(o.number)} · {o.customer?.legalName ?? o.companyName ?? o.contactName ?? "No customer yet"}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+                        <ServiceBadge service={o.serviceType} short />
+                        {o.saleType === "renewal" && <Badge tone="accent">Renewal</Badge>}
+                        {o.outcome === "open" ? <Badge>{o.stage.name}</Badge> : <OutcomeBadge outcome={o.outcome} />}
+                        <span className="text-muted">{o.owner?.name ?? "Unassigned"}</span>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden overflow-x-auto md:block" tabIndex={0}>
                 <table className="w-full min-w-[760px] text-sm">
                   <thead className="bg-surface-2 text-left text-muted">
                     <tr>
@@ -169,7 +192,7 @@ function OpportunitiesList() {
                     {data.items.map((o) => (
                       <tr key={o.id} className="border-t border-border hover:bg-surface-2/60">
                         <td className="px-4 py-2.5">
-                          <Link href={`/opportunities/${o.id}`} className="font-medium hover:underline">
+                          <Link href={`/opportunities/${o.id}`} className="inline-block py-0.5 font-medium hover:underline">
                             {o.name}
                           </Link>
                           <div className="text-xs text-muted">
@@ -193,6 +216,7 @@ function OpportunitiesList() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </Card>
           {data && data.total > 0 && (

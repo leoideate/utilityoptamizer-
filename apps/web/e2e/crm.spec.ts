@@ -123,20 +123,20 @@ test("duplicate customers are flagged before creation", async ({ page }) => {
 test("salespeople only see their own pipeline; managers see everyone's", async ({ page }) => {
   await signIn(page, users.otherSales);
   await page.goto("/opportunities?view=all");
-  await expect(page.getByText("Quayside Bakery – electricity")).toBeVisible();
-  await expect(page.getByText("Harbour Café – dual fuel")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Quayside Bakery – electricity", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Harbour Café – dual fuel", exact: true })).toHaveCount(0);
 
   await page.context().clearCookies();
   await signIn(page, users.manager);
   await page.goto("/opportunities?view=all");
-  await expect(page.getByText("Harbour Café – dual fuel")).toBeVisible();
-  await expect(page.getByText("Quayside Bakery – electricity")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Harbour Café – dual fuel", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Quayside Bakery – electricity", exact: true })).toBeVisible();
 });
 
 test("won opportunities stay visible under All won and in the pipeline", async ({ page }) => {
   await signIn(page, users.manager);
   await page.goto("/opportunities?view=all_won");
-  await expect(page.getByText("Quayside Bakery – electricity")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Quayside Bakery – electricity", exact: true })).toBeVisible();
   await page.goto("/pipeline");
   await page.getByLabel("Whose opportunities").selectOption("all");
   await expect(page.getByRole("listitem", { name: /Live \/ Won/ })).toContainText("Quayside Bakery – electricity");

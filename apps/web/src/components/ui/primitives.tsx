@@ -108,14 +108,14 @@ export function Checkbox({ label, ...p }: InputHTMLAttributes<HTMLInputElement> 
 // --- Layout --------------------------------------------------------------------------
 
 export function Card({ className, ...p }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("rounded-xl border border-border bg-surface", className)} {...p} />;
+  return <div className={cn("min-w-0 rounded-xl border border-border bg-surface", className)} {...p} />;
 }
 
 export function CardHeader({ title, description, actions, className }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; className?: string }) {
   return (
     <div className={cn("flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4", className)}>
       <div className="min-w-0">
-        <h2 className="text-base font-semibold">{title}</h2>
+        <h2 className="text-base font-semibold text-balance">{title}</h2>
         {description && <p className="mt-0.5 text-sm text-muted">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -127,7 +127,7 @@ export function PageHeader({ title, description, actions }: { title: ReactNode; 
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="text-[clamp(1.375rem,1.1rem+1.1vw,1.75rem)] font-semibold leading-tight tracking-tight">{title}</h1>
         {description && <p className="mt-1 text-sm text-muted">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -184,7 +184,7 @@ export function Stat({ label, value, sub, tone }: { label: string; value: ReactN
   return (
     <Card className="p-4">
       <p className="text-sm text-muted">{label}</p>
-      <p className={cn("tabular mt-1 text-2xl font-semibold", tone && tones[tone].split(" ")[1])}>{value}</p>
+      <p className={cn("tabular mt-1 text-[clamp(1.25rem,1rem+1vw,1.5rem)] font-semibold", tone && tones[tone].split(" ")[1])}>{value}</p>
       {sub && <p className="mt-1 text-xs text-muted">{sub}</p>}
     </Card>
   );

@@ -77,16 +77,16 @@ export default function DashboardPage() {
       />
 
       <Card className="mb-6 p-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6 [&>*]:min-w-0">
           <div className="lg:col-span-2">
             <span className="mb-1.5 block text-sm font-medium">Period</span>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2 [&>*]:min-w-0">
               <Input type="date" aria-label="From" value={filters.from} onChange={(e) => set("from")(e.target.value)} />
               <Input type="date" aria-label="To" value={filters.to} onChange={(e) => set("to")(e.target.value)} />
             </div>
             <div className="mt-1.5 flex flex-wrap gap-2">
               {PRESETS.map((p) => (
-                <button key={p.days} className="text-xs text-primary hover:underline" onClick={() => setFilters((f) => ({ ...f, from: addDays(todayIso(), -p.days), to: todayIso() }))}>
+                <button key={p.days} className="min-h-6 py-1 text-xs text-primary hover:underline" onClick={() => setFilters((f) => ({ ...f, from: addDays(todayIso(), -p.days), to: todayIso() }))}>
                   {p.label}
                 </button>
               ))}
@@ -131,7 +131,7 @@ export default function DashboardPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          <section aria-label="Key figures" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <section aria-label="Key figures" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             <Stat label="New leads" value={num(data.newLeads)} sub="in this period" />
             <Stat label="Open pipeline" value={moneyCompact(data.pipelineValue)} sub={`${moneyCompact(data.weightedPipelineValue)} weighted by probability`} />
             <Stat label="Won / lost" value={`${data.won} / ${data.lost}`} sub={`Win rate ${pct(data.winRate)} · conversion ${pct(data.conversionRate)}`} tone="success" />

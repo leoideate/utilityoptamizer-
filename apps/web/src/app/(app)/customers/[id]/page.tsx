@@ -93,7 +93,7 @@ export default function CustomerPage() {
 
   return (
     <>
-      <Link href="/customers" className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-text">
+      <Link href="/customers" className="mb-3 inline-flex min-h-6 items-center gap-1 py-1 text-sm text-muted hover:text-text">
         <ArrowLeft className="size-4" /> Customers
       </Link>
       <PageHeader
@@ -130,7 +130,7 @@ export default function CustomerPage() {
                 {data.opportunities.map((o) => (
                   <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
                     <div>
-                      <Link href={`/opportunities/${o.id}`} className="font-medium hover:underline">
+                      <Link href={`/opportunities/${o.id}`} className="inline-block py-0.5 font-medium hover:underline">
                         {o.name}
                       </Link>
                       <p className="text-xs text-muted">

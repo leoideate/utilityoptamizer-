@@ -45,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Icon className="size-4" aria-hidden />
             {label}
             {href === "/chat" && unread > 0 && (
-              <span className="ml-auto rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-5 text-primary-fg" aria-label={`${unread} unread`}>
+              <span className="ml-auto rounded-full bg-primary px-1.5 text-xs font-semibold leading-5 text-primary-fg" aria-label={`${unread} unread`}>
                 {unread > 99 ? "99+" : unread}
               </span>
             )}
@@ -75,7 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-surface/95 px-3 backdrop-blur sm:px-4">
-          <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
+          <Button variant="ghost" size="icon" className="shrink-0 lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
             <MenuIcon />
           </Button>
           <GlobalSearch />
@@ -198,7 +198,7 @@ function Notifications() {
       <MenuTrigger asChild>
         <Button variant="ghost" size="icon" aria-label={n ? `Notifications, ${n} unread` : "Notifications"} className="relative">
           <Bell />
-          {n > 0 && <span className="absolute right-1 top-1 min-w-4 rounded-full bg-danger px-1 text-[10px] font-semibold leading-4 text-white">{n > 9 ? "9+" : n}</span>}
+          {n > 0 && <span className="absolute right-1 top-1 min-w-[1.125rem] rounded-full bg-danger px-1 text-center text-xs font-semibold leading-[1.125rem] text-white">{n > 9 ? "9+" : n}</span>}
         </Button>
       </MenuTrigger>
       <MenuContent>
