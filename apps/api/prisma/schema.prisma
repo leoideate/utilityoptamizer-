@@ -36,6 +36,18 @@ enum SaleType {
   renewal
 }
 
+enum SupplyChange {
+  change_of_supplier
+  change_of_legal_entity
+  reenergise_meter
+}
+
+enum ProductInterest {
+  electricity
+  gas
+  payment_services
+}
+
 enum Outcome {
   open
   won
@@ -491,6 +503,14 @@ model Opportunity {
   campaign              String?
   nextAction            String?       @map("next_action")
   followUpDate          DateTime?     @map("follow_up_date") @db.Date
+  expectedCloseDate     DateTime?     @map("expected_close_date") @db.Date
+  /// Date of the site visit, if one took place.
+  visitDate             DateTime?     @map("visit_date") @db.Date
+  /// Role of the captured contact (owner, manager, bookkeeper...) before a Customer exists.
+  contactRole           String?       @map("contact_role")
+  productInterest       ProductInterest[] @default([]) @map("product_interest")
+  /// What changes at the supply point; each adds required documents to the checklist.
+  supplyChanges         SupplyChange[] @default([]) @map("supply_changes")
   internalApproval      ApprovalState @default(not_requested) @map("internal_approval")
   internalApprovalById  String?       @map("internal_approval_by_id") @db.Uuid
   internalApprovalAt    DateTime?     @map("internal_approval_at")

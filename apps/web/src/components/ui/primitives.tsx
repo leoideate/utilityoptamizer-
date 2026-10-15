@@ -97,11 +97,26 @@ export function Checkbox({ label, ...p }: InputHTMLAttributes<HTMLInputElement> 
   const id = useId();
   return (
     <div className="flex items-center gap-2">
-      <input id={id} type="checkbox" className="size-4 rounded border-border accent-[var(--primary)]" {...p} />
+      <input id={id} type="checkbox" className="size-6 shrink-0 rounded lg:size-4 border-border accent-[var(--primary)]" {...p} />
       <label htmlFor={id} className="text-sm">
         {label}
       </label>
     </div>
+  );
+}
+
+/** Several checkboxes that edit one array of values. */
+export function CheckboxGroup<T extends string>({ legend, hint, options, labels, value, onChange, disabled, className }: { legend: string; hint?: string; options: readonly T[]; labels: Record<T, string>; value: readonly T[]; onChange: (v: T[]) => void; disabled?: boolean; className?: string }) {
+  return (
+    <fieldset disabled={disabled} className={cn("space-y-1.5", className)}>
+      <legend className="mb-1.5 text-sm font-medium">{legend}</legend>
+      {hint && <p className="text-xs text-muted">{hint}</p>}
+      <div className="flex flex-wrap gap-x-5 gap-y-2">
+        {options.map((o) => (
+          <Checkbox key={o} label={labels[o]} checked={value.includes(o)} onChange={(e) => onChange(e.target.checked ? options.filter((x) => x === o || value.includes(x)) : value.filter((x) => x !== o))} />
+        ))}
+      </div>
+    </fieldset>
   );
 }
 

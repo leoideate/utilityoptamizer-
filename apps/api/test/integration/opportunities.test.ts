@@ -56,6 +56,45 @@ describe("conditional fields (scenario 5)", () => {
   });
 });
 
+describe("onboarding fields", () => {
+  it("saves the new lead fields and keeps the checklist in step with supply changes", async () => {
+    const created = expectStatus(
+      await team.sales.post("/opportunities", {
+        name: "Onboarding fields",
+        serviceType: "electricity",
+        contactRole: "Owner",
+        expectedCloseDate: "2026-12-01",
+        visitDate: "2026-10-10",
+        productInterest: ["electricity", "payment_services"],
+        supplyChanges: ["change_of_supplier"],
+      }),
+      201,
+    ).body.id;
+    let ws = expectStatus(await team.sales.get(`/opportunities/${created}`), 200).body;
+    expect(ws).toMatchObject({ contactRole: "Owner", productInterest: ["electricity", "payment_services"], supplyChanges: ["change_of_supplier"] });
+    expect(ws.expectedCloseDate).toMatch(/^2026-12-01/);
+    expect(ws.visitDate).toMatch(/^2026-10-10/);
+
+    // The checklist created at Details Requested includes what the supply changes need.
+    for (const stage of ["call_scheduled", "contacted", "interested", "details_requested"]) expectStatus(await team.sales.post(`/opportunities/${created}/stage`, { stage }), 204);
+    const docs = async () => expectStatus(await team.sales.get(`/opportunities/${created}/documents`), 200).body as { documentType: string; required: boolean }[];
+    expect((await docs()).find((d) => d.documentType === "meter_reading_photo")).toBeUndefined();
+
+    // Adding changes later adds their documents and makes optional ones required.
+    expectStatus(await team.sales.patch(`/opportunities/${created}`, { supplyChanges: ["change_of_supplier", "change_of_legal_entity", "reenergise_meter"] }), 204);
+    const after = await docs();
+    for (const t of ["lease_agreement", "meter_reading_photo", "change_of_tenancy"]) expect(after.find((d) => d.documentType === t)?.required).toBe(true);
+    ws = expectStatus(await team.sales.get(`/opportunities/${created}`), 200).body;
+    expect(ws.supplyChanges).toEqual(["change_of_supplier", "change_of_legal_entity", "reenergise_meter"]);
+    const timeline = expectStatus(await team.sales.get(`/opportunities/${created}/timeline`), 200).body;
+    expect(JSON.stringify(timeline)).toMatch(/Supply changes: Change of supplier, Change of legal entity, Re-energise/);
+  });
+
+  it("rejects unknown supply changes", async () => {
+    expectStatus(await team.sales.post("/opportunities", { name: "Bad change", serviceType: "gas", supplyChanges: ["new_connection"] }), 400);
+  });
+});
+
 describe("stage validation (scenarios 6–9)", () => {
   it("early stages need nothing; later stages list what's missing", async () => {
     const opp = await createOpportunity(team.sales, "dual_fuel");

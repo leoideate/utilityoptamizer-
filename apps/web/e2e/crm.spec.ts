@@ -60,7 +60,7 @@ test("salesperson captures an electricity lead and sees electricity-only fields"
   await page.getByRole("link", { name: "New opportunity" }).click();
   const name = `E2E Bakery ${Date.now()}`;
   await page.getByLabel("Opportunity name").fill(name);
-  await page.getByLabel("Service").selectOption("electricity");
+  await page.getByLabel("Service", { exact: true }).selectOption("electricity");
   await page.getByLabel("Business name").fill("E2E Bakery Ltd");
   await expectAccessible(page, "new opportunity");
   await page.getByRole("button", { name: "Create opportunity" }).click();
@@ -97,7 +97,7 @@ test("Worldpay opportunity shows the merchant workspace and hides energy section
   await signIn(page, users.sales);
   await page.goto("/opportunities/new");
   await page.getByLabel("Opportunity name").fill(`E2E Card payments ${Date.now()}`);
-  await page.getByLabel("Service").selectOption("merchant_services");
+  await page.getByLabel("Service", { exact: true }).selectOption("merchant_services");
   await page.getByRole("button", { name: "Create opportunity" }).click();
   await expect(page.getByRole("tab", { name: /Worldpay/ })).toBeVisible();
   await expect(page.getByRole("tab", { name: /Energy/ })).toHaveCount(0);

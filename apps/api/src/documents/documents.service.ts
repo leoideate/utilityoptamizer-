@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { DOCUMENT_TYPES, STANDARD_CHECKLIST, can, isSensitiveDocument, today } from "@uo/shared";
+import { DOCUMENT_TYPES, type SupplyChange, can, checklistFor, isSensitiveDocument, today } from "@uo/shared";
 import type { documentItemSchema, documentReviewSchema } from "@uo/shared";
 import type { z } from "zod";
 import { ENV, type Env } from "../config/env";
@@ -83,11 +83,18 @@ export class DocumentsService {
     }));
   }
 
-  /** Adds the standard checklist for the service type, skipping types already present. */
-  async ensureStandardChecklist(db: Db, opp: Pick<OppWithStage, "id" | "serviceType" | "customerId">): Promise<number> {
+  /**
+   * Adds the standard checklist for the service type plus the documents its supply changes
+   * require, skipping types already present and making existing optional ones required.
+   */
+  async ensureStandardChecklist(db: Db, opp: Pick<OppWithStage, "id" | "serviceType" | "customerId"> & { supplyChanges?: SupplyChange[] }): Promise<number> {
     const kind = opp.serviceType === "merchant_services" ? "merchant" : "energy";
-    const existing = new Set((await db.documentItem.findMany({ where: { opportunityId: opp.id }, select: { documentType: true } })).map((d) => d.documentType));
-    const missing = STANDARD_CHECKLIST[kind].filter((d) => !existing.has(d.type));
+    const wanted = checklistFor(kind, opp.supplyChanges);
+    const rows = await db.documentItem.findMany({ where: { opportunityId: opp.id }, select: { id: true, documentType: true, required: true } });
+    const existing = new Set(rows.map((d) => d.documentType));
+    const nowRequired = rows.filter((r) => !r.required && wanted.some((w) => w.required && w.type === r.documentType)).map((r) => r.id);
+    if (nowRequired.length) await db.documentItem.updateMany({ where: { id: { in: nowRequired } }, data: { required: true } });
+    const missing = wanted.filter((d) => !existing.has(d.type));
     if (missing.length) {
       await db.documentItem.createMany({
         data: missing.map((d) => ({ opportunityId: opp.id, customerId: opp.customerId, documentType: d.type, required: d.required, sensitive: isSensitiveDocument(d.type) })),

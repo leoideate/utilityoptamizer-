@@ -32,6 +32,20 @@ export const SALE_TYPES = ["new_sale", "renewal"] as const;
 export type SaleType = (typeof SALE_TYPES)[number];
 export const SALE_TYPE_LABELS = labels<SaleType>({ new_sale: "New Sale", renewal: "Renewal" });
 
+/** What is changing at the supply point when onboarding an energy customer. Several can apply. */
+export const SUPPLY_CHANGES = ["change_of_supplier", "change_of_legal_entity", "reenergise_meter"] as const;
+export type SupplyChange = (typeof SUPPLY_CHANGES)[number];
+export const SUPPLY_CHANGE_LABELS = labels<SupplyChange>({
+  change_of_supplier: "Change of supplier",
+  change_of_legal_entity: "Change of legal entity",
+  reenergise_meter: "Re-energise / reactivate meter",
+});
+
+/** Products the customer is interested in (cross-sell), separate from the opportunity's own service. */
+export const PRODUCT_INTERESTS = ["electricity", "gas", "payment_services"] as const;
+export type ProductInterest = (typeof PRODUCT_INTERESTS)[number];
+export const PRODUCT_INTEREST_LABELS = labels<ProductInterest>({ electricity: "Electricity", gas: "Gas", payment_services: "Payment Services" });
+
 export const OUTCOMES = ["open", "won", "lost"] as const;
 export type Outcome = (typeof OUTCOMES)[number];
 
@@ -219,6 +233,8 @@ export const DOCUMENT_TYPES = {
   letter_of_authority: { label: "Letter of authority", sensitive: false },
   supplier_contract: { label: "Signed supplier contract", sensitive: false },
   change_of_tenancy: { label: "Change of tenancy form", sensitive: false },
+  lease_agreement: { label: "Signed lease agreement", sensitive: false },
+  meter_reading_photo: { label: "Time-stamped meter reading photo", sensitive: false },
   comparison: { label: "Price comparison", sensitive: false },
   proposal: { label: "Proposal", sensitive: false },
   worldpay_application: { label: "Signed Worldpay application", sensitive: false },
@@ -249,3 +265,17 @@ export const STANDARD_CHECKLIST: Record<"energy" | "merchant", { type: DocumentT
     { type: "proof_of_trading", required: true },
   ],
 };
+
+/** Documents each supply change makes required on an energy opportunity. */
+export const SUPPLY_CHANGE_DOCUMENTS: Record<SupplyChange, DocumentType[]> = {
+  change_of_supplier: ["energy_bill", "letter_of_authority"],
+  change_of_legal_entity: ["change_of_tenancy", "lease_agreement"],
+  reenergise_meter: ["meter_reading_photo"],
+};
+
+/** Checklist for an opportunity: the standard list plus whatever its supply changes require. */
+export function checklistFor(kind: "energy" | "merchant", supplyChanges: readonly SupplyChange[] = []): { type: DocumentType; required: boolean }[] {
+  const items = new Map(STANDARD_CHECKLIST[kind].map((d) => [d.type, d.required]));
+  if (kind === "energy") for (const c of supplyChanges) for (const t of SUPPLY_CHANGE_DOCUMENTS[c]) items.set(t, true);
+  return [...items].map(([type, required]) => ({ type, required }));
+}

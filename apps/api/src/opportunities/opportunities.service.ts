@@ -6,6 +6,7 @@ import {
   type StageKey,
   type UpdateOpportunityInput,
   STAGES,
+  SUPPLY_CHANGE_LABELS,
   addDays,
   addMonths,
   can,
@@ -72,6 +73,11 @@ export class OpportunitiesService {
           expectedRevenue: input.expectedRevenue ?? null,
           nextAction: input.nextAction ?? null,
           followUpDate: dateOnly(input.followUpDate) ?? null,
+          expectedCloseDate: dateOnly(input.expectedCloseDate) ?? null,
+          visitDate: dateOnly(input.visitDate) ?? null,
+          contactRole: input.contactRole ?? null,
+          productInterest: input.productInterest ?? [],
+          supplyChanges: input.supplyChanges ?? [],
           ownerId,
           teamId: input.teamId ?? null,
           stageId,
@@ -121,7 +127,7 @@ export class OpportunitiesService {
     }
     assertRules(issues);
 
-    const data = defined({ ...patch, followUpDate: dateOnly(patch.followUpDate) });
+    const data = defined({ ...patch, followUpDate: dateOnly(patch.followUpDate), expectedCloseDate: dateOnly(patch.expectedCloseDate), visitDate: dateOnly(patch.visitDate) });
     const changed = Object.keys(data).filter((k) => String((opp as Record<string, unknown>)[k] ?? "") !== String((data as Record<string, unknown>)[k] ?? ""));
     if (!changed.length) return;
     await this.prisma.$transaction(async (tx) => {
@@ -132,6 +138,15 @@ export class OpportunitiesService {
         await tx.energyContract.updateMany({ where: { opportunityId: id, status: { in: ["draft", "quoted", "selected"] } }, data: { selectedSupplierId: patch.selectedSupplierId } });
         const s = await tx.supplier.findUniqueOrThrow({ where: { id: patch.selectedSupplierId } });
         await this.audit.timeline(actor, { opportunityId: id, customerId: opp.customerId, kind: "system", body: `Selected supplier: ${s.name}.` }, tx);
+      }
+      if (changed.includes("supplyChanges")) {
+        const changes = patch.supplyChanges ?? [];
+        await this.audit.timeline(actor, { opportunityId: id, customerId: opp.customerId, kind: "system", body: changes.length ? `Supply changes: ${changes.map((c) => SUPPLY_CHANGE_LABELS[c]).join(", ")}.` : "Supply changes cleared." }, tx);
+        // Once the checklist exists, keep it in step with what the supply changes require.
+        if (opp.stageKey && isAtOrAfter(opp.stageKey, "details_requested")) {
+          const added = await this.documents.ensureStandardChecklist(tx, { ...opp, serviceType: patch.serviceType ?? opp.serviceType, supplyChanges: changes });
+          if (added) await this.audit.timeline(actor, { opportunityId: id, customerId: opp.customerId, kind: "document", body: `Added ${added} document${added === 1 ? "" : "s"} the supply changes require.` }, tx);
+        }
       }
     });
   }

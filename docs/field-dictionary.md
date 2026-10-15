@@ -14,6 +14,7 @@ Generated from `apps/api/prisma/schema.prisma` (`node scripts/gen-field-dictiona
 | team_id | UUID |  |  |
 | mfa_secret_enc | String |  | TOTP secret (encrypted). MFA is enforced at login when mfaEnabled is true |
 | mfa_enabled | Boolean | ✓ | Default false |
+| mfa_last_step | Int |  | Last TOTP time step accepted, so a code can't be used twice |
 | failed_logins | Int | ✓ | Default 0 |
 | locked_until | DateTime |  |  |
 | last_login_at | DateTime |  |  |
@@ -39,6 +40,7 @@ Generated from `apps/api/prisma/schema.prisma` (`node scripts/gen-field-dictiona
 | ip | String |  |  |
 | user_agent | String |  |  |
 | expires_at | DateTime | ✓ |  |
+| last_seen_at | DateTime | ✓ | Updated (at most once a minute) on use; sessions idle longer than SESSION_IDLE_MINUTES end. Default now() |
 | created_at | DateTime | ✓ | Default now() |
 
 ## sales_teams
@@ -169,6 +171,11 @@ One sale (new or renewal). Permanent: can't be deleted or archived (database tri
 | campaign | String |  |  |
 | next_action | String |  |  |
 | follow_up_date | Date |  |  |
+| expected_close_date | Date |  |  |
+| visit_date | Date |  | Date of the site visit, if one took place |
+| contact_role | String |  | Role of the captured contact (owner, manager, bookkeeper...) before a Customer exists |
+| product_interest | Enum: electricity, gas, payment_services | ✓ | Default [] |
+| supply_changes | Enum: change_of_supplier, change_of_legal_entity, reenergise_meter | ✓ | What changes at the supply point; each adds required documents to the checklist. Default [] |
 | internal_approval | Enum: not_requested, pending, approved, rejected | ✓ | Default not_requested |
 | internal_approval_by_id | UUID |  |  |
 | internal_approval_at | DateTime |  |  |

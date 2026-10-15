@@ -6,9 +6,21 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { LEAD_SOURCES, LEAD_SOURCE_LABELS, SALE_TYPES, SALE_TYPE_LABELS, SERVICE_TYPES, SERVICE_TYPE_LABELS } from "@uo/shared";
+import {
+  LEAD_SOURCES,
+  LEAD_SOURCE_LABELS,
+  PRODUCT_INTERESTS,
+  PRODUCT_INTEREST_LABELS,
+  SALE_TYPES,
+  SALE_TYPE_LABELS,
+  SERVICE_TYPES,
+  SERVICE_TYPE_LABELS,
+  SUPPLY_CHANGES,
+  SUPPLY_CHANGE_LABELS,
+  isEnergyService,
+} from "@uo/shared";
 import { UserSelect } from "@/components/domain";
-import { Button, Card, Field, Input, PageHeader, Select } from "@/components/ui/primitives";
+import { Button, Card, CheckboxGroup, Field, Input, PageHeader, Select } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import { useCan } from "@/lib/session";
 
@@ -21,12 +33,17 @@ const schema = z.object({
   contactName: z.string().optional(),
   email: z.union([z.literal(""), z.string().trim().email("Enter a valid email address.")]).optional(),
   phone: z.string().optional(),
+  contactRole: z.string().optional(),
+  productInterest: z.array(z.enum(PRODUCT_INTERESTS)),
+  supplyChanges: z.array(z.enum(SUPPLY_CHANGES)),
   leadSource: z.enum(LEAD_SOURCES),
   leadSourceDetail: z.string().optional(),
   campaign: z.string().optional(),
   expectedRevenue: z.union([z.literal(""), z.coerce.number().min(0, "Can't be negative.")]).optional(),
   nextAction: z.string().optional(),
   followUpDate: z.string().optional(),
+  expectedCloseDate: z.string().optional(),
+  visitDate: z.string().optional(),
   ownerId: z.string().optional(),
   customerId: z.string().optional(),
 });
@@ -38,7 +55,7 @@ function NewOpportunityForm() {
   const can = useCan();
   const { register, handleSubmit, formState, setValue, watch } = useForm<Values>({
     resolver: zodResolver(schema),
-    defaultValues: { serviceType: "electricity", saleType: "new_sale", leadSource: "telephone", customerId: params.get("customerId") ?? undefined, companyName: params.get("company") ?? "" },
+    defaultValues: { serviceType: "electricity", saleType: "new_sale", productInterest: [], supplyChanges: [], leadSource: "telephone", customerId: params.get("customerId") ?? undefined, companyName: params.get("company") ?? "" },
   });
   const create = useMutation({
     mutationFn: (v: Values) =>
@@ -46,6 +63,10 @@ function NewOpportunityForm() {
         ...v,
         expectedRevenue: v.expectedRevenue === "" || v.expectedRevenue === undefined ? null : v.expectedRevenue,
         followUpDate: v.followUpDate || null,
+        expectedCloseDate: v.expectedCloseDate || null,
+        visitDate: v.visitDate || null,
+        contactRole: v.contactRole || null,
+        supplyChanges: isEnergyService(v.serviceType) ? v.supplyChanges : [],
         ownerId: can("opportunity.assign") ? v.ownerId || null : undefined,
         customerId: v.customerId || null,
       }),
@@ -100,6 +121,18 @@ function NewOpportunityForm() {
           <Field label="Source details" hint="Who referred them, which web form, etc." className="sm:col-span-2">
             {(p) => <Input {...p} {...register("leadSourceDetail")} />}
           </Field>
+          {isEnergyService(watch("serviceType")) && (
+            <CheckboxGroup
+              className="sm:col-span-2"
+              legend="Supply changes"
+              hint="Each adds the documents it needs to the checklist (e.g. a signed lease for a change of legal entity)."
+              options={SUPPLY_CHANGES}
+              labels={SUPPLY_CHANGE_LABELS}
+              value={watch("supplyChanges")}
+              onChange={(v) => setValue("supplyChanges", v)}
+            />
+          )}
+          <CheckboxGroup className="sm:col-span-2" legend="Product interest" options={PRODUCT_INTERESTS} labels={PRODUCT_INTEREST_LABELS} value={watch("productInterest")} onChange={(v) => setValue("productInterest", v)} />
         </div>
       </Card>
 
@@ -111,6 +144,7 @@ function NewOpportunityForm() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Business name">{(p) => <Input {...p} autoComplete="organization" {...register("companyName")} />}</Field>
           <Field label="Contact name">{(p) => <Input {...p} autoComplete="name" {...register("contactName")} />}</Field>
+          <Field label="Contact role" hint="e.g. Owner, manager, bookkeeper">{(p) => <Input {...p} autoComplete="organization-title" {...register("contactRole")} />}</Field>
           <Field label="Email" error={e.email?.message}>
             {(p) => <Input {...p} type="email" autoComplete="email" {...register("email")} />}
           </Field>
@@ -128,6 +162,8 @@ function NewOpportunityForm() {
           <Field label="Expected revenue (€)" error={e.expectedRevenue?.message}>
             {(p) => <Input {...p} inputMode="decimal" {...register("expectedRevenue")} />}
           </Field>
+          <Field label="Expected closing">{(p) => <Input {...p} type="date" {...register("expectedCloseDate")} />}</Field>
+          <Field label="Date of visit">{(p) => <Input {...p} type="date" {...register("visitDate")} />}</Field>
           {can("opportunity.assign") && (
             <Field label="Salesperson" hint="Leave unassigned to let the system assign it.">
               {(p) => <UserSelect {...p} value={watch("ownerId") ?? ""} onChange={(v) => setValue("ownerId", v)} includeUnassigned />}

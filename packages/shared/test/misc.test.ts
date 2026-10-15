@@ -2,6 +2,7 @@ import {
   addMonths,
   can,
   canReadOpportunity,
+  checklistFor,
   merchantPricingSchema,
   meterPointErrors,
   normalizeIdentifier,
@@ -10,6 +11,21 @@ import {
   principalSchema,
   STAGES,
 } from "../src";
+
+describe("document checklist", () => {
+  it("adds the documents each supply change requires and makes them required", () => {
+    const list = checklistFor("energy", ["change_of_legal_entity", "reenergise_meter"]);
+    const req = (t: string) => list.find((d) => d.type === t)?.required;
+    expect(req("change_of_tenancy")).toBe(true); // optional in the standard list
+    expect(req("lease_agreement")).toBe(true);
+    expect(req("meter_reading_photo")).toBe(true);
+    expect(req("energy_bill")).toBe(true);
+  });
+
+  it("ignores supply changes on Worldpay opportunities", () => {
+    expect(checklistFor("merchant", ["reenergise_meter"]).some((d) => d.type === "meter_reading_photo")).toBe(false);
+  });
+});
 
 describe("meter identifiers", () => {
   it("accepts valid MPRN and GPRN, normalising spaces", () => {

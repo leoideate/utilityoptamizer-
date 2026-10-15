@@ -5,10 +5,25 @@ import { Building2, CheckCircle2, Circle, Link2, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { LEAD_SOURCES, LEAD_SOURCE_LABELS, SALE_TYPES, SALE_TYPE_LABELS, SERVICE_TYPES, SERVICE_TYPE_LABELS } from "@uo/shared";
+import {
+  LEAD_SOURCES,
+  LEAD_SOURCE_LABELS,
+  PRODUCT_INTERESTS,
+  PRODUCT_INTEREST_LABELS,
+  type ProductInterest,
+  SALE_TYPES,
+  SALE_TYPE_LABELS,
+  SERVICE_TYPES,
+  SERVICE_TYPE_LABELS,
+  SUPPLY_CHANGES,
+  SUPPLY_CHANGE_LABELS,
+  type ServiceType,
+  type SupplyChange,
+  isEnergyService,
+} from "@uo/shared";
 import { useSuppliers } from "@/components/domain";
 import { Dialog } from "@/components/ui/overlays";
-import { Button, Card, CardHeader, Field, Input, Select } from "@/components/ui/primitives";
+import { Button, Card, CardHeader, CheckboxGroup, Field, Input, Select } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import { date, dateTime, isoDay, money } from "@/lib/format";
 import type { Page, Workspace } from "@/lib/types";
@@ -97,6 +112,11 @@ interface DetailValues {
   expectedRevenue: string;
   nextAction: string;
   followUpDate: string;
+  expectedCloseDate: string;
+  visitDate: string;
+  contactRole: string;
+  productInterest: ProductInterest[];
+  supplyChanges: SupplyChange[];
   selectedSupplierId: string;
   applicationStatus: string;
 }
@@ -116,6 +136,11 @@ function toValues(o: Workspace): DetailValues {
     expectedRevenue: o.expectedRevenue?.toString() ?? "",
     nextAction: o.nextAction ?? "",
     followUpDate: isoDay(o.followUpDate),
+    expectedCloseDate: isoDay(o.expectedCloseDate),
+    visitDate: isoDay(o.visitDate),
+    contactRole: o.contactRole ?? "",
+    productInterest: o.productInterest,
+    supplyChanges: o.supplyChanges,
     selectedSupplierId: o.selectedSupplierId ?? "",
     applicationStatus: o.applicationStatus ?? "",
   };
@@ -124,7 +149,7 @@ function toValues(o: Workspace): DetailValues {
 function DetailsCard({ opp }: { opp: Workspace }) {
   const refresh = useRefreshOpportunity(opp.id);
   const suppliers = useSuppliers(opp.serviceType === "merchant_services" ? "merchant" : "energy");
-  const { register, handleSubmit, reset, formState } = useForm<DetailValues>({ defaultValues: toValues(opp) });
+  const { register, handleSubmit, reset, formState, watch, setValue } = useForm<DetailValues>({ defaultValues: toValues(opp) });
   useEffect(() => reset(toValues(opp)), [opp, reset]);
   const save = useMutation({
     mutationFn: (v: DetailValues) =>
@@ -142,6 +167,11 @@ function DetailsCard({ opp }: { opp: Workspace }) {
         expectedRevenue: numOrNull(v.expectedRevenue),
         nextAction: blankToNull(v.nextAction),
         followUpDate: v.followUpDate || null,
+        expectedCloseDate: v.expectedCloseDate || null,
+        visitDate: v.visitDate || null,
+        contactRole: blankToNull(v.contactRole),
+        productInterest: v.productInterest,
+        supplyChanges: isEnergyService(v.serviceType as ServiceType) ? v.supplyChanges : [],
         selectedSupplierId: v.selectedSupplierId || null,
         applicationStatus: blankToNull(v.applicationStatus),
       }),
@@ -203,8 +233,29 @@ function DetailsCard({ opp }: { opp: Workspace }) {
         <Field label="Application status" hint="Free text, e.g. what the supplier last said.">
           {(p) => <Input {...p} {...register("applicationStatus")} />}
         </Field>
+        {isEnergyService(watch("serviceType") as ServiceType) && (
+          <CheckboxGroup
+            className="sm:col-span-2"
+            legend="Supply changes"
+            hint="Each adds the documents it needs to the checklist (e.g. a signed lease for a change of legal entity)."
+            options={SUPPLY_CHANGES}
+            labels={SUPPLY_CHANGE_LABELS}
+            value={watch("supplyChanges")}
+            onChange={(v) => setValue("supplyChanges", v, { shouldDirty: true })}
+          />
+        )}
+        <CheckboxGroup
+          className="sm:col-span-2"
+          legend="Product interest"
+          options={PRODUCT_INTERESTS}
+          labels={PRODUCT_INTEREST_LABELS}
+          value={watch("productInterest")}
+          onChange={(v) => setValue("productInterest", v, { shouldDirty: true })}
+        />
         <Field label="Next action">{(p) => <Input {...p} {...register("nextAction")} />}</Field>
         <Field label="Follow-up date">{(p) => <Input {...p} type="date" {...register("followUpDate")} />}</Field>
+        <Field label="Expected closing">{(p) => <Input {...p} type="date" {...register("expectedCloseDate")} />}</Field>
+        <Field label="Date of visit">{(p) => <Input {...p} type="date" {...register("visitDate")} />}</Field>
         <Field label="Expected revenue (€)">{(p) => <Input {...p} inputMode="decimal" {...register("expectedRevenue")} />}</Field>
         <Field label="Lead source">
           {(p) => (
@@ -222,6 +273,7 @@ function DetailsCard({ opp }: { opp: Workspace }) {
         <h3 className="pt-2 text-sm font-semibold sm:col-span-2">Captured contact details</h3>
         <Field label="Business name">{(p) => <Input {...p} {...register("companyName")} />}</Field>
         <Field label="Contact name">{(p) => <Input {...p} {...register("contactName")} />}</Field>
+        <Field label="Contact role" hint="e.g. Owner, manager, bookkeeper">{(p) => <Input {...p} {...register("contactRole")} />}</Field>
         <Field label="Email">{(p) => <Input {...p} type="email" {...register("email")} />}</Field>
         <Field label="Phone">{(p) => <Input {...p} type="tel" {...register("phone")} />}</Field>
       </fieldset>

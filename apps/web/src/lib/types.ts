@@ -1,4 +1,4 @@
-import type { ApprovalState, LeadSource, Outcome, SaleType, ServiceType, StageKey } from "@uo/shared";
+import type { ApprovalState, LeadSource, Outcome, ProductInterest, SaleType, ServiceType, StageKey, SupplyChange } from "@uo/shared";
 
 export interface Page<T> {
   items: T[];
@@ -37,6 +37,11 @@ export interface Workspace extends Omit<OpportunityRow, "stage"> {
   leadSourceDetail: string | null;
   campaign: string | null;
   nextAction: string | null;
+  expectedCloseDate: string | null;
+  visitDate: string | null;
+  contactRole: string | null;
+  productInterest: ProductInterest[];
+  supplyChanges: SupplyChange[];
   internalApproval: ApprovalState;
   selectedSupplierId: string | null;
   applicationStatus: string | null;
