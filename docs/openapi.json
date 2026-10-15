@@ -43,6 +43,20 @@
         ]
       }
     },
+    "/api/auth/password": {
+      "post": {
+        "operationId": "AuthController_changePassword",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/auth/mfa/setup": {
       "post": {
         "operationId": "AuthController_startMfa",

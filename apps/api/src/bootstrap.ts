@@ -20,12 +20,21 @@ function plain(value: unknown): unknown {
 export function configureApp(app: INestApplication) {
   const env = app.get<Env>(ENV);
   app.setGlobalPrefix("api");
+  if (env.TRUST_PROXY) {
+    const v = env.TRUST_PROXY.trim();
+    (app.getHttpAdapter().getInstance() as { set(k: string, v: unknown): void }).set("trust proxy", v === "true" ? true : /^\d+$/.test(v) ? Number(v) : v);
+  }
   app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } }, crossOriginResourcePolicy: { policy: "same-site" } }));
   app.use(cookieParser());
   app.enableCors({ origin: env.WEB_ORIGIN, credentials: true });
   app.useGlobalInterceptors({ intercept: (_ctx, next) => next.handle().pipe(map(plain)) });
   app.enableShutdownHooks();
   return env;
+}
+
+/** Off in production unless asked for: the docs map the whole attack surface. */
+export function apiDocsEnabled(env: Pick<Env, "ENABLE_API_DOCS" | "NODE_ENV">) {
+  return env.ENABLE_API_DOCS ? ["true", "1"].includes(env.ENABLE_API_DOCS) : env.NODE_ENV !== "production";
 }
 
 export function buildOpenApi(app: INestApplication) {

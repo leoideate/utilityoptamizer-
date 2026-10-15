@@ -12,7 +12,9 @@
 | Redis 7 | managed service recommended; `maxmemory-policy noeviction` | persistence on |
 | Object storage | AWS S3 / Azure Blob via S3 gateway / any S3-compatible service | private bucket, versioning on |
 
-Put HTTPS (TLS) in front of the web app, e.g. a load balancer or reverse proxy. Only the web app needs to be public: the API is reached through the web app's `/api` proxy.
+Put HTTPS (TLS) in front of the web app, e.g. a load balancer or reverse proxy. Only the web app needs to be public: the API is reached through the web app's `/api` proxy. The proxy must **set or append** `X-Forwarded-For` (AWS ALB, Azure Front Door/App Gateway, nginx `proxy_add_x_forwarded_for` all do), and the API needs `TRUST_PROXY` so rate limits and audit entries see each user's real address. Don't expose the web container directly to the internet with `TRUST_PROXY` set: a client could then choose its own address.
+
+The production web build sends a Content-Security-Policy, HSTS (`max-age=31536000; includeSubDomains`), `X-Frame-Options: DENY`, `nosniff` and a strict referrer policy. Document previews load from your bucket, so build the web image with `STORAGE_ORIGIN` set to the bucket's origin (e.g. `https://uo-documents.s3.eu-west-1.amazonaws.com`).
 
 ## Environment
 
@@ -26,6 +28,7 @@ REDIS_URL=rediss://…
 FIELD_ENCRYPTION_KEY=<32 random bytes, base64>
 APP_SECRET=<64 random hex chars>
 COOKIE_SECURE=true
+TRUST_PROXY=loopback,linklocal,uniquelocal
 STORAGE_DRIVER=s3  S3_REGION=…  S3_BUCKET=…  S3_ACCESS_KEY_ID=…  S3_SECRET_ACCESS_KEY=…
 SMTP_URL=…  MAIL_FROM=…
 RUN_WORKERS_IN_API=false

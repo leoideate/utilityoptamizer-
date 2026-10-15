@@ -17,7 +17,7 @@ import {
 } from "@uo/shared";
 import { AuditService } from "../audit/audit.service";
 import { type Actor, actorRef } from "../common/actor";
-import { Forbidden, NotFound, RuleViolation, assertRules } from "../common/errors";
+import { Forbidden, RuleViolation, assertRules } from "../common/errors";
 import type { Tx } from "../common/prisma.service";
 import { PrismaService } from "../common/prisma.service";
 import { type Page, dateOnly, defined, isoDay, pageArgs, phoneKey } from "../common/values";
@@ -52,10 +52,7 @@ export class OpportunitiesService {
     if (!can(actor, "opportunity.create")) throw new Forbidden();
     let ownerId: string | null = actor.roles.includes("salesperson") ? actor.id : null;
     if (input.ownerId !== undefined && can(actor, "opportunity.assign")) ownerId = input.ownerId;
-    if (input.customerId) {
-      const c = await db.customer.findUnique({ where: { id: input.customerId } });
-      if (!c) throw new NotFound("Customer");
-    }
+    if (input.customerId) await this.access.linkableCustomer(actor, input.customerId, db);
     const stageId = await this.stages.idFor("new_lead", db);
 
     const run = async (tx: Tx) => {
@@ -392,8 +389,7 @@ export class OpportunitiesService {
 
   async linkCustomer(actor: Actor, id: string, customerId: string) {
     await this.access.writable(actor, id);
-    const c = await this.prisma.customer.findUnique({ where: { id: customerId } });
-    if (!c || c.mergedIntoId) throw new NotFound("Customer");
+    const c = await this.access.linkableCustomer(actor, customerId);
     await this.prisma.$transaction(async (tx) => {
       await tx.opportunity.update({ where: { id }, data: { customerId } });
       await tx.supplySite.updateMany({ where: { opportunityId: id, customerId: null }, data: { customerId } });
@@ -515,33 +511,36 @@ export class OpportunitiesService {
   async board(actor: Actor, q: OpportunityListQuery, perStage = 50) {
     const where = this.viewWhere(actor, q);
     const stages = await this.stages.list();
+    const liveWon = stages.filter((s) => s.key === "live_won").map((s) => s.id);
+    // Lost deals drop off the board, except in Live / Won.
+    const shown = (stageIds: string[]): Prisma.OpportunityWhereInput => ({ AND: [where, { stageId: { in: stageIds } }, { OR: [{ stageId: { in: liveWon } }, { outcome: { not: "lost" } }] }] });
+    // One grouped query for every column's count and value (was two queries per stage).
+    const totals = new Map(
+      (await this.prisma.opportunity.groupBy({ by: ["stageId"], where: shown(stages.map((s) => s.id)), _count: { _all: true }, _sum: { expectedRevenue: true } })).map((g) => [g.stageId, g]),
+    );
     const columns = await Promise.all(
       stages.map(async (s) => {
-        const w: Prisma.OpportunityWhereInput = { AND: [where, { stageId: s.id }, s.key === "live_won" ? {} : { outcome: { not: "lost" } }] };
-        const [cards, count, sum] = await Promise.all([
-          this.prisma.opportunity.findMany({
-            where: w,
-            take: perStage,
-            orderBy: { stageEnteredAt: "asc" },
-            select: {
-              id: true,
-              number: true,
-              name: true,
-              serviceType: true,
-              saleType: true,
-              outcome: true,
-              expectedRevenue: true,
-              followUpDate: true,
-              stageEnteredAt: true,
-              companyName: true,
-              owner: { select: { id: true, name: true } },
-              customer: { select: { legalName: true } },
-            },
-          }),
-          this.prisma.opportunity.count({ where: w }),
-          this.prisma.opportunity.aggregate({ where: w, _sum: { expectedRevenue: true } }),
-        ]);
-        return { stage: { id: s.id, key: s.key, name: s.name }, count, value: Number(sum._sum.expectedRevenue ?? 0), cards };
+        const cards = await this.prisma.opportunity.findMany({
+          where: shown([s.id]),
+          take: perStage,
+          orderBy: { stageEnteredAt: "asc" },
+          select: {
+            id: true,
+            number: true,
+            name: true,
+            serviceType: true,
+            saleType: true,
+            outcome: true,
+            expectedRevenue: true,
+            followUpDate: true,
+            stageEnteredAt: true,
+            companyName: true,
+            owner: { select: { id: true, name: true } },
+            customer: { select: { legalName: true } },
+          },
+        });
+        const total = totals.get(s.id);
+        return { stage: { id: s.id, key: s.key, name: s.name }, count: total?._count._all ?? 0, value: Number(total?._sum.expectedRevenue ?? 0), cards };
       }),
     );
     return { columns };

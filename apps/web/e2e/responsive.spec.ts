@@ -83,7 +83,8 @@ test("main screens adapt from 320px to 1920px", async ({ browser }) => {
   await expect(page.getByRole("searchbox", { name: "Search" })).toBeVisible();
 
   // A deal with sites, meters and documents for the workspace screens.
-  await page.goto("/opportunities?view=all&q=Harbour%20Caf%C3%A9%20%E2%80%93%20dual");
+  await page.goto("/opportunities?view=all");
+  await page.getByLabel("Search opportunities").fill("Harbour");
   const dealHref = await page.getByRole("link", { name: "Harbour Café – dual fuel" }).first().getAttribute("href");
   await page.goto("/customers?q=Harbour");
   const customerHref = await page.getByRole("link", { name: "Harbour Café Limited" }).first().getAttribute("href");

@@ -11,6 +11,9 @@ COPY apps/web apps/web
 # The /api rewrite target is fixed at build time.
 ARG API_ORIGIN=http://api:4000
 ENV API_ORIGIN=$API_ORIGIN
+# Origin(s) of signed document links (your S3 bucket), allowed by the Content-Security-Policy.
+ARG STORAGE_ORIGIN=https://*.amazonaws.com
+ENV STORAGE_ORIGIN=$STORAGE_ORIGIN
 RUN npm run build -w @uo/shared && npm run build -w @uo/web
 
 FROM node:22-bookworm-slim

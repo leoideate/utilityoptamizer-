@@ -45,7 +45,7 @@ function prettyTransport() {
       },
     }),
     // Default: 300 requests/minute per IP. Login has its own stricter limit.
-    ThrottlerModule.forRoot({ throttlers: [{ name: "default", ttl: 60_000, limit: 300 }], skipIf: () => process.env.NODE_ENV === "test" }),
+    ThrottlerModule.forRoot({ throttlers: [{ name: "default", ttl: 60_000, limit: Number(process.env.RATE_LIMIT_PER_MINUTE) || 300 }], skipIf: () => process.env.NODE_ENV === "test" }),
     CommonModule,
     StorageModule,
     JobsModule,

@@ -32,6 +32,17 @@ const envSchema = z
     APP_SECRET: z.string().min(32, "APP_SECRET must be at least 32 characters."),
 
     SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(12),
+    /** Sessions unused for this long end (ISO 27001 A.8.5). */
+    SESSION_IDLE_MINUTES: z.coerce.number().int().min(5).max(720).default(60),
+    /**
+     * Set when running behind a load balancer / reverse proxy so client IPs (rate limits, audit log)
+     * are read from X-Forwarded-For: a hop count ("1"), "true", or Express trust-proxy addresses.
+     */
+    TRUST_PROXY: z.string().optional(),
+    /** Requests per minute per IP across the API (login has its own, lower limit). */
+    RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).max(100_000).default(300),
+    /** Interactive API docs at /api/docs. Default: on in development, off in production. */
+    ENABLE_API_DOCS: z.enum(["true", "false", "1", "0"]).optional(),
     COOKIE_SECURE: bool,
 
     STORAGE_DRIVER: z.enum(["s3", "local"]).default("s3"),

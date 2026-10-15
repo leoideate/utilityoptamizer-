@@ -56,6 +56,7 @@ out += `
 - **Opportunities**: salespeople read and edit the opportunities they own plus unassigned leads (so they can claim them). Anything else returns *404 Not found*, so other people's deals aren't revealed. Roles with \`opportunity.read_all\` see everything.
 - **Won deals** keep their salesperson: unassigning a won opportunity is refused.
 - **Activities** can only be edited by their owner, or by roles with \`opportunity.write_all\`.
+- **Customers**: roles with \`opportunity.read_all\` see every customer. Salespeople see customers they created or that are on an opportunity they can see; others return *404*. Duplicate checks still warn about any matching customer, but show salespeople only its name, and only customers they can see can be linked to a deal (a manager links the rest).
 - **Business-card scans** are visible to the uploader and to roles that read all opportunities.
 
 ## Restricted data
@@ -76,11 +77,12 @@ Every view of restricted data writes a \`sensitive.read\` audit entry. Request l
 
 ## Authentication controls
 
-- Email and password, or Microsoft / Google single sign-on (OpenID Connect with PKCE; existing active users only, matched by verified email, optional domain allow-list). HTTP-only, SameSite=Lax session cookie (Secure in production); sessions expire after \`SESSION_TTL_HOURS\`.
+- Email and password, or Microsoft / Google single sign-on (OpenID Connect with PKCE; existing active users only, matched by verified email, optional domain allow-list). HTTP-only, SameSite=Lax session cookie (Secure in production); sessions expire after \`SESSION_TTL_HOURS\` and after \`SESSION_IDLE_MINUTES\` without activity.
 - CSRF: double-submit token (\`uo_csrf\` cookie echoed in \`X-CSRF-Token\`) plus an Origin check on every state-changing request.
-- Rate limits: 300 requests/minute per IP; login 10/minute per IP; account locked for 15 minutes after 8 wrong passwords.
-- Optional TOTP two-factor authentication per user (Account → Security); administrators can reset it.
-- Changing a user's roles, deactivating them or resetting their password ends all their sessions.
+- Rate limits: \`RATE_LIMIT_PER_MINUTE\` (default 300) requests/minute per IP; login and password change 10/minute per IP; account locked for 15 minutes after 8 wrong passwords. Refusals (401/403/429) are logged with user, route and IP.
+- Optional TOTP two-factor authentication per user (Account → Security); each code is accepted once; administrators can reset it.
+- Changing your own password needs the current one and ends your other sessions. Changing a user's roles, deactivating them or resetting their password ends all their sessions.
+- Security headers: the API sends \`default-src 'none'\` CSP, \`nosniff\` and frame denial (helmet); the web app sends a Content-Security-Policy, HSTS in production, \`X-Frame-Options: DENY\` and a strict referrer policy. Interactive API docs are off in production unless \`ENABLE_API_DOCS=true\`.
 `;
 fs.writeFileSync(path.join(__dirname, "..", "docs", "security-matrix.md"), out);
 console.log("Wrote docs/security-matrix.md");

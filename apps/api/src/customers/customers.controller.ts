@@ -33,8 +33,8 @@ export class CustomersController {
   @Post("customers/duplicates")
   @HttpCode(200)
   @RequireCapability("customer.read")
-  duplicates(@Body(new ZodPipe(duplicateCheckSchema)) body: z.infer<typeof duplicateCheckSchema>) {
-    return this.customers.findDuplicates(body);
+  duplicates(@CurrentUser() a: Actor, @Body(new ZodPipe(duplicateCheckSchema)) body: z.infer<typeof duplicateCheckSchema>) {
+    return this.customers.findDuplicates(body, undefined, a);
   }
 
   @Get("customers/:id")
@@ -50,7 +50,8 @@ export class CustomersController {
 
   @Get("customers/:id/timeline")
   @RequireCapability("customer.read")
-  timeline(@Param("id", Id) id: string) {
+  async timeline(@CurrentUser() a: Actor, @Param("id", Id) id: string) {
+    await this.customers.visible(a, id);
     return this.prisma.timelineEntry.findMany({ where: { customerId: id, opportunityId: null }, orderBy: { occurredAt: "desc" }, take: 200 });
   }
 

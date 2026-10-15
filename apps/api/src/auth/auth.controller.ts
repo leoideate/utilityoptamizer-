@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Inject, Post, Req, Res, UnauthorizedException } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
-import { loginSchema, type Role, ROLES, can, CAPABILITIES, type Capability } from "@uo/shared";
+import { loginSchema, passwordSchema, type Role, ROLES, can, CAPABILITIES, type Capability } from "@uo/shared";
 import type { CookieOptions, Response } from "express";
 import { z } from "zod";
 import { ENV, type Env } from "../config/env";
@@ -54,6 +54,13 @@ export class AuthController {
   me(@Req() req: AuthedRequest) {
     if (!req.user) throw new UnauthorizedException("Please sign in.");
     return { user: this.describe(req.user), csrfToken: req.csrfToken };
+  }
+
+  @Post("password")
+  @HttpCode(204)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  changePassword(@CurrentUser() actor: Actor, @Req() req: AuthedRequest, @Body(new ZodPipe(z.object({ currentPassword: z.string().min(1).max(200), newPassword: passwordSchema }))) body: { currentPassword: string; newPassword: string }) {
+    return this.auth.changePassword(actor, req.sessionId!, body.currentPassword, body.newPassword);
   }
 
   @Post("mfa/setup")

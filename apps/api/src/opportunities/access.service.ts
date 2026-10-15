@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { Opportunity, Prisma, Stage } from "@prisma/client";
 import { type StageKey, can, canReadOpportunity, canWriteOpportunity } from "@uo/shared";
 import type { Actor } from "../common/actor";
-import { Forbidden, NotFound } from "../common/errors";
+import { Forbidden, NotFound, RuleViolation } from "../common/errors";
 import type { Db } from "../common/prisma.service";
 import { PrismaService } from "../common/prisma.service";
 
@@ -37,5 +37,27 @@ export class OpportunityAccess {
     if (can(actor, "opportunity.read_all")) return {};
     if (actor.roles.includes("salesperson")) return { OR: [{ ownerId: actor.id }, { ownerId: null }] };
     return { id: { in: [] } };
+  }
+
+  /**
+   * Least privilege for customers: roles that see every opportunity see every customer;
+   * others see customers they created or that sit on an opportunity they can see.
+   */
+  customerWhere(actor: Actor): Prisma.CustomerWhereInput {
+    if (can(actor, "opportunity.read_all")) return {};
+    return { OR: [{ createdById: actor.id }, { opps: { some: this.visibleWhere(actor) } }] };
+  }
+
+  /**
+   * Linking an opportunity to a customer makes that customer visible, so only customers the
+   * actor can already see may be linked. A manager links the rest.
+   */
+  async linkableCustomer(actor: Actor, id: string, db: Db = this.prisma) {
+    const c = await db.customer.findUnique({ where: { id } });
+    if (!c || c.mergedIntoId) throw new NotFound("Customer");
+    if (!(await db.customer.count({ where: { AND: [{ id }, this.customerWhere(actor)] } }))) {
+      throw new RuleViolation(["This customer is handled by another team. Ask a manager to link it for you."]);
+    }
+    return c;
   }
 }

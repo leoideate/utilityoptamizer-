@@ -8,6 +8,7 @@ import { z } from "zod";
 import type { Actor } from "../common/actor";
 import { CurrentUser } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
+import { uploadLimitBytes } from "../documents/documents.controller";
 import { ChatService } from "./chat.service";
 
 const Id = new ParseUUIDPipe({ version: "4" });
@@ -59,7 +60,7 @@ export class ChatController {
   @Post("channels/:id/messages")
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @ApiConsumes("multipart/form-data", "application/json")
-  @UseInterceptors(FilesInterceptor("files", 5, { storage: memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } }))
+  @UseInterceptors(FilesInterceptor("files", 5, { storage: memoryStorage(), limits: { fileSize: uploadLimitBytes(), files: 5, fields: 10, parts: 20 } }))
   post(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(multipartMessage)) body: z.infer<typeof chatMessageSchema>, @UploadedFiles() files?: Express.Multer.File[]) {
     return this.chat.post(a, id, body, files ?? []);
   }

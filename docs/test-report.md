@@ -1,6 +1,6 @@
 # Test report
 
-Run on 14 October 2026, Windows 10, Node 22.17, Docker Desktop (Postgres 16, Redis 7, SeaweedFS S3), after a clean `npm install`.
+Run on 15 October 2026, Windows 10, Node 22.17, Docker Desktop (Postgres 16, Redis 7, SeaweedFS S3), after a clean `npm install`.
 
 ## Results
 
@@ -10,14 +10,17 @@ Run on 14 October 2026, Windows 10, Node 22.17, Docker Desktop (Postgres 16, Red
 | Type check (shared, API, web) | `npm run typecheck` | ✅ 0 errors |
 | Shared unit tests (rules, permissions, identifiers, percentages, dates) | `npm test -w @uo/shared` | ✅ 30 / 30 |
 | API unit tests (encryption, scrypt, TOTP RFC 6238 vector, webhook HMAC and replay, OCR card parser, phone matching, address-history coverage, redaction, upload sniffing, env validation, CSV parsing) | `npm run test:unit -w @uo/api` | ✅ 17 / 17 |
-| API integration tests (real PostgreSQL, full NestJS app over HTTP) | `npm run test:integration -w @uo/api` | ✅ 61 / 61 (incl. 10 single sign-on tests against a mock OpenID provider, 7 call tests incl. a mock RingCentral platform, 5 chat tests) |
-| End-to-end + accessibility (Playwright, Chromium, axe WCAG 2.1 AA, desktop and Pixel 7) | `npm run test:e2e` | ✅ 12 / 12 (incl. real-time chat between two browsers, a logged call, and a responsive check of 15 screens at 6 widths from 320 to 1920px) |
-| Production builds | `npm run build`; `docker build` of API and web images | ✅ API container started in production mode, `/api/health` = ok (database, Redis, storage), `prisma migrate status` = up to date |
+| API integration tests (real PostgreSQL, full NestJS app over HTTP) | `npm run test:integration -w @uo/api` | ✅ 89 / 89 (incl. 17 penetration tests, 11 security-hardening regressions, 10 single sign-on tests against a mock OpenID provider, 7 call tests incl. a mock RingCentral platform, 5 chat tests) |
+| End-to-end + accessibility (Playwright, Chromium, axe WCAG 2.1 AA, desktop and Pixel 7) | `npm run test:e2e` | ✅ 12 / 12 (incl. real-time chat between two browsers, a logged call, a responsive check of 15 screens at 6 widths from 320 to 1920px, and no Content-Security-Policy violations on the main screens) |
+| Production builds | `npm run build`; `docker build` of API and web images | ✅ `npm run build` on 15 October. Docker images last built and started in production mode on 14 October (`/api/health` ok); rebuild them before release. |
 | Migrations | `prisma migrate deploy` on the dev and test databases | ✅ |
 | Dependency audit (runtime) | `npm audit --omit=dev` | ✅ 0 vulnerabilities |
 | Dependency audit (all) | `npm audit` | ⚠️ 31 high, all from `braces` in Jest and ESLint tooling. No fixed version exists yet; not shipped in production images. |
+| Penetration tests | `pentest.test.ts` (part of the integration suite) | ✅ 150 API operations: unauthenticated, CSRF, IDOR (1,710 cross-user requests), injection, secret-exposure sweeps; see [security-assessment.md](security-assessment.md) |
+| Load test | `npm run stress -w @uo/api` (5,000 deals, up to 200 concurrent requests) | ✅ 0 server errors, 0 dropped connections; throttles held |
+| Security headers | production web build | ✅ CSP, HSTS, X-Frame-Options, nosniff, Referrer-Policy, COOP |
 
-**Total automated tests: 120, all passing.**
+**Total automated tests: 148, all passing.**
 
 ## Essential scenarios → tests
 
@@ -55,6 +58,9 @@ Also covered: internal chat (one DM per pair, unread counts and read markers, pu
 - The login rate-limit error was shown to users as "ThrottlerException: Too Many Requests". It now reads "Too many attempts. Please wait a minute and try again."
 - On phones the dashboard scrolled sideways (a wide table stretched its grid column), some badges and stage labels were 10–11px, several tap targets were under 24px, and chat message actions only appeared on hover (unreachable on touch). Fixed; the opportunity and customer lists now become cards on phones.
 - The production container crashed when `NODE_ENV=development` selected a dev-only log formatter. Now only used when installed.
+- Security review and penetration testing found ten issues (self password change without the current password, salespeople reading all customers, 100 MB in-memory uploads, shared rate limit behind the proxy, no CSP/HSTS, no idle timeout, public API docs, TOTP replay, unlogged access denials, 500 on oversized bodies). All fixed with regression tests; details in [security-assessment.md](security-assessment.md).
+- The pipeline board ran 54+ queries per load (4.2 s p95 under load). Now one grouped query for totals plus two new indexes (2.4 s).
+- Three e2e steps opened seeded deals from the first page of a list, which broke once earlier runs had added enough records. They now search first.
 
 ## How to reproduce
 

@@ -121,15 +121,25 @@ test("duplicate customers are flagged before creation", async ({ page }) => {
 });
 
 test("salespeople only see their own pipeline; managers see everyone's", async ({ page }) => {
+  // Search, so records added by earlier e2e runs can't push the seeded deals off the first page.
+  const find = async (term: string) => {
+    await page.getByLabel("Search opportunities").fill(term);
+    await expect(page.getByText("Loading")).toHaveCount(0);
+  };
   await signIn(page, users.otherSales);
   await page.goto("/opportunities?view=all");
+  await find("Quayside");
   await expect(page.getByRole("link", { name: "Quayside Bakery – electricity", exact: true })).toBeVisible();
+  await find("Harbour");
+  await expect(page.getByRole("link", { name: "Quayside Bakery – electricity", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Harbour Café – dual fuel", exact: true })).toHaveCount(0);
 
   await page.context().clearCookies();
   await signIn(page, users.manager);
   await page.goto("/opportunities?view=all");
+  await find("Harbour");
   await expect(page.getByRole("link", { name: "Harbour Café – dual fuel", exact: true })).toBeVisible();
+  await find("Quayside");
   await expect(page.getByRole("link", { name: "Quayside Bakery – electricity", exact: true })).toBeVisible();
 });
 
@@ -143,13 +153,18 @@ test("won opportunities stay visible under All won and in the pipeline", async (
   await expectAccessible(page, "pipeline");
 });
 
-test("main pages pass automated accessibility checks", async ({ page }) => {
+test("main pages pass automated accessibility checks, with no Content-Security-Policy violations", async ({ page }) => {
+  const violations: string[] = [];
+  page.on("console", (m) => {
+    if (/Content Security Policy|Refused to (load|execute|connect|frame)/i.test(m.text())) violations.push(m.text());
+  });
   await signIn(page, users.admin);
-  for (const path of ["/opportunities", "/customers", "/activities", "/scan", "/admin", "/account"]) {
+  for (const path of ["/", "/opportunities", "/pipeline", "/customers", "/activities", "/chat", "/scan", "/admin", "/account"]) {
     await page.goto(path);
-    await expect(page.locator("main h1")).toBeVisible();
-    await expectAccessible(page, path);
+    await expect(page.locator("main h1").first()).toBeVisible();
+    if (path !== "/" && path !== "/pipeline" && path !== "/chat") await expectAccessible(page, path);
   }
+  expect(violations).toEqual([]);
 });
 
 test("mobile layout keeps the menu and key figures usable @mobile", async ({ page }) => {
@@ -186,6 +201,7 @@ test("colleagues chat in real time, with mentions in deal discussions", async ({
 
   // Deal discussion: the Team chat tab on an opportunity.
   await sarah.goto("/opportunities?view=my_open");
+  await sarah.getByLabel("Search opportunities").fill("Harbour");
   await sarah.getByRole("link", { name: "Harbour Café – dual fuel" }).click();
   await sarah.getByRole("tab", { name: "Team chat" }).click();
   await sarah.getByLabel("Message", { exact: true }).fill("@Mich");
@@ -202,6 +218,7 @@ test("colleagues chat in real time, with mentions in deal discussions", async ({
 test("calling a customer without a phone system opens the dialler and logs the outcome", async ({ page }) => {
   await signIn(page, users.sales);
   await page.goto("/opportunities?view=my_open");
+  await page.getByLabel("Search opportunities").fill("Doyle");
   await page.getByRole("link", { name: "Doyle Pharmacy – electricity" }).click();
   await page.getByRole("button", { name: "Call", exact: true }).click();
   await expect(page.getByLabel("Number")).toContainText("+353875550199");

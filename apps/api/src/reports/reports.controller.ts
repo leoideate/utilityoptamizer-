@@ -90,6 +90,7 @@ export class ReportsController {
       this.prisma.customer.findMany({
         where: {
           mergedIntoId: null,
+          AND: [this.access.customerWhere(a)],
           OR: [
             { legalName: { contains: q, mode: "insensitive" } },
             { tradingName: { contains: q, mode: "insensitive" } },

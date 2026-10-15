@@ -6,8 +6,8 @@ import { AuditService } from "../audit/audit.service";
 import { CryptoService } from "../common/crypto.service";
 import { Forbidden, RuleViolation } from "../common/errors";
 import { PrismaService } from "../common/prisma.service";
-import { DUMMY_HASH_PROMISE, verifyPassword } from "./passwords";
-import { generateSecret, otpauthUrl, verifyTotp } from "./totp";
+import { DUMMY_HASH_PROMISE, hashPassword, verifyPassword } from "./passwords";
+import { generateSecret, matchTotpStep, otpauthUrl, verifyTotp } from "./totp";
 
 export const MAX_FAILED_LOGINS = 8;
 export const LOCKOUT_MINUTES = 15;
@@ -76,13 +76,31 @@ export class AuthService {
     return this.issueSession(user.id, actor, { ip: input.ip, userAgent: input.userAgent, method: "password" });
   }
 
-  /** Verifies a TOTP code for a user with MFA on; audits failures. */
+  /** Verifies a TOTP code for a user with MFA on; each code works once. Audits failures. */
   async checkTotp(user: { id: string; mfaSecretEnc: string | null }, actor: Actor, code: string) {
     const secret = this.crypto.decrypt(user.mfaSecretEnc);
-    if (!secret || !verifyTotp(secret, code)) {
-      await this.audit.log(actor, { action: "auth.mfa_failed", entityType: "user", entityId: user.id, summary: "Wrong authenticator code" });
+    const step = secret ? matchTotpStep(secret, code) : null;
+    // Conditional update: a code (time step) already used, here or concurrently, is refused.
+    const fresh = step === null ? 0 : (await this.prisma.user.updateMany({ where: { id: user.id, OR: [{ mfaLastStep: null }, { mfaLastStep: { lt: step } }] }, data: { mfaLastStep: step } })).count;
+    if (!fresh) {
+      await this.audit.log(actor, { action: "auth.mfa_failed", entityType: "user", entityId: user.id, summary: step === null ? "Wrong authenticator code" : "Authenticator code reused" });
       throw new Forbidden("That code is incorrect.");
     }
+  }
+
+  /** Self-service password change: the current password is required, and other sessions end. */
+  async changePassword(actor: Actor, sessionId: string, current: string, next: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: actor.id } });
+    if (!(await verifyPassword(current, user.passwordHash))) {
+      await this.audit.log(actor, { action: "auth.password_change_failed", entityType: "user", entityId: actor.id, summary: "Wrong current password when changing password" });
+      throw new Forbidden("Your current password is incorrect.");
+    }
+    if (current === next) throw new RuleViolation(["Choose a password you haven't used here before."]);
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: actor.id }, data: { passwordHash: await hashPassword(next) } }),
+      this.prisma.session.deleteMany({ where: { userId: actor.id, id: { not: sessionId } } }),
+    ]);
+    await this.audit.log(actor, { action: "auth.password_changed", entityType: "user", entityId: actor.id, summary: "Changed own password; other sessions ended" });
   }
 
   /** Creates a server-side session after any successful sign-in (password or SSO). */
@@ -113,6 +131,14 @@ export class AuthService {
       include: { user: { include: { roles: true } } },
     });
     if (!session || session.expiresAt < new Date() || !session.user.active) return null;
+    const now = Date.now();
+    if (now - session.lastSeenAt.getTime() > this.env.SESSION_IDLE_MINUTES * 60_000) {
+      await this.prisma.session.deleteMany({ where: { id: session.id } });
+      return null;
+    }
+    if (now - session.lastSeenAt.getTime() > 60_000) {
+      void this.prisma.session.update({ where: { id: session.id }, data: { lastSeenAt: new Date(now) } }).catch(() => undefined);
+    }
     return {
       sessionId: session.id,
       csrfToken: session.csrfToken,

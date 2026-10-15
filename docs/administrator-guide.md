@@ -57,7 +57,9 @@ Chat needs no configuration. Anyone can send direct messages and join public cha
 | Compliance | Reviews Worldpay principals and risk; approves or raises queries; sees restricted data |
 | Finance | Commissions and restricted bank details |
 
-A user can hold several roles. The full permission table is in [security-matrix.md](security-matrix.md) and under **Administration → Security matrix**. Deactivating a user keeps all their opportunities and history; reassign their open deals from **Opportunities → filter by salesperson → Reassign**. Changing roles or resetting a password signs the user out everywhere. **Reset 2FA** removes a lost authenticator.
+A user can hold several roles. The full permission table is in [security-matrix.md](security-matrix.md) and under **Administration → Security matrix**. Deactivating a user keeps all their opportunities and history; reassign their open deals from **Opportunities → filter by salesperson → Reassign**. Changing roles or resetting a password signs the user out everywhere. **Reset 2FA** removes a lost authenticator. People change their own password under **Account** (it asks for the current one and signs out their other devices); only administrators can reset someone else's. Sessions end after `SESSION_IDLE_MINUTES` without activity (default 60) and after `SESSION_TTL_HOURS` in any case.
+
+Salespeople see the customers they created and those on deals they can see. If a salesperson enters details that match a customer they can't see, the duplicate warning shows only the company name; a manager links that customer to the deal.
 
 ## Suppliers and pipeline (Administration → Suppliers & pipeline)
 

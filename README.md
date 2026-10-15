@@ -57,6 +57,8 @@ Open http://localhost:3000 and sign in as `manager@demo.utilityoptimizer.ie` (or
 - [Architecture](docs/architecture.md), with system and data-model diagrams
 - [Field dictionary](docs/field-dictionary.md)
 - [Security matrix](docs/security-matrix.md)
+- [Security assessment (penetration and stress tests)](docs/security-assessment.md)
+- [ISO 27001 gap analysis](docs/iso27001-gap-analysis.md)
 - [API](docs/api.md) and [OpenAPI](docs/openapi.json)
 - [User guide](docs/user-guide.md)
 - [Administrator guide](docs/administrator-guide.md)

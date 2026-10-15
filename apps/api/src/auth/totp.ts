@@ -52,6 +52,17 @@ export function totpAt(secret: string, timeMs: number, step = 30): string {
   return code.padStart(6, "0");
 }
 
+/** The time step a code belongs to (current ±1 for clock drift), or null if it doesn't match. */
+export function matchTotpStep(secret: string, code: string, now = Date.now()): number | null {
+  for (const w of [-1, 0, 1]) {
+    const t = now + w * 30_000;
+    const expected = Buffer.from(totpAt(secret, t));
+    const given = Buffer.from(code);
+    if (expected.length === given.length && timingSafeEqual(expected, given)) return Math.floor(t / 30_000);
+  }
+  return null;
+}
+
 /** Accepts the current code and one step either side (clock drift). */
 export function verifyTotp(secret: string, code: string, now = Date.now()): boolean {
   return [-1, 0, 1].some((w) => {

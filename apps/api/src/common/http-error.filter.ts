@@ -16,6 +16,8 @@ export class HttpErrorFilter implements ExceptionFilter {
 
   catch(err: unknown, host: ArgumentsHost) {
     const res = host.switchToHttp().getResponse<Response>();
+    const req = host.switchToHttp().getRequest<{ method: string; originalUrl: string; ip?: string; user?: { id: string } }>();
+    const denied = (status: number) => this.log.warn({ status, method: req.method, path: req.originalUrl.split("?")[0], userId: req.user?.id, ip: req.ip }, "Access denied");
     const send = (statusCode: number, message: string, issues?: string[]) =>
       res.status(statusCode).json(issues ? { statusCode, message, issues } : { statusCode, message });
 
@@ -24,14 +26,26 @@ export class HttpErrorFilter implements ExceptionFilter {
       const issues = err.issues.map((i) => (i.path.length ? `${i.path.join(".")}: ${i.message}` : i.message));
       return send(400, "Some details are missing or invalid.", issues);
     }
-    if (err instanceof Forbidden) return send(403, err.message);
+    if (err instanceof Forbidden) {
+      denied(403);
+      return send(403, err.message);
+    }
     if (err instanceof NotFound) return send(404, err.message);
     if (err instanceof Conflict) return send(409, err.message);
-    if (err instanceof ThrottlerException) return send(429, "Too many attempts. Please wait a minute and try again.");
+    if (err instanceof ThrottlerException) {
+      denied(429);
+      return send(429, "Too many attempts. Please wait a minute and try again.");
+    }
     if (err instanceof HttpException) {
+      if (err.getStatus() === 401 || err.getStatus() === 403) denied(err.getStatus());
       const body = err.getResponse();
       const message = typeof body === "string" ? body : ((body as { message?: string | string[] }).message ?? err.message);
       return send(err.getStatus(), Array.isArray(message) ? message.join(" ") : message);
+    }
+    // Request-parsing errors from body-parser (body too large, malformed JSON, bad encoding).
+    const parse = err as { expose?: boolean; status?: number; type?: string };
+    if (parse?.expose && typeof parse.status === "number" && parse.status >= 400 && parse.status < 500) {
+      return send(parse.status, parse.status === 413 ? "That request is too large." : "The request couldn't be read.");
     }
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
       if (err.code === "P2002") return send(409, "That record already exists.");

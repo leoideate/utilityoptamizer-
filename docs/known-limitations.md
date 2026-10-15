@@ -20,6 +20,9 @@ These are deliberate gaps or follow-up work. Nothing here pretends to work when 
 
 ## Operational notes
 
+- **Content-Security-Policy** allows inline scripts (`'unsafe-inline'`), which Next.js needs for hydration without per-request nonces. No third-party script origins are allowed.
+- **Customer data subject requests** (GDPR access/erasure) are handled by an administrator from the customer record and the retention job; there's no self-service export.
+
 - **Single sign-on** signs in existing users only, and doesn't sync users or roles from Entra ID or Google (no SCIM). Microsoft SSO is single-tenant by design. SSO users keep a CRM password, which an administrator can't disable per user yet.
 - **RingCentral call length** is measured by the CRM from "connected" to "ended" (RingOut doesn't report duration), so it's shown as approximate. Salespeople can enter the exact length with their notes.
 - **Chat** messages are kept indefinitely (no chat retention setting yet) and have no threads, reactions, per-person read receipts or search. Live updates use Server-Sent Events; proxies must not buffer `/api/realtime/stream`.
@@ -32,6 +35,6 @@ These are deliberate gaps or follow-up work. Nothing here pretends to work when 
 ## Testing gaps
 
 - End-to-end tests run against the seeded local stack, not an isolated database per run, so they create extra demo records each time.
-- Rate limiting is switched off in the automated test environment; the login limit and account lockout are covered by a dedicated test, but the per-IP throttle isn't.
-- No load or penetration testing has been done. Accessibility is checked with axe (WCAG 2.1 AA, serious and critical issues) on the main pages, not with a manual screen-reader audit.
+- Rate limiting is switched off in the automated test environment; the login limit and account lockout are covered by a dedicated test, and the throttles were exercised under load by the stress script, but not in `npm test`.
+- Penetration and load testing were done by the developer ([security-assessment.md](security-assessment.md)), not independently. Commission an independent test before go-live. Accessibility is checked with axe (WCAG 2.1 AA, serious and critical issues) on the main pages, not with a manual screen-reader audit.
 - Recurring job *schedules* (cron registration in BullMQ) are exercised by starting the worker, not by automated tests; the job *handlers* are tested directly.

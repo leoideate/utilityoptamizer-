@@ -12,6 +12,7 @@
     "db:seed": "ts-node --transpile-only prisma/seed.ts",
     "db:generate": "prisma generate",
     "openapi": "ts-node --transpile-only scripts/export-openapi.ts",
+    "stress": "ts-node --transpile-only scripts/stress.ts",
     "test": "jest --runInBand",
     "test:unit": "jest --selectProjects unit",
     "test:integration": "jest --runInBand --selectProjects integration"

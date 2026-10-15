@@ -32,7 +32,28 @@ export class CustomersService {
    * Possible duplicates by email, phone/mobile, company registration number, VAT number,
    * or legal name + postcode. Contacts' emails and phones count too. Never merges anything.
    */
-  async findDuplicates(c: z.infer<typeof duplicateCheckSchema>, excludeId?: string): Promise<DuplicateMatch[]> {
+  /** Customers the actor may see (ISO 27001 A.8.3); see OpportunityAccess.customerWhere. */
+  visibleWhere(actor: Actor): Prisma.CustomerWhereInput {
+    return this.access.customerWhere(actor);
+  }
+
+  /** A customer the actor may link a new opportunity or contact to. */
+  linkable(actor: Actor, id: string) {
+    return this.access.linkableCustomer(actor, id);
+  }
+
+  /** Loads a customer the actor may see (404 otherwise, so existence isn't revealed). */
+  async visible(actor: Actor, id: string) {
+    const c = await this.prisma.customer.findFirst({ where: { AND: [{ id }, this.visibleWhere(actor)] } });
+    if (!c) throw new NotFound("Customer");
+    return c;
+  }
+
+  /**
+   * Duplicate check. Matches are reported for every customer (to prevent duplicates), but people
+   * who can't see a matching customer get only its name and why it matched, never its contact details.
+   */
+  async findDuplicates(c: z.infer<typeof duplicateCheckSchema>, excludeId?: string, actor?: Actor): Promise<DuplicateMatch[]> {
     const or: Prisma.CustomerWhereInput[] = [];
     const email = norm(c.email);
     const pk = phoneKey(c.phone);
@@ -51,7 +72,7 @@ export class CustomersService {
       include: { contacts: true, addresses: true },
       take: 20,
     });
-    return rows.map((r) => {
+    const matches = rows.map((r) => {
       const reasons: string[] = [];
       if (email && (norm(r.email) === email || r.contacts.some((x) => norm(x.email) === email))) reasons.push("Same email");
       if (pk && (r.phoneKey === pk || r.contacts.some((x) => x.phoneKey === pk || x.mobileKey === pk))) reasons.push("Same phone number");
@@ -63,6 +84,9 @@ export class CustomersService {
       const { id, legalName, tradingName, email: e, phone, companyRegNumber, vatNumber } = r;
       return { customer: { id, legalName, tradingName, email: e, phone, companyRegNumber, vatNumber }, reasons };
     });
+    if (!actor || can(actor, "opportunity.read_all")) return matches;
+    const visibleIds = new Set((await this.prisma.customer.findMany({ where: { AND: [{ id: { in: matches.map((m) => m.customer.id) } }, this.visibleWhere(actor)] }, select: { id: true } })).map((x) => x.id));
+    return matches.map((m) => (visibleIds.has(m.customer.id) ? m : { ...m, customer: { id: m.customer.id, legalName: m.customer.legalName, tradingName: m.customer.tradingName, email: null, phone: null, companyRegNumber: null, vatNumber: null } }));
   }
 
   /**
@@ -80,7 +104,7 @@ export class CustomersService {
         vatNumber: input.vatNumber,
         legalName: input.legalName,
         postcode: input.addresses?.[0]?.postcode,
-      });
+      }, undefined, actor);
       if (duplicates.length) return { duplicates };
     }
     const customer = await this.prisma.$transaction(async (tx) => {
@@ -124,7 +148,7 @@ export class CustomersService {
 
   async update(actor: Actor, id: string, patch: Partial<CustomerInput>) {
     if (!can(actor, "customer.write")) throw new Forbidden();
-    const c = await this.get(id);
+    const c = await this.visible(actor, id);
     const after = { vatRegistered: patch.vatRegistered ?? c.vatRegistered, vatNumber: patch.vatNumber === undefined ? c.vatNumber : patch.vatNumber };
     // Explicitly saying "VAT registered: yes" on the profile requires the number.
     if (patch.vatRegistered === "yes" && vatIssues(after).length) throw new RuleViolation(vatIssues(after));
@@ -147,6 +171,7 @@ export class CustomersService {
 
   async profile(actor: Actor, id: string) {
     if (!can(actor, "customer.read")) throw new Forbidden();
+    await this.visible(actor, id);
     const c = await this.prisma.customer.findUnique({
       where: { id },
       include: {
@@ -171,6 +196,7 @@ export class CustomersService {
     const term = q.q?.trim();
     const where: Prisma.CustomerWhereInput = {
       mergedIntoId: null,
+      AND: [this.visibleWhere(actor)],
       ...(term
         ? {
             OR: [
@@ -230,7 +256,7 @@ export class CustomersService {
 
   async addContact(actor: Actor, customerId: string, input: ContactInput) {
     if (!can(actor, "customer.write")) throw new Forbidden();
-    await this.get(customerId);
+    await this.visible(actor, customerId);
     return this.prisma.$transaction(async (tx) => {
       if (input.isPrimary) await tx.customerContact.updateMany({ where: { customerId }, data: { isPrimary: false } });
       const c = await tx.customerContact.create({ data: { ...input, customerId, phoneKey: phoneKey(input.phone), mobileKey: phoneKey(input.mobile), isPrimary: input.isPrimary ?? false } });
@@ -243,6 +269,7 @@ export class CustomersService {
     if (!can(actor, "customer.write")) throw new Forbidden();
     const c = await this.prisma.customerContact.findUnique({ where: { id: contactId } });
     if (!c) throw new NotFound("Contact");
+    await this.visible(actor, c.customerId);
     return this.prisma.$transaction(async (tx) => {
       if (input.isPrimary) await tx.customerContact.updateMany({ where: { customerId: c.customerId }, data: { isPrimary: false } });
       const updated = await tx.customerContact.update({
@@ -258,7 +285,7 @@ export class CustomersService {
 
   async addBankAccount(actor: Actor, customerId: string, input: z.infer<typeof bankDetailsSchema>) {
     if (!can(actor, "bank.write")) throw new Forbidden();
-    await this.get(customerId);
+    await this.visible(actor, customerId);
     const b = await this.prisma.bankAccount.create({
       data: {
         customerId,

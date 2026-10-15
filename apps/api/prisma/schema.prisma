@@ -273,6 +273,8 @@ model User {
   /// TOTP secret (encrypted). MFA is enforced at login when mfaEnabled is true.
   mfaSecretEnc   String?    @map("mfa_secret_enc")
   mfaEnabled     Boolean    @default(false) @map("mfa_enabled")
+  /// Last TOTP time step accepted, so a code can't be used twice.
+  mfaLastStep    Int?       @map("mfa_last_step")
   failedLogins   Int        @default(0) @map("failed_logins")
   lockedUntil    DateTime?  @map("locked_until")
   lastLoginAt    DateTime?  @map("last_login_at")
@@ -308,6 +310,8 @@ model Session {
   ip         String?
   userAgent  String?  @map("user_agent")
   expiresAt  DateTime @map("expires_at")
+  /// Updated (at most once a minute) on use; sessions idle longer than SESSION_IDLE_MINUTES end.
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
   createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([userId])
@@ -389,6 +393,7 @@ model Customer {
   opps        Opportunity[]
   sites       SupplySite[]
 
+  @@index([createdById])
   @@index([email])
   @@index([phoneKey])
   @@index([companyRegNumber])
@@ -520,6 +525,7 @@ model Opportunity {
   timeline       TimelineEntry[]
   commissions    Commission[]
 
+  @@index([updatedAt])
   @@index([stageId])
   @@index([ownerId])
   @@index([customerId])

@@ -83,14 +83,14 @@ export class OcrService {
       email: parsed.email ?? null,
       phone: parsed.mobile ?? parsed.phone ?? null,
       legalName: parsed.company ?? null,
-    });
+    }, undefined, actor);
     return { ...scan, imageUrl, duplicates, automatic: this.provider.automatic };
   }
 
   async duplicates(actor: Actor, id: string, fields: Partial<CardFields>) {
     await this.own(actor, id);
-    const byMobile = await this.customers.findDuplicates({ email: fields.email ?? null, phone: fields.mobile ?? null, legalName: fields.company ?? null });
-    const byPhone = fields.phone ? await this.customers.findDuplicates({ phone: fields.phone }) : [];
+    const byMobile = await this.customers.findDuplicates({ email: fields.email ?? null, phone: fields.mobile ?? null, legalName: fields.company ?? null }, undefined, actor);
+    const byPhone = fields.phone ? await this.customers.findDuplicates({ phone: fields.phone }, undefined, actor) : [];
     const seen = new Set<string>();
     return [...byMobile, ...byPhone].filter((d) => !seen.has(d.customer.id) && seen.add(d.customer.id));
   }
@@ -108,8 +108,8 @@ export class OcrService {
 
     let customerId = input.existingCustomerId ?? null;
     if (customerId) {
-      const existing = await this.prisma.customer.findUnique({ where: { id: customerId } });
-      if (!existing) throw new NotFound("Customer");
+      // Checked before the contact is added, not just when the opportunity is created.
+      await this.customers.linkable(actor, customerId);
     } else {
       // The user has reviewed the duplicates on screen; creating a new customer is their explicit choice.
       const created = await this.customers.create(

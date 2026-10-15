@@ -12,6 +12,7 @@ export default function AccountPage() {
   const [code, setCode] = useState("");
   const [done, setDone] = useState(false);
   const [issues, setIssues] = useState<string[]>([]);
+  const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
   const [pwDone, setPwDone] = useState(false);
   const start = useMutation({ mutationFn: () => api.post<{ secret: string; otpauthUrl: string }>("/auth/mfa/setup"), onSuccess: setSetup });
@@ -23,8 +24,8 @@ export default function AccountPage() {
   });
   const changePw = useMutation({
     meta: { silent: true },
-    mutationFn: () => api.post(`/admin/users/${me.id}/password`, { password }),
-    onSuccess: () => (setPwDone(true), setPassword("")),
+    mutationFn: () => api.post("/auth/password", { currentPassword: current, newPassword: password }),
+    onSuccess: () => (setPwDone(true), setCurrent(""), setPassword("")),
     onError: (e) => setIssues((e as ApiError).issues.length ? (e as ApiError).issues : [(e as ApiError).message]),
   });
 
@@ -57,12 +58,15 @@ export default function AccountPage() {
         </div>
       </Card>
       <Card>
-        <CardHeader title="Change password" description="At least 12 characters. You'll be signed out everywhere." />
+        <CardHeader title="Change password" description="At least 12 characters. Your other devices will be signed out." />
         <div className="flex flex-wrap items-end gap-3 p-5">
+          <Field label="Current password" className="min-w-64 flex-1">
+            {(p) => <Input {...p} type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />}
+          </Field>
           <Field label="New password" className="min-w-64 flex-1">
             {(p) => <Input {...p} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />}
           </Field>
-          <Button onClick={() => (setIssues([]), changePw.mutate())} loading={changePw.isPending} disabled={password.length < 12}>
+          <Button onClick={() => (setIssues([]), changePw.mutate())} loading={changePw.isPending} disabled={!current || password.length < 12}>
             Change password
           </Button>
           {pwDone && <p className="w-full text-sm text-success">Password changed. Sign in again on your other devices.</p>}

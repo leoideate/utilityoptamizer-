@@ -84,7 +84,8 @@ export class AdminService {
   }
 
   async resetPassword(actor: Actor, id: string, password: string) {
-    if (actor.id !== id) this.need(actor, "admin.users");
+    // Administrators only. People change their own password with POST /auth/password (needs the current one).
+    this.need(actor, "admin.users");
     await this.prisma.user.update({ where: { id }, data: { passwordHash: await hashPassword(password), failedLogins: 0, lockedUntil: null } });
     await this.auth.revokeAll(id);
     await this.audit.log(actor, { action: "user.password_reset", entityType: "user", entityId: id, summary: "Password reset" });

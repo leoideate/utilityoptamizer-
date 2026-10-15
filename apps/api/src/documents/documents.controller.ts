@@ -11,8 +11,9 @@ import { ZodPipe } from "../common/zod.pipe";
 import { DocumentsService } from "./documents.service";
 
 const Id = new ParseUUIDPipe({ version: "4" });
-/** Hard cap at the HTTP layer; the configured MAX_UPLOAD_MB is checked in the service. */
-export const uploadInterceptor = () => FileInterceptor("file", { storage: memoryStorage(), limits: { fileSize: 100 * 1024 * 1024, files: 1 } });
+/** Uploads are buffered in memory, so the configured size limit is enforced while receiving, not after. */
+export const uploadLimitBytes = () => (Number(process.env.MAX_UPLOAD_MB) || 20) * 1024 * 1024;
+export const uploadInterceptor = () => FileInterceptor("file", { storage: memoryStorage(), limits: { fileSize: uploadLimitBytes(), files: 1, fields: 20, parts: 30 } });
 
 @ApiTags("documents")
 @Controller()
