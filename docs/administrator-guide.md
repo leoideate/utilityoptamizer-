@@ -66,6 +66,21 @@ Salespeople see the customers they created and those on deals they can see. If a
 - Add or deactivate suppliers. Set each supplier's **submissions email** to enable **Send submission pack**.
 - Stage names can be changed; their order and rules can't (rules reference stable keys). **Check stages** re-runs the idempotent stage migration: it matches existing stages by key, then by name (e.g. a legacy "Proposition" becomes Proposal Sent), creates only what's missing and never duplicates. A legacy "Lost" stage is left untouched and reported, because Lost is an outcome.
 
+## Supplier forms (Supplier forms in the menu)
+
+Administrators, managers and operations can add each supplier's PDF once and reuse it for every deal.
+
+1. **Add form**: upload the PDF, choose the supplier and how the filled copy is filed on the deal's checklist (application form, rate card, direct debit mandate, commercial agreement, letter of authority or supplier contract).
+2. **Place the fields.** Fillable PDFs (such as the Bord Gáis electricity form) bring their own boxes, including rows of single-character boxes for the MPRN. On flat PDFs (most rate cards and CAFs), choose *Text*, *Tick box*, *Signature* or *Date signed* and click where the box starts; drag to move, drag the corner to resize, or use the arrow keys.
+3. **Link each box** to CRM data under *Fill from* (customer, contact, billing and supply address, MPRN/GPRN, contract and rates, bank details, broker), or leave it to be typed. Set *Character boxes* for MPRN/GPRN rows on flat PDFs. Signature and date-signed boxes belong to the client or the broker.
+4. **Save.** Changing the boxes creates a new template version; forms already filled keep the version they used. Untick *In use* to retire a template.
+
+On a deal, the **Forms** tab fills the supplier's form from the CRM. Anything typed or changed is recorded against the form, and an IBAN that differs from the one on file must be confirmed. The generated PDF has no fillable fields left (so nothing can drop out when it's opened in Adobe), and the CRM reopens it to check every value and signature is present; a failed check blocks signing and submission.
+
+**Signatures** are uploaded as a photo or scan; the browser removes the paper background. The uploader records who signed, in what capacity and how they authorised it *for that form*, and the signed copy then needs **review by someone else** with document review rights. An approved form counts as the customer's signature for submission. Stored signatures are never reused automatically.
+
+**Change of supplier**: when a deal is marked *Change of supplier*, the Forms tab shows the previous supplier's bill (uploaded as the “Recent energy bill”) and a **Check bill** step: readable, customer name, MPRN/GPRN and supplier must all match. Submission is blocked until the latest bill passes; a newer upload needs a new check. Other open deals for the same MPRN/GPRN are flagged.
+
 ## Integrations
 
 All credentials are environment variables on the API/worker (or your secrets manager). They're never sent to the browser or written to logs. **Administration → Integrations** shows what's configured and the outbound job queue.

@@ -36,6 +36,14 @@ enum SaleType {
   renewal
 }
 
+enum FormStatus {
+  generated
+  awaiting_review
+  approved
+  rejected
+  superseded
+}
+
 enum SupplyChange {
   change_of_supplier
   change_of_legal_entity
@@ -274,31 +282,31 @@ enum JobStatus {
 // ---------------------------------------------------------------------------
 
 model User {
-  id             String     @id @default(uuid()) @db.Uuid
-  name           String
-  email          String     @unique
-  passwordHash   String     @map("password_hash")
-  active         Boolean    @default(true)
-  roles          UserRole[]
-  teamId         String?    @map("team_id") @db.Uuid
-  team           SalesTeam? @relation(fields: [teamId], references: [id])
+  id            String     @id @default(uuid()) @db.Uuid
+  name          String
+  email         String     @unique
+  passwordHash  String     @map("password_hash")
+  active        Boolean    @default(true)
+  roles         UserRole[]
+  teamId        String?    @map("team_id") @db.Uuid
+  team          SalesTeam? @relation(fields: [teamId], references: [id])
   /// TOTP secret (encrypted). MFA is enforced at login when mfaEnabled is true.
-  mfaSecretEnc   String?    @map("mfa_secret_enc")
-  mfaEnabled     Boolean    @default(false) @map("mfa_enabled")
+  mfaSecretEnc  String?    @map("mfa_secret_enc")
+  mfaEnabled    Boolean    @default(false) @map("mfa_enabled")
   /// Last TOTP time step accepted, so a code can't be used twice.
-  mfaLastStep    Int?       @map("mfa_last_step")
-  failedLogins   Int        @default(0) @map("failed_logins")
-  lockedUntil    DateTime?  @map("locked_until")
-  lastLoginAt    DateTime?  @map("last_login_at")
+  mfaLastStep   Int?       @map("mfa_last_step")
+  failedLogins  Int        @default(0) @map("failed_logins")
+  lockedUntil   DateTime?  @map("locked_until")
+  lastLoginAt   DateTime?  @map("last_login_at")
   /// The user's own phone (E.164). Click-to-call rings this number first, then connects the customer.
-  callbackPhone  String?    @map("callback_phone")
-  createdAt      DateTime   @default(now()) @map("created_at")
-  updatedAt      DateTime   @updatedAt @map("updated_at")
+  callbackPhone String?    @map("callback_phone")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
 
-  sessions         Session[]
-  ownedOpps        Opportunity[]  @relation("OppOwner")
-  activities       Activity[]     @relation("ActivityOwner")
-  notifications    Notification[]
+  sessions      Session[]
+  ownedOpps     Opportunity[]  @relation("OppOwner")
+  activities    Activity[]     @relation("ActivityOwner")
+  notifications Notification[]
 
   @@map("users")
 }
@@ -357,15 +365,16 @@ model Stage {
 }
 
 model Supplier {
-  id        String       @id @default(uuid()) @db.Uuid
-  name      String
-  kind      SupplierKind
+  id              String            @id @default(uuid()) @db.Uuid
+  name            String
+  kind            SupplierKind
   /// Where "Send submission pack" emails applications. Optional.
-  submissionEmail String? @map("submission_email")
-  active    Boolean      @default(true)
-  opps      Opportunity[]
-  contracts EnergyContract[] @relation("SelectedSupplier")
-  quotes    ComparisonQuote[]
+  submissionEmail String?           @map("submission_email")
+  active          Boolean           @default(true)
+  opps            Opportunity[]
+  contracts       EnergyContract[]  @relation("SelectedSupplier")
+  quotes          ComparisonQuote[]
+  formTemplates   FormTemplate[]
 
   @@unique([name, kind])
   @@map("suppliers")
@@ -399,11 +408,11 @@ model Customer {
   createdAt              DateTime   @default(now()) @map("created_at")
   updatedAt              DateTime   @updatedAt @map("updated_at")
 
-  addresses   CustomerAddress[]
-  contacts    CustomerContact[]
+  addresses    CustomerAddress[]
+  contacts     CustomerContact[]
   bankAccounts BankAccount[]
-  opps        Opportunity[]
-  sites       SupplySite[]
+  opps         Opportunity[]
+  sites        SupplySite[]
 
   @@index([createdById])
   @@index([email])
@@ -473,66 +482,66 @@ model BankAccount {
 // ---------------------------------------------------------------------------
 
 model Opportunity {
-  id                    String        @id @default(uuid()) @db.Uuid
+  id                    String            @id @default(uuid()) @db.Uuid
   /// Human-friendly number shown as UO-000123.
-  number                Int           @unique @default(autoincrement())
+  number                Int               @unique @default(autoincrement())
   name                  String
-  customerId            String?       @map("customer_id") @db.Uuid
-  customer              Customer?     @relation(fields: [customerId], references: [id])
+  customerId            String?           @map("customer_id") @db.Uuid
+  customer              Customer?         @relation(fields: [customerId], references: [id])
   // Captured before a Customer exists.
-  contactName           String?       @map("contact_name")
-  companyName           String?       @map("company_name")
+  contactName           String?           @map("contact_name")
+  companyName           String?           @map("company_name")
   email                 String?
   phone                 String?
-  ownerId               String?       @map("owner_id") @db.Uuid
-  owner                 User?         @relation("OppOwner", fields: [ownerId], references: [id])
-  teamId                String?       @map("team_id") @db.Uuid
-  team                  SalesTeam?    @relation(fields: [teamId], references: [id])
-  stageId               String        @map("stage_id") @db.Uuid
-  stage                 Stage         @relation(fields: [stageId], references: [id])
-  stageEnteredAt        DateTime      @default(now()) @map("stage_entered_at")
+  ownerId               String?           @map("owner_id") @db.Uuid
+  owner                 User?             @relation("OppOwner", fields: [ownerId], references: [id])
+  teamId                String?           @map("team_id") @db.Uuid
+  team                  SalesTeam?        @relation(fields: [teamId], references: [id])
+  stageId               String            @map("stage_id") @db.Uuid
+  stage                 Stage             @relation(fields: [stageId], references: [id])
+  stageEnteredAt        DateTime          @default(now()) @map("stage_entered_at")
   /// Opportunities are permanent records. No code path sets this to false.
-  active                Boolean       @default(true)
-  outcome               Outcome       @default(open)
-  probability           Int           @default(5)
-  expectedRevenue       Decimal?      @map("expected_revenue") @db.Decimal(14, 2)
-  serviceType           ServiceType   @map("service_type")
-  saleType              SaleType      @default(new_sale) @map("sale_type")
-  leadSource            LeadSource    @default(manual) @map("lead_source")
-  leadSourceDetail      String?       @map("lead_source_detail")
+  active                Boolean           @default(true)
+  outcome               Outcome           @default(open)
+  probability           Int               @default(5)
+  expectedRevenue       Decimal?          @map("expected_revenue") @db.Decimal(14, 2)
+  serviceType           ServiceType       @map("service_type")
+  saleType              SaleType          @default(new_sale) @map("sale_type")
+  leadSource            LeadSource        @default(manual) @map("lead_source")
+  leadSourceDetail      String?           @map("lead_source_detail")
   campaign              String?
-  nextAction            String?       @map("next_action")
-  followUpDate          DateTime?     @map("follow_up_date") @db.Date
-  expectedCloseDate     DateTime?     @map("expected_close_date") @db.Date
+  nextAction            String?           @map("next_action")
+  followUpDate          DateTime?         @map("follow_up_date") @db.Date
+  expectedCloseDate     DateTime?         @map("expected_close_date") @db.Date
   /// Date of the site visit, if one took place.
-  visitDate             DateTime?     @map("visit_date") @db.Date
+  visitDate             DateTime?         @map("visit_date") @db.Date
   /// Role of the captured contact (owner, manager, bookkeeper...) before a Customer exists.
-  contactRole           String?       @map("contact_role")
+  contactRole           String?           @map("contact_role")
   productInterest       ProductInterest[] @default([]) @map("product_interest")
   /// What changes at the supply point; each adds required documents to the checklist.
-  supplyChanges         SupplyChange[] @default([]) @map("supply_changes")
-  internalApproval      ApprovalState @default(not_requested) @map("internal_approval")
-  internalApprovalById  String?       @map("internal_approval_by_id") @db.Uuid
-  internalApprovalAt    DateTime?     @map("internal_approval_at")
-  selectedSupplierId    String?       @map("selected_supplier_id") @db.Uuid
-  selectedSupplier      Supplier?     @relation(fields: [selectedSupplierId], references: [id])
-  applicationStatus     String?       @map("application_status")
-  wonAt                 DateTime?     @map("won_at")
-  lostAt                DateTime?     @map("lost_at")
-  lostReason            String?       @map("lost_reason")
-  activationDate        DateTime?     @map("activation_date") @db.Date
-  renewalDate           DateTime?     @map("renewal_date") @db.Date
-  previousOpportunityId String?       @map("previous_opportunity_id") @db.Uuid
-  previousOpportunity   Opportunity?  @relation("Renewals", fields: [previousOpportunityId], references: [id])
-  renewals              Opportunity[] @relation("Renewals")
+  supplyChanges         SupplyChange[]    @default([]) @map("supply_changes")
+  internalApproval      ApprovalState     @default(not_requested) @map("internal_approval")
+  internalApprovalById  String?           @map("internal_approval_by_id") @db.Uuid
+  internalApprovalAt    DateTime?         @map("internal_approval_at")
+  selectedSupplierId    String?           @map("selected_supplier_id") @db.Uuid
+  selectedSupplier      Supplier?         @relation(fields: [selectedSupplierId], references: [id])
+  applicationStatus     String?           @map("application_status")
+  wonAt                 DateTime?         @map("won_at")
+  lostAt                DateTime?         @map("lost_at")
+  lostReason            String?           @map("lost_reason")
+  activationDate        DateTime?         @map("activation_date") @db.Date
+  renewalDate           DateTime?         @map("renewal_date") @db.Date
+  previousOpportunityId String?           @map("previous_opportunity_id") @db.Uuid
+  previousOpportunity   Opportunity?      @relation("Renewals", fields: [previousOpportunityId], references: [id])
+  renewals              Opportunity[]     @relation("Renewals")
   /// Identifies the contract(s) a renewal came from. Unique, so renewals can't be duplicated.
-  renewalSourceKey      String?       @unique @map("renewal_source_key")
-  firstContactAt        DateTime?     @map("first_contact_at")
-  lastContactAt         DateTime?     @map("last_contact_at")
-  convertedAt           DateTime?     @map("converted_at")
-  createdById           String?       @map("created_by_id") @db.Uuid
-  createdAt             DateTime      @default(now()) @map("created_at")
-  updatedAt             DateTime      @updatedAt @map("updated_at")
+  renewalSourceKey      String?           @unique @map("renewal_source_key")
+  firstContactAt        DateTime?         @map("first_contact_at")
+  lastContactAt         DateTime?         @map("last_contact_at")
+  convertedAt           DateTime?         @map("converted_at")
+  createdById           String?           @map("created_by_id") @db.Uuid
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
 
   stageHistory   StageHistory[]
   sites          SupplySite[]
@@ -544,6 +553,8 @@ model Opportunity {
   activities     Activity[]
   timeline       TimelineEntry[]
   commissions    Commission[]
+  generatedForms GeneratedForm[]
+  billChecks     BillCheck[]
 
   @@index([updatedAt])
   @@index([stageId])
@@ -623,17 +634,17 @@ model MeterPoint {
 }
 
 model MeterReading {
-  id                String      @id @default(uuid()) @db.Uuid
-  meterPointId      String      @map("meter_point_id") @db.Uuid
-  meterPoint        MeterPoint  @relation(fields: [meterPointId], references: [id], onDelete: Cascade)
-  readingType       ReadingType @map("reading_type")
-  register          String?
-  value             Decimal     @db.Decimal(14, 2)
-  readingDate       DateTime    @map("reading_date") @db.Date
+  id             String      @id @default(uuid()) @db.Uuid
+  meterPointId   String      @map("meter_point_id") @db.Uuid
+  meterPoint     MeterPoint  @relation(fields: [meterPointId], references: [id], onDelete: Cascade)
+  readingType    ReadingType @map("reading_type")
+  register       String?
+  value          Decimal     @db.Decimal(14, 2)
+  readingDate    DateTime    @map("reading_date") @db.Date
   /// Bill or photo the reading came from.
-  documentItemId    String?     @map("document_item_id") @db.Uuid
-  createdById       String?     @map("created_by_id") @db.Uuid
-  createdAt         DateTime    @default(now()) @map("created_at")
+  documentItemId String?     @map("document_item_id") @db.Uuid
+  createdById    String?     @map("created_by_id") @db.Uuid
+  createdAt      DateTime    @default(now()) @map("created_at")
 
   @@index([meterPointId])
   @@map("meter_readings")
@@ -705,31 +716,31 @@ model ComparisonQuote {
 // ---------------------------------------------------------------------------
 
 model MerchantApplication {
-  id                      String          @id @default(uuid()) @db.Uuid
-  opportunityId           String          @map("opportunity_id") @db.Uuid
-  opportunity             Opportunity     @relation(fields: [opportunityId], references: [id])
-  customerId              String?         @map("customer_id") @db.Uuid
+  id                      String         @id @default(uuid()) @db.Uuid
+  opportunityId           String         @map("opportunity_id") @db.Uuid
+  opportunity             Opportunity    @relation(fields: [opportunityId], references: [id])
+  customerId              String?        @map("customer_id") @db.Uuid
   campaign                String?
-  legalEntity             LegalEntity?    @map("legal_entity")
-  natureOfBusiness        String?         @map("nature_of_business")
-  estimatedAnnualTurnover Decimal?        @map("estimated_annual_turnover") @db.Decimal(14, 2)
-  cardTurnoverPct         Decimal?        @map("card_turnover_pct") @db.Decimal(5, 2)
-  averageTransactionValue Decimal?        @map("average_transaction_value") @db.Decimal(12, 2)
-  settlementPeriod        String?         @map("settlement_period")
-  dashboardRequested      Boolean         @default(false) @map("dashboard_requested")
+  legalEntity             LegalEntity?   @map("legal_entity")
+  natureOfBusiness        String?        @map("nature_of_business")
+  estimatedAnnualTurnover Decimal?       @map("estimated_annual_turnover") @db.Decimal(14, 2)
+  cardTurnoverPct         Decimal?       @map("card_turnover_pct") @db.Decimal(5, 2)
+  averageTransactionValue Decimal?       @map("average_transaction_value") @db.Decimal(12, 2)
+  settlementPeriod        String?        @map("settlement_period")
+  dashboardRequested      Boolean        @default(false) @map("dashboard_requested")
   website                 String?
-  advertisingMethod       String?         @map("advertising_method")
-  applicationReference    String?         @map("application_reference")
-  customerAcceptedAt      DateTime?       @map("customer_accepted_at")
-  submissionDate          DateTime?       @map("submission_date") @db.Date
-  approvalDate            DateTime?       @map("approval_date") @db.Date
-  activationDate          DateTime?       @map("activation_date") @db.Date
-  termMonths              Int?            @map("term_months")
-  contractEndDate         DateTime?       @map("contract_end_date") @db.Date
-  status                  MerchantStatus  @default(draft)
-  previousApplicationId   String?         @map("previous_application_id") @db.Uuid
-  createdAt               DateTime        @default(now()) @map("created_at")
-  updatedAt               DateTime        @updatedAt @map("updated_at")
+  advertisingMethod       String?        @map("advertising_method")
+  applicationReference    String?        @map("application_reference")
+  customerAcceptedAt      DateTime?      @map("customer_accepted_at")
+  submissionDate          DateTime?      @map("submission_date") @db.Date
+  approvalDate            DateTime?      @map("approval_date") @db.Date
+  activationDate          DateTime?      @map("activation_date") @db.Date
+  termMonths              Int?           @map("term_months")
+  contractEndDate         DateTime?      @map("contract_end_date") @db.Date
+  status                  MerchantStatus @default(draft)
+  previousApplicationId   String?        @map("previous_application_id") @db.Uuid
+  createdAt               DateTime       @default(now()) @map("created_at")
+  updatedAt               DateTime       @updatedAt @map("updated_at")
 
   pricing    MerchantPricing[]
   principals Principal[]
@@ -822,24 +833,24 @@ model MerchantRisk {
 // ---------------------------------------------------------------------------
 
 model DocumentItem {
-  id                    String           @id @default(uuid()) @db.Uuid
-  opportunityId         String           @map("opportunity_id") @db.Uuid
-  opportunity           Opportunity      @relation(fields: [opportunityId], references: [id])
-  customerId            String?          @map("customer_id") @db.Uuid
-  merchantApplicationId String?          @map("merchant_application_id") @db.Uuid
-  energyContractId      String?          @map("energy_contract_id") @db.Uuid
-  documentType          String           @map("document_type")
-  required              Boolean          @default(true)
-  sensitive             Boolean          @default(false)
-  requestedAt           DateTime?        @map("requested_at")
-  received              Boolean          @default(false)
-  receivedAt            DateTime?        @map("received_at")
-  approval              DocumentApproval @default(pending)
-  reviewerId            String?          @map("reviewer_id") @db.Uuid
-  reviewedAt            DateTime?        @map("reviewed_at")
-  reviewNotes           String?          @map("review_notes")
-  expiryDate            DateTime?        @map("expiry_date") @db.Date
-  createdAt             DateTime         @default(now()) @map("created_at")
+  id                    String            @id @default(uuid()) @db.Uuid
+  opportunityId         String            @map("opportunity_id") @db.Uuid
+  opportunity           Opportunity       @relation(fields: [opportunityId], references: [id])
+  customerId            String?           @map("customer_id") @db.Uuid
+  merchantApplicationId String?           @map("merchant_application_id") @db.Uuid
+  energyContractId      String?           @map("energy_contract_id") @db.Uuid
+  documentType          String            @map("document_type")
+  required              Boolean           @default(true)
+  sensitive             Boolean           @default(false)
+  requestedAt           DateTime?         @map("requested_at")
+  received              Boolean           @default(false)
+  receivedAt            DateTime?         @map("received_at")
+  approval              DocumentApproval  @default(pending)
+  reviewerId            String?           @map("reviewer_id") @db.Uuid
+  reviewedAt            DateTime?         @map("reviewed_at")
+  reviewNotes           String?           @map("review_notes")
+  expiryDate            DateTime?         @map("expiry_date") @db.Date
+  createdAt             DateTime          @default(now()) @map("created_at")
   versions              DocumentVersion[]
 
   @@index([opportunityId])
@@ -864,6 +875,106 @@ model DocumentVersion {
 
   @@unique([itemId, version])
   @@map("document_versions")
+}
+
+/// A supplier PDF with positioned fields. Field layout changes bump `version`; generated forms keep a snapshot.
+model FormTemplate {
+  id           String          @id @default(uuid()) @db.Uuid
+  name         String
+  supplierId   String?         @map("supplier_id") @db.Uuid
+  supplier     Supplier?       @relation(fields: [supplierId], references: [id])
+  documentType String          @map("document_type")
+  version      Int             @default(1)
+  storageKey   String          @unique @map("storage_key")
+  filename     String
+  sha256       String
+  /// [{ width, height }] in PDF points, one per page.
+  pages        Json
+  /// FormField[] (see @uo/shared formFieldSchema).
+  fields       Json
+  active       Boolean         @default(true)
+  createdById  String?         @map("created_by_id") @db.Uuid
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  forms        GeneratedForm[]
+
+  @@index([supplierId])
+  @@map("form_templates")
+}
+
+/// One filled copy of a template for an opportunity. Never edited; regenerating supersedes it.
+model GeneratedForm {
+  id                  String          @id @default(uuid()) @db.Uuid
+  opportunityId       String          @map("opportunity_id") @db.Uuid
+  opportunity         Opportunity     @relation(fields: [opportunityId], references: [id])
+  templateId          String          @map("template_id") @db.Uuid
+  template            FormTemplate    @relation(fields: [templateId], references: [id])
+  templateVersion     Int             @map("template_version")
+  /// Field layout used, so the exact copy can be reproduced.
+  fields              Json
+  /// Encrypted JSON of the values written (may include an IBAN).
+  valuesEnc           String          @map("values_enc")
+  /// Field ids whose value was typed or changed instead of coming from the CRM.
+  changedFields       Json            @default("[]") @map("changed_fields")
+  ibanChangeConfirmed Boolean         @default(false) @map("iban_change_confirmed")
+  documentItemId      String          @map("document_item_id") @db.Uuid
+  /// The unsigned generated PDF.
+  versionId           String          @map("version_id") @db.Uuid
+  /// The PDF with signatures applied, once every required signer has one.
+  signedVersionId     String?         @map("signed_version_id") @db.Uuid
+  status              FormStatus      @default(generated)
+  qcPassed            Boolean         @map("qc_passed")
+  qcIssues            Json            @default("[]") @map("qc_issues")
+  reviewedById        String?         @map("reviewed_by_id") @db.Uuid
+  reviewedAt          DateTime?       @map("reviewed_at")
+  reviewNote          String?         @map("review_note")
+  createdById         String?         @map("created_by_id") @db.Uuid
+  createdAt           DateTime        @default(now()) @map("created_at")
+  signatures          FormSignature[]
+
+  @@index([opportunityId])
+  @@map("generated_forms")
+}
+
+/// An uploaded signature image, authorised for one generated form only.
+model FormSignature {
+  id             String        @id @default(uuid()) @db.Uuid
+  formId         String        @map("form_id") @db.Uuid
+  form           GeneratedForm @relation(fields: [formId], references: [id])
+  role           SignerRole
+  signerName     String        @map("signer_name")
+  signerCapacity String?       @map("signer_capacity")
+  authorisation  String
+  note           String?
+  storageKey     String        @unique @map("storage_key")
+  sha256         String
+  uploadedById   String?       @map("uploaded_by_id") @db.Uuid
+  uploadedAt     DateTime      @default(now()) @map("uploaded_at")
+
+  @@index([formId])
+  @@map("form_signatures")
+}
+
+/// Verification of the previous supplier's bill for a change of supplier.
+model BillCheck {
+  id                  String      @id @default(uuid()) @db.Uuid
+  opportunityId       String      @map("opportunity_id") @db.Uuid
+  opportunity         Opportunity @relation(fields: [opportunityId], references: [id])
+  /// The bill version that was checked; a newer upload needs a new check.
+  documentVersionId   String      @map("document_version_id") @db.Uuid
+  previousSupplier    String      @map("previous_supplier")
+  billDate            DateTime?   @map("bill_date") @db.Date
+  readable            Boolean
+  customerNameMatches Boolean     @map("customer_name_matches")
+  supplyPointMatches  Boolean     @map("supply_point_matches")
+  supplierMatches     Boolean     @map("supplier_matches")
+  passed              Boolean
+  notes               String?
+  verifiedById        String?     @map("verified_by_id") @db.Uuid
+  verifiedAt          DateTime    @default(now()) @map("verified_at")
+
+  @@index([opportunityId])
+  @@map("bill_checks")
 }
 
 model SignatureTemplate {
@@ -1126,16 +1237,16 @@ model ChatMember {
 }
 
 model ChatMessage {
-  id          String           @id @default(uuid()) @db.Uuid
-  channelId   String           @map("channel_id") @db.Uuid
-  channel     ChatChannel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  authorId    String?          @map("author_id") @db.Uuid
+  id          String                @id @default(uuid()) @db.Uuid
+  channelId   String                @map("channel_id") @db.Uuid
+  channel     ChatChannel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  authorId    String?               @map("author_id") @db.Uuid
   /// Null once deleted (the text is kept in chat_message_revisions).
   body        String?
-  mentions    String[]         @default([]) @db.Uuid
-  editedAt    DateTime?        @map("edited_at")
-  deletedAt   DateTime?        @map("deleted_at")
-  createdAt   DateTime         @default(now()) @map("created_at")
+  mentions    String[]              @default([]) @db.Uuid
+  editedAt    DateTime?             @map("edited_at")
+  deletedAt   DateTime?             @map("deleted_at")
+  createdAt   DateTime              @default(now()) @map("created_at")
   attachments ChatAttachment[]
   revisions   ChatMessageRevision[]
 
@@ -1186,27 +1297,27 @@ enum CallStatus {
 }
 
 model CallLog {
-  id             String       @id @default(uuid()) @db.Uuid
-  opportunityId  String?      @map("opportunity_id") @db.Uuid
-  customerId     String?      @map("customer_id") @db.Uuid
-  contactId      String?      @map("contact_id") @db.Uuid
-  userId         String       @map("user_id") @db.Uuid
-  direction      String       @default("outbound")
+  id             String     @id @default(uuid()) @db.Uuid
+  opportunityId  String?    @map("opportunity_id") @db.Uuid
+  customerId     String?    @map("customer_id") @db.Uuid
+  contactId      String?    @map("contact_id") @db.Uuid
+  userId         String     @map("user_id") @db.Uuid
+  direction      String     @default("outbound")
   /// Customer number (E.164).
-  toNumber       String       @map("to_number")
+  toNumber       String     @map("to_number")
   /// The staff phone that was rung first (E.164); null for manual calls.
-  agentNumber    String?      @map("agent_number")
+  agentNumber    String?    @map("agent_number")
   provider       String
-  providerCallId String?      @unique @map("provider_call_id")
-  status         CallStatus   @default(initiated)
-  startedAt      DateTime     @default(now()) @map("started_at")
-  answeredAt     DateTime?    @map("answered_at")
-  endedAt        DateTime?    @map("ended_at")
-  durationSec    Int?         @map("duration_sec")
+  providerCallId String?    @unique @map("provider_call_id")
+  status         CallStatus @default(initiated)
+  startedAt      DateTime   @default(now()) @map("started_at")
+  answeredAt     DateTime?  @map("answered_at")
+  endedAt        DateTime?  @map("ended_at")
+  durationSec    Int?       @map("duration_sec")
   outcome        String?
   notes          String?
   /// Set once the call has been written to the opportunity timeline (exactly once).
-  loggedAt       DateTime?    @map("logged_at")
+  loggedAt       DateTime?  @map("logged_at")
 
   @@index([opportunityId, startedAt])
   @@index([userId, startedAt])

@@ -52,6 +52,8 @@ const envSchema = z
     S3_ACCESS_KEY_ID: z.string().optional(),
     S3_SECRET_ACCESS_KEY: z.string().optional(),
     S3_FORCE_PATH_STYLE: bool,
+    /** Server-side encryption requested on upload. "none" for local SeaweedFS, which returns SSE objects still encrypted. */
+    S3_SERVER_SIDE_ENCRYPTION: z.enum(["AES256", "aws:kms", "none"]).default("AES256"),
     LOCAL_STORAGE_DIR: z.string().default("./storage"),
     DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
     MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(100).default(20),

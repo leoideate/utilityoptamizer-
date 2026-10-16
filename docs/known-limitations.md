@@ -18,6 +18,8 @@ These are deliberate gaps or follow-up work. Nothing here pretends to work when 
 | Custom pipeline stages | Rename only | The 18 stages and their rules are fixed in code; names can be changed in Administration. |
 | Commission rules | Manual | Expected commission comes from the chosen quotes and is confirmed at activation; Finance can add or adjust entries. No rate tables per supplier. |
 
+- **Supplier forms**: a black-and-white copy isn't generated (the colour PDF is clean, so rescanning isn't needed); add one if a processor insists. Forms fill from the deal's first supply site and first live contract, so multi-site applications need the extra sites typed. Text uses Helvetica, which covers Irish and Western European characters (fadas, €) but not others; the quality check names any character it can't print. Signature capture is an authorised upload reviewed by a colleague, not a qualified e-signature; use the Signatures tab with an e-signature provider where a supplier requires one.
+
 ## Operational notes
 
 - **Content-Security-Policy** allows inline scripts (`'unsafe-inline'`), which Next.js needs for hydration without per-request nonces. No third-party script origins are allowed.

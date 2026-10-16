@@ -88,6 +88,8 @@ test("main screens adapt from 320px to 1920px", async ({ browser }) => {
   const dealHref = await page.getByRole("link", { name: "Harbour Café – dual fuel" }).first().getAttribute("href");
   await page.goto("/customers?q=Harbour");
   const customerHref = await page.getByRole("link", { name: "Harbour Café Limited" }).first().getAttribute("href");
+  await page.goto("/forms");
+  const templateHref = await page.locator('a[href^="/forms/"]').first().getAttribute("href").catch(() => null);
 
   const screens: [string, string][] = [
     ["dashboard", "/"],
@@ -97,6 +99,7 @@ test("main screens adapt from 320px to 1920px", async ({ browser }) => {
     ["workspace-overview", `${dealHref}?tab=overview`],
     ["workspace-energy", `${dealHref}?tab=energy`],
     ["workspace-documents", `${dealHref}?tab=documents`],
+    ["workspace-forms", `${dealHref}?tab=forms`],
     ["workspace-timeline", `${dealHref}?tab=timeline`],
     ["customers", "/customers"],
     ["customer", customerHref!],
@@ -104,6 +107,8 @@ test("main screens adapt from 320px to 1920px", async ({ browser }) => {
     ["chat", "/chat"],
     ["scan", "/scan"],
     ["admin", "/admin"],
+    ["supplier-forms", "/forms"],
+    ...(templateHref ? ([["form-template", templateHref]] as [string, string][]) : []),
     ["account", "/account"],
   ];
 

@@ -1,4 +1,4 @@
-import type { INestApplication } from "@nestjs/common";
+import { type INestApplication, StreamableFile } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { Prisma } from "@prisma/client";
 import cookieParser from "cookie-parser";
@@ -10,6 +10,8 @@ import { ENV, type Env } from "./config/env";
 function plain(value: unknown): unknown {
   if (value instanceof Prisma.Decimal) return value.toNumber();
   if (Array.isArray(value)) return value.map(plain);
+  // File downloads pass through untouched.
+  if (value instanceof StreamableFile) return value;
   if (value && typeof value === "object" && !(value instanceof Date) && !Buffer.isBuffer(value)) {
     return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, plain(v)]));
   }

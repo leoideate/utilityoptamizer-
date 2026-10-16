@@ -34,6 +34,8 @@ SMTP_URL=…  MAIL_FROM=…
 RUN_WORKERS_IN_API=false
 ```
 
+Uploads ask S3 for server-side encryption (`S3_SERVER_SIDE_ENCRYPTION`, default `AES256`; `aws:kms` also works). Only set it to `none` for the local SeaweedFS server, which returns encrypted objects without decrypting them.
+
 The API refuses to start if anything is missing or malformed, and prints which variable is wrong. **Back up `FIELD_ENCRYPTION_KEY` separately from the database**: without it, encrypted fields can't be recovered.
 
 ## Release steps

@@ -41,8 +41,15 @@ export async function loadGateFacts(db: Db, opportunityId: string): Promise<Gate
       },
       documents: true,
       signatures: { include: { signers: true } },
+      generatedForms: { where: { status: { not: "superseded" } }, include: { template: { select: { name: true } } } },
     },
   });
+  const [bill, billCheck] = await Promise.all([
+    db.documentVersion.findFirst({ where: { item: { opportunityId, documentType: "energy_bill" } }, orderBy: { uploadedAt: "desc" }, select: { id: true } }),
+    db.billCheck.findFirst({ where: { opportunityId }, orderBy: { verifiedAt: "desc" } }),
+  ]);
+  // An approved, reviewed form with a client signature counts as the customer's signature.
+  const signedForms = opp.generatedForms.filter((f) => f.status === "approved" && (f.fields as { kind: string; signer?: string | null }[]).some((x) => x.kind === "signature" && x.signer === "customer"));
 
   // Sites referenced by contracts but owned by another opportunity (e.g. renewals) count too.
   const extraSiteIds = opp.contracts.map((c) => c.siteId).filter((id): id is string => !!id && !opp.sites.some((s) => s.id === id));
@@ -91,6 +98,13 @@ export async function loadGateFacts(db: Db, opportunityId: string): Promise<Gate
       })),
     })),
     documents: opp.documents.map((d) => ({ documentType: d.documentType, required: d.required, received: d.received, approval: d.approval })),
-    signatures: opp.signatures.map((s) => ({ status: s.status, hasCustomerSigner: s.signers.some((x) => x.role === "customer") })),
+    signatures: [
+      ...opp.signatures.map((s) => ({ status: s.status, hasCustomerSigner: s.signers.some((x) => x.role === "customer") })),
+      ...signedForms.map(() => ({ status: "completed" as const, hasCustomerSigner: true })),
+    ],
+    supplyChanges: opp.supplyChanges,
+    // A check only counts for the bill version it looked at.
+    billCheck: billCheck && bill && billCheck.documentVersionId === bill.id ? { passed: billCheck.passed } : null,
+    forms: opp.generatedForms.map((f) => ({ name: f.template.name, status: f.status, qcPassed: f.qcPassed })),
   };
 }

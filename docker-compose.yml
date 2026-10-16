@@ -32,7 +32,8 @@ services:
   # The API creates the private bucket on start-up in development.
   s3:
     image: chrislusf/seaweedfs:3.97
-    command: ["server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/etc/seaweedfs/s3.json", "-volume.max=5"]
+    # Each bucket is its own collection and needs several volumes, so leave room; no 1 GB pre-allocation per volume in development.
+    command: ["server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/etc/seaweedfs/s3.json", "-volume.max=30", "-master.volumePreallocate=false", "-master.volumeSizeLimitMB=256"]
     ports: ["127.0.0.1:8333:8333"]
     volumes:
       - s3data:/data

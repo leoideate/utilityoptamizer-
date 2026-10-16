@@ -12,6 +12,7 @@ import { TeamChatTab } from "@/components/opportunity/team-chat";
 import { useRefreshOpportunity } from "@/components/opportunity/common";
 import { DocumentsTab } from "@/components/opportunity/documents";
 import { EnergyTab } from "@/components/opportunity/energy";
+import { FormsTab } from "@/components/opportunity/forms";
 import { OverviewTab } from "@/components/opportunity/overview";
 import { SignaturesTab } from "@/components/opportunity/signatures";
 import { TimelineTab } from "@/components/opportunity/timeline";
@@ -190,6 +191,7 @@ function OpportunityWorkspace() {
           { value: "overview", label: "Overview" },
           energy ? { value: "energy", label: `Energy (${opp._count.sites} site${opp._count.sites === 1 ? "" : "s"})` } : { value: "worldpay", label: `Worldpay (${opp._count.merchantApps})` },
           { value: "documents", label: `Documents (${opp._count.documents})` },
+          { value: "forms", label: "Forms" },
           { value: "signatures", label: "Signatures" },
           { value: "activities", label: `Tasks (${opp._count.activities})` },
           { value: "timeline", label: "Timeline" },
@@ -210,6 +212,9 @@ function OpportunityWorkspace() {
         )}
         <TabPanel value="documents">
           <DocumentsTab opp={opp} />
+        </TabPanel>
+        <TabPanel value="forms">
+          <FormsTab opp={opp} />
         </TabPanel>
         <TabPanel value="signatures">
           <SignaturesTab opp={opp} />

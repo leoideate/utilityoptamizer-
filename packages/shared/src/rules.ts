@@ -8,6 +8,7 @@ import {
   type PrincipalRole,
   type ServiceType,
   type SignatureStatus,
+  type SupplyChange,
   type VatStatus,
   DOCUMENT_TYPES,
   LEGAL_ENTITY_LABELS,
@@ -15,6 +16,7 @@ import {
   needsGas,
   occupancyNeedsLandlord,
 } from "./enums";
+import type { FormStatus } from "./forms";
 import { type StageKey, isAtOrAfter } from "./stages";
 
 /**
@@ -68,6 +70,11 @@ export interface GateFacts {
   }[];
   documents: { documentType: string; required: boolean; received: boolean; approval: DocumentApproval }[];
   signatures: { status: SignatureStatus; hasCustomerSigner: boolean }[];
+  supplyChanges?: SupplyChange[];
+  /** Result of checking the latest previous-supplier bill; null when no check covers it. */
+  billCheck?: { passed: boolean } | null;
+  /** Current (not superseded) generated supplier forms. */
+  forms?: { name: string; status: FormStatus; qcPassed: boolean }[];
 }
 
 const docLabel = (t: string) => (DOCUMENT_TYPES as Record<string, { label: string }>)[t]?.label ?? t;
@@ -200,6 +207,16 @@ export function stageGateIssues(f: GateFacts, target: StageKey): string[] {
     const outstanding = f.documents.filter((d) => d.required && !(d.received && d.approval === "approved"));
     if (outstanding.length) issues.push(`These required documents must be received and approved: ${outstanding.map((d) => docLabel(d.documentType)).join(", ")}.`);
     if (!f.signatures.some((s) => s.status === "completed" && s.hasCustomerSigner)) issues.push("The customer must sign before submission.");
+    if (!merchant && f.supplyChanges?.includes("change_of_supplier")) {
+      if (!f.billCheck) issues.push("Check the previous supplier's bill (readable, and the customer, MPRN/GPRN and supplier match).");
+      else if (!f.billCheck.passed) issues.push("The previous supplier's bill failed its check. Get a clear bill that matches this customer and supply point.");
+    }
+    for (const form of f.forms ?? []) {
+      if (!form.qcPassed) issues.push(`"${form.name}" failed its quality check. Generate it again.`);
+      else if (form.status === "awaiting_review") issues.push(`Review the signatures on "${form.name}".`);
+      else if (form.status === "generated") issues.push(`"${form.name}" still needs its signatures.`);
+      else if (form.status === "rejected") issues.push(`"${form.name}" was rejected at review. Generate it again.`);
+    }
     if (f.internalApproval !== "approved") issues.push("Internal approval must be granted before submission.");
     if (merchant && !f.merchantApps.every((a) => a.risk?.complianceStatus === "approved")) {
       issues.push("Compliance must approve the Worldpay risk review before submission.");

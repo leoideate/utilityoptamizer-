@@ -28,6 +28,9 @@ export const JOB_QUEUE = Symbol("JOB_QUEUE");
 export const DEFAULT_ATTEMPTS = 6;
 export const BACKOFF = { type: "exponential" as const, delay: 30_000 };
 
+/** BullMQ rejects custom job ids containing ":" (it uses ":" in Redis keys), so callers' ids are normalised here. */
+export const bullJobId = (id: string | undefined) => id?.replace(/:/g, "-");
+
 export class BullJobQueue implements JobQueue {
   private readonly queues = new Map<QueueName, Queue>();
   constructor(private readonly connection: ConnectionOptions) {}
@@ -43,7 +46,7 @@ export class BullJobQueue implements JobQueue {
 
   async add(queue: QueueName, name: string, data: Record<string, unknown>, opts: EnqueueOptions = {}) {
     await this.queue(queue).add(name, data, {
-      jobId: opts.jobId,
+      jobId: bullJobId(opts.jobId),
       delay: opts.delayMs,
       attempts: opts.attempts ?? DEFAULT_ATTEMPTS,
       backoff: BACKOFF,

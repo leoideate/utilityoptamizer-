@@ -33,6 +33,7 @@ export const CAPABILITIES = {
   /** Identity documents, bank statements and other sensitive files. */
   "document.read_sensitive": ["administrator", "compliance", "finance"],
   "document.review": ["administrator", "manager", "operations", "compliance"],
+  "form.template_manage": ["administrator", "manager", "operations"],
   "document.request": ["administrator", "manager", "salesperson", "operations", "compliance"],
 
   // Finance

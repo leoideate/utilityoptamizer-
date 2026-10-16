@@ -189,7 +189,7 @@ function DocumentRow({
       onDrop={onDrop}
     >
       <div className="flex flex-wrap items-center gap-3">
-        {selectable ? <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={selected} onChange={(e) => onSelect(e.target.checked)} aria-label={`Select ${item.label}`} /> : <span className="size-4" />}
+        {selectable ? <input type="checkbox" className="size-6 shrink-0 accent-[var(--primary)] lg:size-4" checked={selected} onChange={(e) => onSelect(e.target.checked)} aria-label={`Select ${item.label}`} /> : <span className="size-6 shrink-0 lg:size-4" />}
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
             {item.label}

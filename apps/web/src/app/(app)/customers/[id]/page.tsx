@@ -283,7 +283,7 @@ function ContactDialog({ customerId, onClose }: { customerId: string; onClose: (
         <Field label="Phone">{(p) => <Input {...p} type="tel" {...register("phone")} />}</Field>
         <Field label="Mobile">{(p) => <Input {...p} type="tel" {...register("mobile")} />}</Field>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" className="size-4 accent-[var(--primary)]" {...register("isPrimary")} /> Primary contact
+          <input type="checkbox" className="size-6 shrink-0 accent-[var(--primary)] lg:size-4" {...register("isPrimary")} /> Primary contact
         </label>
       </div>
       <div className="mt-4">

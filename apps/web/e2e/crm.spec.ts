@@ -159,10 +159,18 @@ test("main pages pass automated accessibility checks, with no Content-Security-P
     if (/Content Security Policy|Refused to (load|execute|connect|frame)/i.test(m.text())) violations.push(m.text());
   });
   await signIn(page, users.admin);
-  for (const path of ["/", "/opportunities", "/pipeline", "/customers", "/activities", "/chat", "/scan", "/admin", "/account"]) {
+  for (const path of ["/", "/opportunities", "/pipeline", "/customers", "/activities", "/chat", "/scan", "/admin", "/account", "/forms"]) {
     await page.goto(path);
     await expect(page.locator("main h1").first()).toBeVisible();
     if (path !== "/" && path !== "/pipeline" && path !== "/chat") await expectAccessible(page, path);
+  }
+  // The template editor renders PDFs with pdf.js in a worker, which the CSP must allow.
+  const template = await page.locator('a[href^="/forms/"]').first().getAttribute("href").catch(() => null);
+  if (template) {
+    await page.goto(template);
+    await expect(page.getByRole("img", { name: /page 1/ })).toBeVisible();
+    await expect(page.getByText("The PDF couldn't be shown.")).toHaveCount(0);
+    await expectAccessible(page, "form template editor");
   }
   expect(violations).toEqual([]);
 });

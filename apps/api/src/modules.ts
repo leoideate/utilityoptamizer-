@@ -48,6 +48,8 @@ import { StagesService } from "./opportunities/stages.service";
 import { ReportsController } from "./reports/reports.controller";
 import { ReportsService } from "./reports/reports.service";
 import { ManualSignatureProvider, SIGNATURE_PROVIDER } from "./signatures/provider";
+import { FormsController } from "./forms/forms.controller";
+import { FormsService } from "./forms/forms.service";
 import { SignaturesController } from "./signatures/signatures.controller";
 import { SignaturesService } from "./signatures/signatures.service";
 
@@ -88,6 +90,9 @@ export class MerchantModule {}
   providers: [SignaturesService, { provide: SIGNATURE_PROVIDER, useFactory: () => new ManualSignatureProvider() }],
 })
 export class SignaturesModule {}
+
+@Module({ imports: [DocumentsModule], controllers: [FormsController], providers: [FormsService] })
+export class FormsModule {}
 
 @Module({
   imports: [CustomersModule, OpportunitiesModule],
@@ -139,6 +144,7 @@ export const FEATURE_MODULES = [
   EnergyModule,
   MerchantModule,
   SignaturesModule,
+  FormsModule,
   OcrModule,
   IntegrationsModule,
   ReportsModule,

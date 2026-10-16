@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, Building2, CalendarCheck, MessagesSquare, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Menu as MenuIcon, ScanLine, Search, Settings, Zap } from "lucide-react";
+import { Bell, Building2, CalendarCheck, FileSignature, MessagesSquare, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Menu as MenuIcon, ScanLine, Search, Settings, Zap } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -33,7 +33,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const nav = (
     <nav aria-label="Main" className="flex flex-col gap-0.5 p-3">
-      {[...NAV, ...(isAdmin ? [{ href: "/admin", label: "Administration", icon: Settings }] : [])].map(({ href, label, icon: Icon }) => {
+      {[
+        ...NAV,
+        ...(user.capabilities.includes("form.template_manage") ? [{ href: "/forms", label: "Supplier forms", icon: FileSignature }] : []),
+        ...(isAdmin ? [{ href: "/admin", label: "Administration", icon: Settings }] : []),
+      ].map(({ href, label, icon: Icon }) => {
         const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (
           <Link

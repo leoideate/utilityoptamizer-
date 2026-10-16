@@ -1800,6 +1800,310 @@
         ]
       }
     },
+    "/api/form-templates": {
+      "get": {
+        "operationId": "FormsController_templates",
+        "parameters": [
+          {
+            "name": "supplierId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      },
+      "post": {
+        "operationId": "FormsController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      }
+    },
+    "/api/form-templates/all": {
+      "get": {
+        "operationId": "FormsController_all",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      }
+    },
+    "/api/form-templates/{id}": {
+      "get": {
+        "operationId": "FormsController_template",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      },
+      "patch": {
+        "operationId": "FormsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      }
+    },
+    "/api/form-templates/{id}/file": {
+      "get": {
+        "operationId": "FormsController_file",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/forms": {
+      "get": {
+        "operationId": "FormsController_list",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      },
+      "post": {
+        "operationId": "FormsController_generate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/forms/prefill": {
+      "get": {
+        "operationId": "FormsController_prefill",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "templateId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      }
+    },
+    "/api/forms/{id}/signatures": {
+      "post": {
+        "operationId": "FormsController_sign",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      }
+    },
+    "/api/forms/{id}/review": {
+      "post": {
+        "operationId": "FormsController_review",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/bill-checks": {
+      "get": {
+        "operationId": "FormsController_billChecks",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      },
+      "post": {
+        "operationId": "FormsController_checkBill",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/switch-conflicts": {
+      "get": {
+        "operationId": "FormsController_conflicts",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      }
+    },
     "/api/business-cards": {
       "post": {
         "operationId": "OcrController_upload",

@@ -131,6 +131,8 @@ Permanent customer record. Merged duplicates are kept with merged_into_id set.
 
 ## bank_accounts
 
+Restricted (bank.read). Values encrypted; only the IBAN's last four digits are stored in clear.
+
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -196,6 +198,8 @@ One sale (new or renewal). Permanent: can't be deleted or archived (database tri
 | updated_at | DateTime | ✓ |  |
 
 ## stage_history
+
+One row per stage visit; drives "average time in each stage".
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -357,7 +361,7 @@ Live/ended contracts are read-only history; renewals create new rows.
 
 ## principals
 
-Restricted. Personal values are encrypted; has_* flags let validation run without decrypting.
+Restricted. Date of birth and nationality are encrypted; presence flags let rules run without decrypting. Restricted. Personal values are encrypted; has_* flags let validation run without decrypting.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -378,6 +382,8 @@ Restricted. Personal values are encrypted; has_* flags let validation run withou
 | created_at | DateTime | ✓ | Default now() |
 
 ## principal_addresses
+
+Residential address history (restricted, address encrypted).
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -432,7 +438,7 @@ Restricted. Personal values are encrypted; has_* flags let validation run withou
 
 ## document_versions
 
-Every upload is a new version; nothing is overwritten.
+Every upload is a new version; nothing is overwritten. Every upload is a new version; nothing is overwritten.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -447,6 +453,85 @@ Every upload is a new version; nothing is overwritten.
 | scan_status | Enum: pending, clean, infected, error, skipped | ✓ | Default pending |
 | uploaded_by_id | UUID |  |  |
 | uploaded_at | DateTime | ✓ | Default now() |
+
+## FormTemplate
+
+A supplier PDF with positioned fields. Field layout changes bump `version`; generated forms keep a snapshot.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| name | String | ✓ |  |
+| supplier_id | UUID |  |  |
+| document_type | String | ✓ |  |
+| version | Int | ✓ | Default 1 |
+| storage_key | String | ✓ | Unique |
+| filename | String | ✓ |  |
+| sha256 | String | ✓ |  |
+
+## generated_forms
+
+One filled copy of a template for an opportunity. Never edited; regenerating supersedes it.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| opportunity_id | UUID | ✓ |  |
+| template_id | UUID | ✓ |  |
+| template_version | Int | ✓ |  |
+| fields | Json | ✓ | Field layout used, so the exact copy can be reproduced |
+| values_enc | String | ✓ | Encrypted JSON of the values written (may include an IBAN) |
+| changed_fields | Json | ✓ | Field ids whose value was typed or changed instead of coming from the CRM. Default "[]" |
+| iban_change_confirmed | Boolean | ✓ | Default false |
+| document_item_id | UUID | ✓ |  |
+| version_id | UUID | ✓ | The unsigned generated PDF |
+| signed_version_id | UUID |  | The PDF with signatures applied, once every required signer has one |
+| status | Enum: generated, awaiting_review, approved, rejected, superseded | ✓ | Default generated |
+| qc_passed | Boolean | ✓ |  |
+| qc_issues | Json | ✓ | Default "[]" |
+| reviewed_by_id | UUID |  |  |
+| reviewed_at | DateTime |  |  |
+| review_note | String |  |  |
+| created_by_id | UUID |  |  |
+| created_at | DateTime | ✓ | Default now() |
+
+## form_signatures
+
+An uploaded signature image, authorised for one generated form only.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| form_id | UUID | ✓ |  |
+| role | Enum: customer, broker | ✓ |  |
+| signer_name | String | ✓ |  |
+| signer_capacity | String |  |  |
+| authorisation | String | ✓ |  |
+| note | String |  |  |
+| storage_key | String | ✓ | Unique |
+| sha256 | String | ✓ |  |
+| uploaded_by_id | UUID |  |  |
+| uploaded_at | DateTime | ✓ | Default now() |
+
+## bill_checks
+
+Verification of the previous supplier's bill for a change of supplier.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| opportunity_id | UUID | ✓ |  |
+| document_version_id | UUID | ✓ | The bill version that was checked; a newer upload needs a new check |
+| previous_supplier | String | ✓ |  |
+| bill_date | Date |  |  |
+| readable | Boolean | ✓ |  |
+| customer_name_matches | Boolean | ✓ |  |
+| supply_point_matches | Boolean | ✓ |  |
+| supplier_matches | Boolean | ✓ |  |
+| passed | Boolean | ✓ |  |
+| notes | String |  |  |
+| verified_by_id | UUID |  |  |
+| verified_at | DateTime | ✓ | Default now() |
 
 ## signature_templates
 
@@ -513,7 +598,7 @@ Every upload is a new version; nothing is overwritten.
 
 ## timeline_entries
 
-Append-only (trigger). Corrections are new entries with corrects_id.
+Append-only (a database trigger blocks UPDATE and DELETE). Corrections are new entries with `correctsId`. Append-only (trigger). Corrections are new entries with corrects_id.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -531,7 +616,7 @@ Append-only (trigger). Corrections are new entries with corrects_id.
 
 ## audit_logs
 
-Append-only (trigger). Never contains restricted values.
+Append-only security/audit log (trigger-protected). Never contains sensitive values. Append-only (trigger). Never contains restricted values.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -592,6 +677,9 @@ Append-only (trigger). Never contains restricted values.
 
 ## integration_jobs
 
+Outbound integration work (supplier/Worldpay submission, email, WhatsApp, accounting).
+Executed by BullMQ with retries; jobs that exhaust retries become `dead` (dead-letter).
+
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -608,6 +696,8 @@ Append-only (trigger). Never contains restricted values.
 | updated_at | DateTime | ✓ |  |
 
 ## webhook_events
+
+Inbound webhooks, recorded once per provider event id (idempotency).
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -629,6 +719,8 @@ Append-only (trigger). Never contains restricted values.
 | updated_at | DateTime | ✓ |  |
 
 ## chat_channels
+
+A conversation: a direct message between two users, a team channel, or the internal discussion on one opportunity.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -668,6 +760,8 @@ Append-only (trigger). Never contains restricted values.
 | created_at | DateTime | ✓ | Default now() |
 
 ## chat_message_revisions
+
+Previous text of edited or deleted messages (append-only), for administrators and disputes.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|

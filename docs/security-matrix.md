@@ -23,6 +23,7 @@ Generated from `packages/shared/src/permissions.ts`, the single source of truth 
 | `bank.write` | Add bank details | ✓ | ✓ | ✓ | ✓ |  | ✓ |
 | `document.read_sensitive` | Open identity documents, bank statements and other restricted files (every view is logged) | ✓ |  |  |  | ✓ | ✓ |
 | `document.review` | Approve or reject documents | ✓ | ✓ |  | ✓ | ✓ |  |
+| `form.template_manage` |  | ✓ | ✓ |  | ✓ |  |  |
 | `document.request` | Request documents from the customer | ✓ | ✓ | ✓ | ✓ | ✓ |  |
 | `commission.read` | View commission figures and export the commissions CSV | ✓ | ✓ |  |  |  | ✓ |
 | `commission.write` | Record and update commissions | ✓ |  |  |  |  | ✓ |

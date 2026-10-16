@@ -29,7 +29,7 @@ export class S3Storage implements ObjectStorage {
   }
 
   async put(key: string, body: Buffer, contentType: string) {
-    await this.s3.send(new PutObjectCommand({ Bucket: this.env.S3_BUCKET, Key: key, Body: body, ContentType: contentType, ServerSideEncryption: "AES256" }));
+    await this.s3.send(new PutObjectCommand({ Bucket: this.env.S3_BUCKET, Key: key, Body: body, ContentType: contentType, ServerSideEncryption: this.env.S3_SERVER_SIDE_ENCRYPTION === "none" ? undefined : this.env.S3_SERVER_SIDE_ENCRYPTION }));
   }
 
   async get(key: string) {

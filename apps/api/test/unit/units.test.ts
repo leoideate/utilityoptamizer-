@@ -3,6 +3,7 @@ import { redact } from "../../src/common/redact";
 import { phoneKey } from "../../src/common/values";
 import { loadEnv } from "../../src/config/env";
 import { sniffMatches } from "../../src/documents/documents.service";
+import { bullJobId } from "../../src/jobs/queue";
 import { parseCardText } from "../../src/ocr/card-parser";
 import { addressYears } from "../../src/opportunities/facts";
 import { signWebhook, verifyWebhook } from "../../src/signatures/provider";
@@ -143,5 +144,13 @@ describe("CSV lead import parsing", () => {
       ["Murphy, Bar", "Gas", 'Said "call Tuesday"'],
       ["Shop", "Electricity", ""],
     ]);
+  });
+});
+
+describe("BullMQ job ids", () => {
+  it("never contain a colon, which BullMQ rejects", () => {
+    expect(bullJobId("scan:1b2c")).toBe("scan-1b2c");
+    expect(bullJobId("call.poll:abc:2")).toBe("call.poll-abc-2");
+    expect(bullJobId(undefined)).toBeUndefined();
   });
 });
