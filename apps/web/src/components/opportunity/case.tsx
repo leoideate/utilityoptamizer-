@@ -94,7 +94,7 @@ const OUTCOME_TONE: Record<ResponseOutcome, Tone> = { accepted: "success", chang
 const caseKey = (id: string) => ["opportunity", id, "case"];
 
 /** The workflow case on an energy deal: where it stands, what's missing, and the evidence trail. */
-export function CaseCard({ opp }: { opp: Workspace }) {
+export function CaseCard({ opp, readOnly = false }: { opp: Workspace; readOnly?: boolean }) {
   const kase = useQuery({ queryKey: caseKey(opp.id), queryFn: () => api.get<CaseOverview>(`/opportunities/${opp.id}/case`) });
   // Change of supplier shows these on its own card.
   const conflicts = useQuery({
@@ -105,7 +105,8 @@ export function CaseCard({ opp }: { opp: Workspace }) {
   const [editing, setEditing] = useState(false);
   if (kase.isLoading) return <Skeleton className="h-40" />;
   if (!kase.data) return null;
-  const c = kase.data;
+  // Read-only: sales following a deal the back office has taken over.
+  const c = readOnly ? { ...kase.data, permissions: { write: false, submit: false, verifyLease: false } } : kase.data;
   const missing = c.checklist.filter((i) => !i.done);
   return (
     <Card>

@@ -1,14 +1,16 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Download, FileWarning, Plus, RefreshCw } from "lucide-react";
+import { AlertTriangle, Download, FileWarning, Plus, RefreshCw, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { LEAD_SOURCE_LABELS, type LeadSource, SERVICE_TYPE_LABELS, type ServiceType, addDays } from "@uo/shared";
+import { CasesBoard } from "@/components/cases-board";
 import { BarList, UserSelect, useSuppliers } from "@/components/domain";
 import { Button, Card, CardHeader, Input, PageHeader, Select, Skeleton, Stat } from "@/components/ui/primitives";
 import { api, qs } from "@/lib/api";
 import { money, moneyCompact, num, pct, todayIso } from "@/lib/format";
+import { useDesk } from "@/lib/desk";
 import { useCan, useUser } from "@/lib/session";
 
 interface Dashboard {
@@ -40,7 +42,16 @@ const PRESETS = [
   { label: "Last 12 months", days: 365 },
 ];
 
-export default function DashboardPage() {
+export default function HomePage() {
+  const { desk } = useDesk();
+  return desk === "back_office" ? (
+    <CasesBoard scope="back_office" title="Work queue" description="Deals handed over by sales at Supplier selected: forms, checks, signatures, submission and the external party's answer." />
+  ) : (
+    <SalesDashboard />
+  );
+}
+
+function SalesDashboard() {
   const user = useUser();
   const can = useCan();
   const seesAll = can("report.read");
@@ -67,9 +78,14 @@ export default function DashboardPage() {
                 </a>
               </Button>
             )}
+            <Button variant="secondary" asChild>
+              <Link href="/scan">
+                <ScanLine /> Scan business card
+              </Link>
+            </Button>
             <Button asChild>
               <Link href="/opportunities/new">
-                <Plus /> New opportunity
+                <Plus /> New lead
               </Link>
             </Button>
           </>

@@ -13,6 +13,7 @@ const dashboardQuery = z.object({
   ownerId: z.string().uuid().optional(),
   supplierId: z.string().uuid().optional(),
   dueBefore: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  scope: z.enum(["back_office"]).optional(),
 });
 
 @ApiTags("workflows")

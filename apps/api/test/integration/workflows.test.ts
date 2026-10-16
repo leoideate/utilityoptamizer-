@@ -606,3 +606,29 @@ async function sendSome(oppId: string) {
     201,
   ).body.id as string;
 }
+
+describe("sales to back office handover", () => {
+  it("hands the deal to the back office at Supplier selected, and it appears in their work queue", async () => {
+    const s = await supplier(t);
+    const early = await createOpportunity(team.sales, "electricity", { name: "Still selling" });
+    const opp = await createOpportunity(team.sales, "electricity", { name: "Agreed deal" });
+    expectStatus(await team.sales.post(`/opportunities/${opp}/sites`, { serviceType: "electricity", address: { line1: "5 Market Sq" } }), 201);
+    expectStatus(await team.sales.patch(`/opportunities/${opp}`, { selectedSupplierId: s.id }), 204);
+    expectStatus(await team.sales.post(`/opportunities/${opp}/stage`, { stage: "supplier_selected" }), 204);
+
+    const task = await t.prisma.activity.findFirstOrThrow({ where: { opportunityId: opp, automationKey: "back_office_handover", status: "open" } });
+    expect(task).toMatchObject({ ownerId: opsUser.user.id, priority: "high", type: "submit_application" });
+    const timeline = (expectStatus(await team.sales.get(`/opportunities/${opp}/timeline`), 200).body as { body: string }[]).map((e) => e.body);
+    expect(timeline).toContain("Handed over to the back office (Orla Ops).");
+
+    // Going back to the client and agreeing again doesn't create a second handover task.
+    expectStatus(await team.sales.post(`/opportunities/${opp}/stage`, { stage: "client_reviewing" }), 204);
+    expectStatus(await team.sales.post(`/opportunities/${opp}/stage`, { stage: "supplier_selected" }), 204);
+    expect(await t.prisma.activity.count({ where: { opportunityId: opp, automationKey: "back_office_handover" } })).toBe(1);
+
+    const queue = expectStatus(await team.ops.get("/cases?scope=back_office"), 200).body.rows.map((r: { id: string }) => r.id);
+    expect(queue).toContain(opp);
+    expect(queue).not.toContain(early);
+    expect(expectStatus(await team.ops.get("/cases"), 200).body.rows.map((r: { id: string }) => r.id)).toContain(early);
+  });
+});

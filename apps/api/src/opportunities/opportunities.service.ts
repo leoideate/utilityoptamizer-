@@ -12,6 +12,7 @@ import {
   can,
   canWriteOpportunity,
   isAtOrAfter,
+  isHandedOver,
   stageDef,
   stageGateIssues,
   today,
@@ -234,6 +235,22 @@ export class OpportunitiesService {
       await this.documents.ensureStandardChecklist(tx, opp);
       await this.activities.ensureAutomated(tx, { opportunityId: opp.id, customerId: opp.customerId, type: "request_documents", summary: merchant ? "Request business details and documents" : "Request recent bills and meter details", dueDate: today(), ownerId: opp.ownerId, automationKey: "request_details" });
     }
+    // The sale is agreed: the back office takes over forms, checks, signatures and submission.
+    if (isHandedOver(target) && !isHandedOver(opp.stageKey)) {
+      const backOffice = await this.activities.leastLoaded(tx, "operations");
+      await this.activities.ensureAutomated(tx, {
+        opportunityId: opp.id,
+        customerId: opp.customerId,
+        type: "submit_application",
+        summary: `Back office: prepare the supplier forms and submit ${opp.name}`,
+        dueDate: addDays(today(), 1),
+        priority: "high",
+        ownerId: backOffice ?? opp.ownerId,
+        automationKey: "back_office_handover",
+      });
+      const name = backOffice ? (await tx.user.findUnique({ where: { id: backOffice }, select: { name: true } }))?.name : null;
+      await this.audit.timeline(actor, { opportunityId: opp.id, customerId: opp.customerId, kind: "assignment", body: `Handed over to the back office${name ? ` (${name})` : ""}.` }, tx);
+    }
     if (target === "internal_review") {
       await tx.opportunity.update({ where: { id: opp.id }, data: { internalApproval: "pending" } });
       const approvers = await tx.user.findMany({ where: { active: true, roles: { some: { role: "manager" } } }, select: { id: true } });
@@ -245,6 +262,7 @@ export class OpportunitiesService {
       await tx.merchantApplication.updateMany({ where: { opportunityId: opp.id, status: { in: ["draft", "ready"] } }, data: { status: "submitted", submissionDate: dateOnly(today()) } });
       await tx.energyContract.updateMany({ where: { opportunityId: opp.id, status: { notIn: ["cancelled", "live", "ended"] } }, data: { status: "submitted" } });
       await this.activities.completeAutomated(tx, opp.id, "internal_review");
+      await this.activities.completeAutomated(tx, opp.id, "back_office_handover");
       await this.audit.timeline(actor, { opportunityId: opp.id, customerId: opp.customerId, kind: "submission", body: merchant ? "Application submitted to Worldpay." : "Application submitted to the supplier." }, tx);
     }
     if (target === "compliance_query") {
@@ -370,7 +388,7 @@ export class OpportunitiesService {
         applicationStatus: "Live",
       });
 
-      for (const key of ["submission_follow_up", "submission_correction", "renewal_deadline", "signature_reminder", "missing_documents", "missing_information", "compliance_query", "activation_due"]) {
+      for (const key of ["submission_follow_up", "submission_correction", "renewal_deadline", "back_office_handover", "signature_reminder", "missing_documents", "missing_information", "compliance_query", "activation_due"]) {
         await this.activities.completeAutomated(tx, id, key);
       }
       // Renewal review ~120 days before the end date (or a 30-day check-in when there's no term).

@@ -7,6 +7,7 @@ const users = {
   otherSales: "sean@demo.utilityoptimizer.ie",
   manager: "manager@demo.utilityoptimizer.ie",
   admin: "admin@demo.utilityoptimizer.ie",
+  ops: "ops@demo.utilityoptimizer.ie",
 };
 
 /** Sessions are reused per user: logging in for every test would trip the login rate limit (10/min per IP). */
@@ -56,7 +57,7 @@ test("single sign-on errors are explained on the login page", async ({ page }) =
 test("salesperson captures an electricity lead and sees electricity-only fields", async ({ page }) => {
   await signIn(page, users.sales);
   await expectAccessible(page, "dashboard");
-  await page.getByRole("link", { name: "Opportunities" }).first().click();
+  await page.getByRole("link", { name: "Leads and deals" }).first().click();
   await page.getByRole("link", { name: "New opportunity" }).click();
   const name = `E2E Bakery ${Date.now()}`;
   await page.getByLabel("Opportunity name").fill(name);
@@ -125,6 +126,28 @@ test("a change of entity case shows its status and guided checklist, and records
   await expect(page.getByRole("heading", { name: /^Change of legal entity (Awaiting incoming details|Request received)$/ })).toBeVisible();
   await expect(page.getByText(/ESB Networks connection letter \(verified by/)).toBeVisible();
   await expectAccessible(page, "forms tab with case");
+});
+
+test("sales and the back office each get their own interface", async ({ page }) => {
+  await signIn(page, users.sales);
+  const nav = page.getByRole("navigation", { name: "Main" });
+  await expect(nav.getByRole("link", { name: "Scan business card" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Work queue" })).toHaveCount(0);
+  await expect(nav.getByRole("link", { name: "Supplier forms" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "New lead" })).toBeVisible();
+
+  await signIn(page, users.ops);
+  await expect(nav.getByRole("link", { name: "Work queue" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Scan business card" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1, name: "Work queue" })).toBeVisible();
+  await expectAccessible(page, "back office work queue");
+
+  // Managers can switch between the two.
+  await signIn(page, users.manager);
+  await nav.getByRole("button", { name: "Back office" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Work queue" })).toBeVisible();
+  await nav.getByRole("button", { name: "Sales" }).click();
+  await expect(nav.getByRole("link", { name: "Scan business card" })).toBeVisible();
 });
 
 test("Worldpay opportunity shows the merchant workspace and hides energy sections", async ({ page }) => {

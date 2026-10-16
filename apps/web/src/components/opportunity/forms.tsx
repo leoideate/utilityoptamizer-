@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Eye, FilePen, FileSignature, PenLine, ShieldCheck, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Eye, FilePen, FileSignature, Info, PenLine, ShieldCheck, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   FORM_SIGNER_ROLE_LABELS,
@@ -13,6 +13,7 @@ import {
   SIGNATURE_AUTHORISATION_LABELS,
   type SignatureAuthorisation,
   isEnergyService,
+  isHandedOver,
 } from "@uo/shared";
 import { Dialog } from "@/components/ui/overlays";
 import { Badge, Button, Card, CardHeader, Checkbox, EmptyState, Field, Input, IssueList, Select, Skeleton, type Tone } from "@/components/ui/primitives";
@@ -65,6 +66,8 @@ const STATUS_TONE: Record<FormStatus, Tone> = { generated: "warning", awaiting_r
 const issuesOf = (e: unknown) => ((e as ApiError).issues?.length ? (e as ApiError).issues : [(e as ApiError).message]);
 
 export function FormsTab({ opp }: { opp: Workspace }) {
+  const canSubmit = useCan()("opportunity.submit");
+  if (!canSubmit) return <SalesCaseView opp={opp} />;
   const switching = isEnergyService(opp.serviceType) && opp.supplyChanges.includes("change_of_supplier");
   return (
     <div className="space-y-6">
@@ -72,6 +75,31 @@ export function FormsTab({ opp }: { opp: Workspace }) {
       {switching && <SwitchCard opp={opp} />}
       <FillCard opp={opp} />
       <FormsList opp={opp} />
+    </div>
+  );
+}
+
+/** Sales: the case and what's still needed from the customer; read-only once the back office has it. */
+function SalesCaseView({ opp }: { opp: Workspace }) {
+  const handedOver = isHandedOver(opp.stage.key);
+  if (!isEnergyService(opp.serviceType)) {
+    return (
+      <Card className="p-5 text-sm text-muted">
+        {handedOver ? "The back office is completing the Worldpay application. Progress shows on the Overview and Timeline." : "The back office takes over once the product is selected."}
+      </Card>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2 rounded-lg bg-info-soft p-3 text-sm text-info" role="status">
+        <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <p>
+          {handedOver
+            ? "Handed over to the back office. They prepare the supplier forms, run the checks and submit; you can follow progress here. Anything still needed from the customer is listed below."
+            : "Log the request and collect what's listed below from the customer (bill, meter reading, details). The back office takes over when the supplier is selected."}
+        </p>
+      </div>
+      <CaseCard opp={opp} readOnly={handedOver} />
     </div>
   );
 }

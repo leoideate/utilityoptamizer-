@@ -61,6 +61,10 @@ A user can hold several roles. The full permission table is in [security-matrix.
 
 Salespeople see the customers they created and those on deals they can see. If a salesperson enters details that match a customer they can't see, the duplicate warning shows only the company name; a manager links that customer to the deal.
 
+## Sales and back-office interfaces
+
+Roles decide the interface: salespeople (including field agents) get the sales interface; Operations, Compliance and Finance get the back office; managers and administrators can switch. A deal is handed to the back office when it reaches **Supplier selected** (a task goes to the Operations user with the fewest open tasks). The interfaces only change what's shown: every permission is still enforced by the server from the security matrix.
+
 ## Suppliers and pipeline (Administration → Suppliers & pipeline)
 
 - Add or deactivate suppliers. Set each supplier's **submissions email** to enable **Send submission pack**.

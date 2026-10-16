@@ -11,32 +11,60 @@ import { cn, ref, relative } from "@/lib/format";
 import { useChannels } from "@/lib/chat";
 import { useUser } from "@/lib/session";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "./ui/overlays";
+import { DESK_LABELS, type Desk } from "@uo/shared";
+import { useDesk } from "@/lib/desk";
 import { Button } from "./ui/primitives";
 
-const NAV = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
-  { href: "/opportunities", label: "Opportunities", icon: ListChecks },
-  { href: "/customers", label: "Customers", icon: Building2 },
-  { href: "/activities", label: "My tasks", icon: CalendarCheck },
-  { href: "/cases", label: "Cases", icon: ClipboardList },
-  { href: "/chat", label: "Chat", icon: MessagesSquare },
-  { href: "/scan", label: "Scan business card", icon: ScanLine },
-];
+/** Sales (office and field) capture and work leads; the back office completes deals after the sale. */
+const NAV: Record<Desk, { href: string; label: string; icon: typeof LayoutDashboard }[]> = {
+  sales: [
+    { href: "/", label: "Home", icon: LayoutDashboard },
+    { href: "/scan", label: "Scan business card", icon: ScanLine },
+    { href: "/opportunities", label: "Leads and deals", icon: ListChecks },
+    { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
+    { href: "/customers", label: "Customers", icon: Building2 },
+    { href: "/activities", label: "My tasks", icon: CalendarCheck },
+    { href: "/chat", label: "Chat", icon: MessagesSquare },
+  ],
+  back_office: [
+    { href: "/", label: "Work queue", icon: LayoutDashboard },
+    { href: "/cases", label: "All cases", icon: ClipboardList },
+    { href: "/opportunities", label: "Opportunities", icon: ListChecks },
+    { href: "/customers", label: "Customers", icon: Building2 },
+    { href: "/activities", label: "My tasks", icon: CalendarCheck },
+    { href: "/chat", label: "Chat", icon: MessagesSquare },
+  ],
+};
 
 export function AppShell({ children }: { children: ReactNode }) {
   const user = useUser();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const isAdmin = user.capabilities.some((c) => c.startsWith("admin."));
+  const { desk, desks, setDesk } = useDesk();
   const unread = useChannels().data?.totalUnread ?? 0;
   useEffect(() => setOpen(false), [pathname]);
 
   const nav = (
     <nav aria-label="Main" className="flex flex-col gap-0.5 p-3">
+      {desks.length > 1 && (
+        <div role="group" aria-label="Interface" className="mb-2 grid grid-cols-2 gap-1 rounded-lg bg-surface-2 p-1">
+          {desks.map((d) => (
+            <button
+              key={d}
+              type="button"
+              aria-pressed={desk === d}
+              onClick={() => setDesk(d)}
+              className={cn("min-h-8 rounded-md px-2 text-xs font-medium text-muted", desk === d && "bg-surface text-text shadow-sm")}
+            >
+              {DESK_LABELS[d]}
+            </button>
+          ))}
+        </div>
+      )}
       {[
-        ...NAV,
-        ...(user.capabilities.includes("form.template_manage") ? [{ href: "/forms", label: "Supplier forms", icon: FileSignature }] : []),
+        ...NAV[desk],
+        ...(desk === "back_office" && user.capabilities.includes("form.template_manage") ? [{ href: "/forms", label: "Supplier forms", icon: FileSignature }] : []),
         ...(isAdmin ? [{ href: "/admin", label: "Administration", icon: Settings }] : []),
       ].map(({ href, label, icon: Icon }) => {
         const active = href === "/" ? pathname === "/" : pathname.startsWith(href);

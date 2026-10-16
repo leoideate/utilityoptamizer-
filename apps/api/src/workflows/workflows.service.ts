@@ -15,8 +15,10 @@ import {
   type WorkflowReminders,
   addDays,
   can,
+  STAGE_KEYS,
   canReadOpportunity,
   caseChecklist,
+  isHandedOver,
   caseKind,
   caseSteps,
   leaseCheckPassed,
@@ -577,7 +579,7 @@ export class WorkflowsService {
   // --- Dashboard ---------------------------------------------------------------------
 
   /** Open cases (and those completed in the last 90 days) grouped by where they stand. */
-  async dashboard(actor: Actor, q: { kind?: CaseKind; ownerId?: string; supplierId?: string; dueBefore?: string }) {
+  async dashboard(actor: Actor, q: { kind?: CaseKind; ownerId?: string; supplierId?: string; dueBefore?: string; scope?: "back_office" }) {
     const asOf = today();
     const and: Prisma.OpportunityWhereInput[] = [
       this.access.visibleWhere(actor),
@@ -590,6 +592,8 @@ export class WorkflowsService {
     if (q.kind === "new_supply") and.push({ saleType: "new_sale" }, { supplyChanges: { isEmpty: true } });
     if (q.ownerId) and.push({ ownerId: q.ownerId });
     if (q.supplierId) and.push({ selectedSupplierId: q.supplierId });
+    // The back office's queue: deals handed over at Supplier selected, and those completed recently.
+    if (q.scope === "back_office") and.push({ OR: [{ outcome: "won" }, { stage: { key: { in: STAGE_KEYS.filter((k) => isHandedOver(k)) } } }] });
     const opps = await this.prisma.opportunity.findMany({
       where: { AND: and },
       take: 200,

@@ -80,6 +80,15 @@ Changes of legal entity and renewals add their own requirements (see **Cases** b
 
 If something's missing, the CRM lists it. The **Overview → Checklist** shows the same list in advance.
 
+## Sales and back office
+
+The CRM has two interfaces, chosen by your role:
+
+- **Sales** (salespeople and field agents): Home with your figures, **Scan business card** (the card becomes a lead), leads and deals, pipeline, customers and tasks. On a deal's Overview, **Collect from the customer** takes a photo of the current bill and the meter reading straight from your phone and lists any other documents still needed.
+- **Back office** (Operations, Compliance, Finance): Home is the **Work queue**: every deal handed over by sales, by where it stands. A handed-over deal opens on its **Back office** tab with the supplier forms, checks, signatures and submission.
+- Deals move to the back office at **Supplier selected**: a task is created for the least busy Operations colleague and the hand-over is noted on the timeline. Sales then sees the deal's **Case** tab read-only, with its progress and anything still needed from the customer.
+- Managers and administrators can switch between the two at the top of the menu; the choice is remembered on the device.
+
 ## Cases: change of entity and renewals
 
 The **Forms** tab of an energy deal starts with its case: the steps done so far, its status and what's still missing.
