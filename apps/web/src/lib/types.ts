@@ -58,6 +58,6 @@ export interface Workspace extends Omit<OpportunityRow, "stage"> {
   previousOpportunity: { id: string; number: number; name: string } | null;
   renewals: { id: string; number: number; name: string; outcome: Outcome }[];
   _count: { sites: number; contracts: number; merchantApps: number; documents: number; activities: number };
-  gates: Record<"proposal_sent" | "supplier_selected" | "documents_prepared" | "submitted", string[]>;
+  gates: Record<"proposal_sent" | "supplier_selected" | "documents_prepared" | "submitted" | "live_won", string[]>;
   permissions: { write: boolean; assign: boolean; approve: boolean; submit: boolean; activate: boolean; reopenCompleted: boolean };
 }

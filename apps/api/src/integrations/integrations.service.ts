@@ -10,6 +10,7 @@ import { JOB_QUEUE, type JobQueue, QUEUES } from "../jobs/queue";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OpportunityAccess } from "../opportunities/access.service";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/storage";
+import { recordSentPack } from "../workflows/workflows.service";
 import { EMAIL_SENDER, type EmailSender, NotConfigured, SUBMISSION_CHANNEL, type SubmissionChannel, WHATSAPP_SENDER, type WhatsAppSender } from "./adapters";
 
 export type IntegrationKind = "email.send" | "whatsapp.send" | "submission.send";
@@ -105,7 +106,10 @@ export class IntegrationsService {
       const result = await this.run(job.kind as IntegrationKind, job.payload as Record<string, string>);
       await this.prisma.integrationJob.update({ where: { id: job.id }, data: { status: "succeeded", result: result as Prisma.InputJsonValue, lastError: null } });
       if (job.kind === "submission.send" && job.opportunityId) {
-        await this.audit.timeline(SYSTEM, { opportunityId: job.opportunityId, kind: "submission", body: `Submission pack emailed (${(result as { reference: string }).reference}).` });
+        const sent = result as { reference: string; versionIds?: string[] };
+        // What was emailed is recorded as a submission (recipient, files, message id), pending a response.
+        await recordSentPack(this.prisma, this.audit, job.opportunityId, (job.payload as { destination: string }).destination, sent.reference, sent.versionIds ?? []);
+        await this.audit.timeline(SYSTEM, { opportunityId: job.opportunityId, kind: "submission", body: `Submission pack emailed (${sent.reference}). Pending until the external party responds.` });
       }
     } catch (e) {
       const message = (e as Error).message.slice(0, 500);
@@ -134,20 +138,23 @@ export class IntegrationsService {
           include: { customer: true, documents: { where: { approval: "approved" }, include: { versions: { orderBy: { version: "desc" }, take: 1 } } } },
         });
         const documents = [];
+        const versionIds: string[] = [];
         for (const d of opp.documents) {
           const v = d.versions[0];
           if (!v || v.scanStatus === "infected") continue;
           const label = (DOCUMENT_TYPES as Record<string, { label: string }>)[d.documentType]?.label ?? d.documentType;
           // Links last 7 days for the recipient; storage enforces the expiry.
+          versionIds.push(v.id);
           documents.push({ label, url: await this.storage.signedUrl(v.storageKey, v.filename, Math.min(7 * 24 * 3600, 604800)) });
         }
-        return this.submissions.submit(p.destination, {
+        const sent = await this.submissions.submit(p.destination, {
           opportunityNumber: opp.number,
           customerName: opp.customer?.legalName ?? opp.companyName ?? opp.name,
           serviceType: SERVICE_TYPE_LABELS[opp.serviceType],
           summary: `Submitted by Utility Optimizer Limited.`,
           documents,
         });
+        return { ...sent, versionIds };
       }
     }
   }

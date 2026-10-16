@@ -76,7 +76,19 @@ Identity documents and bank statements are restricted: you can upload them but o
 | Documents Prepared | Customer linked; VAT number if VAT registered; landlord for rented sites; Worldpay: principals for the legal entity, risk answers (deposit/prepayment details if applicable), advertising method if no website. |
 | Submitted *(Operations/manager)* | All of the above, plus an MPRN for every electricity meter and a GPRN for every gas meter, every required document received and approved, the customer's signature, internal approval and (Worldpay) compliance approval. |
 
+Changes of legal entity and renewals add their own requirements (see **Cases** below).
+
 If something's missing, the CRM lists it. The **Overview → Checklist** shows the same list in advance.
+
+## Cases: change of entity and renewals
+
+The **Forms** tab of an energy deal starts with its case: the steps done so far, its status and what's still missing.
+
+- **Case details** records how the broker's request came in and, for a change of entity, the supply point. Search by MPRN/GPRN or address to match one already in our records (if several match, check carefully), or choose *new to us* and say where the MPRN/GPRN came from. Link or create the **incoming** customer: the outgoing account holder can't be used, and their bank details never appear on the new forms.
+- **Lease**: upload it under Documents. A draft (one you prepared, or one not yet signed) never counts; Operations checks the signed copy before submission.
+- **Renewal terms**: enter the proposed rates, term and start date on the contract; Operations verifies them before forms are generated. Forms show last time's values so you only change what's new, and you can say why.
+- **Record submission** once it's sent, choosing the exact files and the proof of delivery. **Record response** when the supplier answers: accepted (with their reference), changes required or rejected (with the reason; a correction task is created). A sent case is not complete: it needs the acceptance, and for a change of entity the confirmed effective date, before activation.
+- **Cases** in the menu lists every case by where it stands: overdue, awaiting approvals, ready to send, sent without acknowledgement, rejected and completed.
 
 ## After submission
 

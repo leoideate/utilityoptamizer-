@@ -13,7 +13,13 @@ import {
   PDFTextField,
   StandardFonts,
   decodePDFRawStream,
+  fill,
+  popGraphicsState,
+  pushGraphicsState,
+  rectangle,
   rgb,
+  setFillingGrayscaleColor,
+  setGraphicsState,
 } from "pdf-lib";
 import type { FormField } from "@uo/shared";
 
@@ -259,6 +265,43 @@ export async function verifyPdf(bytes: Uint8Array, pageCount: number, expect: Ex
     if (images < e.images) issues.push(`A signature is missing from page ${e.page + 1} after saving.`);
   }
   return issues;
+}
+
+/**
+ * A black and white (greyscale) copy for external parties that need one, made directly from the
+ * PDF instead of printing and rescanning. A grey rectangle in "Saturation" blend mode is laid over
+ * each page, so every colour renders as its own luminance while text and signatures stay vector.
+ * The copy is reopened and each page's original content must still be there.
+ */
+export async function greyscaleCopy(source: Uint8Array, title: string): Promise<{ bytes: Uint8Array; issues: string[] }> {
+  const doc = await PDFDocument.load(source);
+  const pages = doc.getPages();
+  const original = pages.map((p) => pageContent(doc, p));
+  const gs = doc.context.register(doc.context.obj({ Type: "ExtGState", BM: "Saturation" }));
+  for (const page of pages) {
+    const box = page.getMediaBox();
+    const key = page.node.newExtGState("UOGrey", gs);
+    page.pushOperators(pushGraphicsState(), setGraphicsState(key), setFillingGrayscaleColor(0.5), rectangle(box.x, box.y, box.width, box.height), fill(), popGraphicsState());
+  }
+  doc.setTitle(`${title} (black and white)`);
+  doc.setProducer("Utility Optimizer CRM");
+  const bytes = await doc.save({ useObjectStreams: false });
+
+  const issues: string[] = [];
+  let reopened: PDFDocument;
+  try {
+    reopened = await PDFDocument.load(bytes);
+  } catch {
+    return { bytes, issues: ["The black and white copy could not be reopened."] };
+  }
+  const copy = reopened.getPages();
+  if (copy.length !== pages.length) issues.push(`The black and white copy has ${copy.length} pages instead of ${pages.length}.`);
+  copy.forEach((p, i) => {
+    const content = pageContent(reopened, p);
+    if (original[i] !== undefined && !content.includes(original[i])) issues.push(`Page ${i + 1} of the black and white copy lost some of its content.`);
+    if (!/\/uogrey[-\d]*\s+gs/.test(content)) issues.push(`Page ${i + 1} of the black and white copy wasn't converted.`);
+  });
+  return { bytes, issues };
 }
 
 function pageContent(doc: PDFDocument, page: PDFPage): string {

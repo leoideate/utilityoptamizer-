@@ -179,6 +179,8 @@ export class CustomersService {
         contacts: { orderBy: [{ isPrimary: "desc" }, { firstName: "asc" }] },
         sites: { include: { meterPoints: true } },
         bankAccounts: { select: { id: true, ibanLast4: true, createdAt: true } },
+        // Supply points this customer has occupied, including ones since taken over by someone else.
+        occupancies: { orderBy: { recordedAt: "desc" }, include: { site: { select: { id: true, label: true, line1: true, city: true, customerId: true, meterPoints: { select: { fuel: true, mprn: true, gprn: true } } } } } },
       },
     });
     if (!c) throw new NotFound("Customer");

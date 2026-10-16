@@ -90,6 +90,12 @@ export class FormsController {
     return this.forms.review(a, id, body);
   }
 
+  /** Makes the black and white copy of a form, for external parties that need one. */
+  @Post("forms/:id/mono")
+  mono(@CurrentUser() a: Actor, @Param("id", Id) id: string) {
+    return this.forms.monoCopy(a, id);
+  }
+
   @Get("opportunities/:id/bill-checks")
   billChecks(@CurrentUser() a: Actor, @Param("id", Id) id: string) {
     return this.forms.billChecks(a, id);

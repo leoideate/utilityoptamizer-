@@ -18,6 +18,7 @@ import {
 } from "@uo/shared";
 import { AuditService } from "../audit/audit.service";
 import { type Actor, actorRef } from "../common/actor";
+import { CryptoService } from "../common/crypto.service";
 import { Forbidden, RuleViolation, assertRules } from "../common/errors";
 import type { Tx } from "../common/prisma.service";
 import { PrismaService } from "../common/prisma.service";
@@ -42,7 +43,13 @@ export class OpportunitiesService {
     private readonly activities: ActivitiesService,
     private readonly notifications: NotificationsService,
     private readonly documents: DocumentsService,
+    private readonly crypto: CryptoService,
   ) {}
+
+  /** Gate facts, with the incoming/outgoing IBAN comparison a change of entity needs. */
+  facts(id: string, db: Tx | PrismaService = this.prisma) {
+    return loadGateFacts(db, id, this.crypto);
+  }
 
   // -------------------------------------------------------------------------
   // Create / update
@@ -193,7 +200,7 @@ export class OpportunitiesService {
     if (isAtOrAfter(target, "submitted") && target !== "renewal_scheduled" && !can(actor, "opportunity.submit")) {
       throw new Forbidden("Only Operations or a manager can submit applications.");
     }
-    const issues = stageGateIssues(await loadGateFacts(this.prisma, id), target);
+    const issues = stageGateIssues(await this.facts(id), target);
     if (issues.length) throw new RuleViolation(issues);
 
     await this.prisma.$transaction((tx) => this.enterStage(tx, actor, opp, target));
@@ -318,11 +325,13 @@ export class OpportunitiesService {
     if (opp.outcome === "won") return;
     if (opp.outcome === "lost") throw new RuleViolation(["This opportunity is lost. Reopen it before activating."]);
     if (!opp.stageKey || !OPEN_STAGES_AFTER_SUBMISSION.includes(opp.stageKey)) throw new RuleViolation(["Only submitted opportunities can be activated."]);
-    const issues = stageGateIssues(await loadGateFacts(this.prisma, id), "submitted");
+    // Completion needs everything submission needed, plus the external party's acceptance (and for a change of entity, the confirmed date).
+    const issues = stageGateIssues(await this.facts(id), "live_won");
     if (issues.length) throw new RuleViolation(issues);
 
     await this.prisma.$transaction(async (tx) => {
       const customerId = opp.customerId ?? (await this.createCustomerFromCapture(tx, actor, opp));
+      await this.handOverSupplyPoints(tx, actor, opp, customerId, input.activationDate);
       const activation = input.activationDate;
       let renewalDate: string | null = null;
       const consider = (end: string | null) => {
@@ -361,7 +370,7 @@ export class OpportunitiesService {
         applicationStatus: "Live",
       });
 
-      for (const key of ["submission_follow_up", "signature_reminder", "missing_documents", "missing_information", "compliance_query", "activation_due"]) {
+      for (const key of ["submission_follow_up", "submission_correction", "renewal_deadline", "signature_reminder", "missing_documents", "missing_information", "compliance_query", "activation_due"]) {
         await this.activities.completeAutomated(tx, id, key);
       }
       // Renewal review ~120 days before the end date (or a 30-day check-in when there's no term).
@@ -384,6 +393,34 @@ export class OpportunitiesService {
       );
       if (opp.ownerId) await this.notifications.notify(opp.ownerId, { title: `${opp.name} is live`, link: `/opportunities/${id}` }, tx);
     });
+  }
+
+  /**
+   * A change of entity links the incoming customer to the supply point from the confirmed
+   * effective date. Occupancy rows are append-only, so the outgoing customer's tenure is kept;
+   * the site's current customer pointer moves to the incoming customer.
+   */
+  private async handOverSupplyPoints(tx: Tx, actor: Actor, opp: OppWithStage, customerId: string, activationDate: string) {
+    if (!opp.supplyChanges.includes("change_of_legal_entity") || opp.serviceType === "merchant_services") return;
+    const kase = await tx.workflowCase.findUnique({ where: { opportunityId: opp.id } });
+    const confirmed = await tx.submissionResponse.findFirst({ where: { opportunityId: opp.id, outcome: "change_confirmed" }, orderBy: { recordedAt: "desc" } });
+    const from = confirmed?.effectiveDate ?? dateOnly(activationDate);
+    const sites = await tx.supplySite.findMany({ where: { OR: [{ opportunityId: opp.id }, ...(kase?.siteId ? [{ id: kase.siteId }] : [])] } });
+    for (const site of sites) {
+      // Record the outgoing occupant once, so their history survives the pointer moving.
+      const previous = site.customerId && site.customerId !== customerId ? site.customerId : kase?.siteId === site.id ? kase.outgoingCustomerId : null;
+      if (previous && !(await tx.supplyOccupancy.count({ where: { siteId: site.id, customerId: previous } }))) {
+        await tx.supplyOccupancy.create({ data: { siteId: site.id, customerId: previous, fromDate: null, recordedById: actorRef(actor) } });
+      }
+      await tx.supplyOccupancy.create({ data: { siteId: site.id, customerId, fromDate: from, opportunityId: opp.id, recordedById: actorRef(actor) } });
+      if (site.customerId !== customerId) await tx.supplySite.update({ where: { id: site.id }, data: { customerId } });
+      await this.audit.record(
+        actor,
+        { action: "supply_point.occupancy", entityType: "supply_site", entityId: site.id, summary: `Supply point taken over from ${isoDay(from)}`, data: { from: previous, to: customerId, opportunityId: opp.id } },
+        { opportunityId: opp.id, customerId, kind: "activation", body: `Supply point ${site.label || site.line1} linked to the incoming customer from ${isoDay(from)}; the previous occupier's history is kept.` },
+        tx,
+      );
+    }
   }
 
   /** On activation, expected commission from the selected quote becomes confirmed. */
@@ -577,7 +614,7 @@ export class OpportunitiesService {
         _count: { select: { sites: true, contracts: true, merchantApps: true, documents: true, activities: { where: { status: "open" } } } },
       },
     });
-    const facts = await loadGateFacts(this.prisma, id);
+    const facts = await this.facts(id);
     // Outstanding requirements for the next gates, so the workspace can show a checklist.
     const gates = Object.fromEntries(GATE_STAGES.map((k) => [k, stageGateIssues(facts, k)]));
     return {
@@ -597,8 +634,8 @@ export class OpportunitiesService {
   /** Lists what blocks a stage, so the UI can explain before the user tries. */
   async gatePreview(actor: Actor, id: string, target: StageKey) {
     await this.access.readable(actor, id);
-    return { stage: target, issues: stageGateIssues(await loadGateFacts(this.prisma, id), target) };
+    return { stage: target, issues: stageGateIssues(await this.facts(id), target) };
   }
 }
 
-const GATE_STAGES = ["proposal_sent", "supplier_selected", "documents_prepared", "submitted"] as const;
+const GATE_STAGES = ["proposal_sent", "supplier_selected", "documents_prepared", "submitted", "live_won"] as const;

@@ -234,6 +234,8 @@ export const DOCUMENT_TYPES = {
   supplier_contract: { label: "Signed supplier contract", sensitive: false },
   change_of_tenancy: { label: "Change of tenancy form", sensitive: false },
   lease_agreement: { label: "Signed lease agreement", sensitive: false },
+  outgoing_consent: { label: "Outgoing account holder's consent", sensitive: false },
+  request_message: { label: "Broker request (email or WhatsApp)", sensitive: false },
   meter_reading_photo: { label: "Time-stamped meter reading photo", sensitive: false },
   application_form: { label: "Supplier application form", sensitive: false },
   rate_card: { label: "Rate card", sensitive: false },

@@ -6,6 +6,7 @@ import {
   type LegalEntity,
   type OccupancyType,
   type PrincipalRole,
+  type SaleType,
   type ServiceType,
   type SignatureStatus,
   type SupplyChange,
@@ -18,6 +19,7 @@ import {
 } from "./enums";
 import type { FormStatus } from "./forms";
 import { type StageKey, isAtOrAfter } from "./stages";
+import { type CaseKind, type ChecklistItem, type WorkflowFacts, caseKind } from "./workflows";
 
 /**
  * Plain facts about an opportunity that the stage gates need. The API builds this from
@@ -25,6 +27,7 @@ import { type StageKey, isAtOrAfter } from "./stages";
  */
 export interface GateFacts {
   serviceType: ServiceType;
+  saleType?: SaleType;
   customerId: string | null;
   selectedSupplierId: string | null;
   internalApproval: ApprovalState;
@@ -74,7 +77,9 @@ export interface GateFacts {
   /** Result of checking the latest previous-supplier bill; null when no check covers it. */
   billCheck?: { passed: boolean } | null;
   /** Current (not superseded) generated supplier forms. */
-  forms?: { name: string; status: FormStatus; qcPassed: boolean }[];
+  forms?: { name: string; status: FormStatus; qcPassed: boolean; documentType?: string }[];
+  /** Workflow case evidence (change of entity, renewal, submission and response). Absent: those rules are skipped. */
+  workflow?: WorkflowFacts;
 }
 
 const docLabel = (t: string) => (DOCUMENT_TYPES as Record<string, { label: string }>)[t]?.label ?? t;
@@ -223,7 +228,153 @@ export function stageGateIssues(f: GateFacts, target: StageKey): string[] {
     }
   }
 
+  const w = f.workflow;
+  if (w && !merchant) {
+    const kind = caseKind({ serviceType: f.serviceType, saleType: f.saleType, supplyChanges: f.supplyChanges });
+    if (at("documents_prepared")) {
+      for (const item of caseChecklist(f)) if (!item.done && item.issue) issues.push(item.issue);
+      if (kind === "change_of_entity" && w.sharedIban) issues.push("The incoming customer's IBAN is the same as the outgoing customer's. Record the incoming customer's own bank account.");
+      if (kind === "renewal" && !w.terms.verified) issues.push(w.terms.complete ? "Verify the renewal terms (rates, term, start date and supplier)." : "Enter the renewal terms (rates, term, start date and supplier), then verify them.");
+    }
+    if (at("submitted")) {
+      if (kind === "change_of_entity") {
+        if (!w.lease.hasCopy) issues.push("Upload the lease agreement under Documents: a signed lease is needed before submission.");
+        else if (w.lease.status === null) issues.push("Check the lease agreement (draft or signed, names, address, dates and signatures).");
+        else if (w.lease.status === "draft") issues.push("The lease is still a draft. Upload the copy signed by the landlord and tenant, then check it.");
+        else if (!w.lease.passed) issues.push("The signed lease failed its check. Get a lease that matches this case and is signed by both parties.");
+        if (w.supplier?.outgoingConsentRequired && !f.documents.some((d) => d.documentType === "outgoing_consent" && d.received && d.approval === "approved")) {
+          issues.push("This supplier needs the outgoing account holder's consent: upload and approve it under Documents.");
+        }
+      }
+      if (kind === "renewal") {
+        const route = w.supplier?.renewalRoute ?? "full_form";
+        if (route === "rate_card_only") {
+          if (!f.documents.some((d) => d.documentType === "rate_card" && d.received && d.approval === "approved")) issues.push("This supplier renews on the rate card alone: upload and approve the signed rate card.");
+        } else if (!(f.forms ?? []).some((x) => x.documentType === "application_form" && x.status === "approved" && x.qcPassed)) {
+          issues.push("This supplier needs its full renewal form: generate it, add the signatures and have it reviewed.");
+        }
+      }
+    }
+    if (at("awaiting_confirmation")) {
+      const latest = w.submission.latest;
+      if (!latest) issues.push("Record what was sent to the external party (recipient, files and proof of delivery).");
+      else if (!latest.accepted) issues.push("Record the external party's acceptance and reference: a sent submission is not an accepted one.");
+    }
+    if (at("live_won") && kind === "change_of_entity" && !w.submission.latest?.effectiveDateConfirmed) {
+      issues.push("Record the confirmed effective date of the change of entity.");
+    }
+  }
+
   return [...new Set(issues)];
+}
+
+// ---------------------------------------------------------------------------
+// Workflow cases: what's still needed, and where the case stands
+// ---------------------------------------------------------------------------
+
+const kindOf = (f: GateFacts): CaseKind => caseKind({ serviceType: f.serviceType, saleType: f.saleType, supplyChanges: f.supplyChanges });
+
+function meterIdsDone(f: GateFacts) {
+  const pts = f.sites.flatMap((s) => s.meterPoints);
+  const elec = !needsElectricity(f.serviceType) || (pts.some((m) => m.fuel === "electricity") && pts.filter((m) => m.fuel === "electricity").every((m) => m.mprn));
+  const gas = !needsGas(f.serviceType) || (pts.some((m) => m.fuel === "gas") && pts.filter((m) => m.fuel === "gas").every((m) => m.gprn));
+  return elec && gas;
+}
+
+/**
+ * The guided checklist of details a case needs before documents are prepared. For a customer
+ * new to us it doubles as the missing-information list when there is no bill.
+ */
+export function caseChecklist(f: GateFacts): ChecklistItem[] {
+  const w = f.workflow;
+  if (!w || f.serviceType === "merchant_services") return [];
+  const kind = kindOf(f);
+  const ids = meterIdsDone(f);
+  const items: ChecklistItem[] = [];
+  const add = (key: string, label: string, done: boolean, issue?: string) => items.push({ key, label, done, issue });
+
+  if (kind === "change_of_entity") {
+    add("supply_point", "Supply point matched from our records or added", w.hasSupplyPoint, "Match the supply point from our records, or add it if it's new to us.");
+    if (w.supplyPath === "new_supply_point") add("supply_source", "Source of the supply details recorded and verified", w.supplySourceVerified, "Record where the MPRN/GPRN and address came from (the lease alone doesn't prove the meter).");
+    add("meter_ids", "MPRN/GPRN for every meter", ids, "Enter the MPRN/GPRN for every meter at the supply point.");
+    add("incoming_customer", "Incoming customer linked as a separate record", !!f.customerId && !w.incomingIsOutgoing, w.incomingIsOutgoing ? "Link the incoming customer: the outgoing account holder can't be the incoming customer." : "Create or link the incoming customer.");
+    add("occupancy_date", "Proposed occupancy date", w.occupancyDate, "Enter the incoming customer's proposed occupancy date.");
+    add("contact_name", "Incoming contact name", w.incoming.contactName, "Add the incoming customer's contact name.");
+    add("contact_reach", "Incoming contact email or phone", w.incoming.contactReach, "Add the incoming customer's email or phone.");
+    add("billing_address", "Incoming billing address", w.incoming.billingAddress, "Add the incoming customer's billing address.");
+    add("iban", "Incoming customer's IBAN on file", w.incoming.iban, "Add the incoming customer's own bank account (IBAN).");
+    add("landlord_name", "Landlord name", w.landlord.name, "Enter the landlord's name on the supply site.");
+    add("landlord_contact", "Landlord contact details", w.landlord.contact, "Enter the landlord's contact details on the supply site.");
+  } else if (kind === "renewal") {
+    add("customer_path", "Existing client or new to us", w.customerPath !== null || w.renewalOfPrevious, "Choose whether the customer is an existing client or new to us.");
+    add("customer", "Customer record linked", !!f.customerId);
+    add("contact_name", "Contact name", w.incoming.contactName, "Add the customer's contact name.");
+    add("contact_reach", "Contact email or phone", w.incoming.contactReach, "Add the customer's email or phone.");
+    add("billing_address", "Billing address", w.incoming.billingAddress, "Add the customer's billing address.");
+    add("supply_point", "Supply site", f.sites.length > 0, "Add the supply site.");
+    add("meter_ids", "MPRN/GPRN for every meter", ids, "Enter the MPRN/GPRN for every meter.");
+    add("current_supplier", "Current supplier", w.currentSupplier, "Enter the current supplier on the contract.");
+    add("contract_end", "Current contract end date", w.contractEndDate, "Enter the current contract end date.");
+    if (w.customerPath === "new_to_us") add("bill", "Current bill received and checked (optional when the checklist is complete)", w.billVerified);
+  }
+  return items;
+}
+
+export interface CaseStep {
+  key: string;
+  label: string;
+  done: boolean;
+}
+
+/** Ordered steps of the case's workflow and whether each is evidenced. */
+export function caseSteps(f: GateFacts, outcome: "open" | "won" | "lost" = "open"): { kind: CaseKind; steps: CaseStep[]; status: string; exception: "changes_required" | "rejected" | "cancelled" | null } {
+  const kind = kindOf(f);
+  const w = f.workflow;
+  const forms = f.forms ?? [];
+  const checklistDone = caseChecklist(f).every((i) => i.done || !i.issue);
+  // Supplier forms generated here, or prepared outside the CRM and uploaded.
+  const formsDrafted = forms.some((x) => x.qcPassed) || f.documents.some((d) => ["application_form", "change_of_tenancy", "supplier_contract"].includes(d.documentType) && d.received);
+  const signed = f.signatures.some((s) => s.status === "completed" && s.hasCustomerSigner) && !forms.some((x) => x.status !== "approved");
+  const ready = stageGateIssues(f, "submitted").length === 0;
+  const latest = w?.submission.latest ?? null;
+  const steps: (CaseStep & { waiting: string })[] = [];
+  const step = (key: string, label: string, done: boolean, waiting: string) => steps.push({ key, label, done, waiting });
+
+  if (kind === "change_of_entity") {
+    step("request", "Request received", !!w?.recorded, "New request");
+    step("supply_point", "Supply point matched or created", !!w?.hasSupplyPoint, "Request received");
+    step("incoming_details", "Incoming details complete", checklistDone, "Awaiting incoming details");
+    step("tenancy", "Signed lease checked", !!w?.lease.passed, "Awaiting tenancy evidence");
+    step("documents", "Documents drafted", formsDrafted, "Documents to prepare");
+    step("signatures", "Signatures and approvals", signed, "Awaiting signed lease and approvals");
+  } else if (kind === "renewal") {
+    step("request", "Request received", !!w && (w.requestLogged || w.renewalOfPrevious), "Renewal due");
+    step("data_review", "Details verified", checklistDone, "Data review");
+    step("terms", "Terms confirmed", !!w?.terms.verified, "Awaiting terms confirmation");
+    const route = w?.supplier?.renewalRoute ?? "full_form";
+    step(
+      "documents",
+      route === "rate_card_only" ? "Rate card received" : "Documents generated",
+      route === "rate_card_only" ? f.documents.some((d) => d.documentType === "rate_card" && d.received) : forms.some((x) => x.documentType === "application_form" && x.qcPassed),
+      "Terms confirmed",
+    );
+    step("approvals", "Client and broker approvals", signed, "Awaiting approvals");
+  } else {
+    step("documents", "Documents prepared", formsDrafted || f.documents.some((d) => d.received), "Preparing documents");
+    step("approvals", "Signatures and approvals", signed, "Awaiting signatures");
+  }
+  step("ready", "Ready to submit", ready, "Final checks");
+  step("sent", kind === "renewal" ? "Sent to external party" : "Sent", !!latest, "Ready to submit");
+  step("accepted", "Accepted", !!latest?.accepted, kind === "renewal" ? "Sent to external party" : "Sent");
+  if (kind === "change_of_entity") step("confirmed", "Entity change confirmed", !!latest?.effectiveDateConfirmed, "Accepted");
+  step("completed", "Completed", outcome === "won", kind === "change_of_entity" ? "Entity change confirmed" : "Accepted");
+
+  // Later evidence implies the earlier steps once the case is won (e.g. records from before these workflows).
+  if (outcome === "won") for (const s of steps) s.done = true;
+  const exception = outcome === "lost" ? "cancelled" : outcome === "open" && latest?.lastOutcome === "rejected" ? "rejected" : outcome === "open" && latest?.lastOutcome === "changes_required" ? "changes_required" : null;
+  const current = steps.find((s) => !s.done);
+  const status = exception === "cancelled" ? "Cancelled" : exception === "rejected" ? "Rejected" : exception === "changes_required" ? "Changes required" : current ? current.waiting : "Completed";
+  return { kind, steps: steps.map(({ waiting: _w, ...s }) => s), status, exception };
 }
 
 /** Required documents not yet received (drives reminders and the Missing Documents view). */

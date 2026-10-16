@@ -16,9 +16,11 @@ These are deliberate gaps or follow-up work. Nothing here pretends to work when 
 | Notifications by email or push | In-app only | Bell notifications, plus reminders for tasks with a reminder time. |
 | API keys for machine clients | Not built | Session-based API for users; HMAC-signed endpoints for website leads and e-signature events. |
 | Custom pipeline stages | Rename only | The 18 stages and their rules are fixed in code; names can be changed in Administration. |
+| Workflow consent channels and acknowledgements | Manual | The briefs leave open which channels give valid consent per supplier, whether acknowledgements arrive by email or portal, and the retention period per evidence type. Consent is an authorised signature upload (or an e-signature request); responses are recorded by Operations; evidence follows the general retention policy. |
+| Bill data extraction for renewals | Manual | A renewal for a customer new to us uses the bill check and the case checklist; values are typed, not read from the bill. |
 | Commission rules | Manual | Expected commission comes from the chosen quotes and is confirmed at activation; Finance can add or adjust entries. No rate tables per supplier. |
 
-- **Supplier forms**: a black-and-white copy isn't generated (the colour PDF is clean, so rescanning isn't needed); add one if a processor insists. Forms fill from the deal's first supply site and first live contract, so multi-site applications need the extra sites typed. Text uses Helvetica, which covers Irish and Western European characters (fadas, €) but not others; the quality check names any character it can't print. Signature capture is an authorised upload reviewed by a colleague, not a qualified e-signature; use the Signatures tab with an e-signature provider where a supplier requires one.
+- **Supplier forms**: the black and white copy is greyscale (each colour shown as its brightness) rather than a thresholded scan; text and signatures stay sharp. Forms fill from the deal's first supply site and first live contract, so multi-site applications need the extra sites typed. Text uses Helvetica, which covers Irish and Western European characters (fadas, €) but not others; the quality check names any character it can't print. Signature capture is an authorised upload reviewed by a colleague, not a qualified e-signature; use the Signatures tab with an e-signature provider where a supplier requires one.
 
 ## Operational notes
 

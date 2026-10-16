@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, type Role } from "@prisma/client";
-import { can } from "@uo/shared";
+import { RENEWAL_ROUTES, can } from "@uo/shared";
 import { z } from "zod";
 import { AuditService } from "../audit/audit.service";
 import { AuthService } from "../auth/auth.service";
@@ -27,6 +27,10 @@ export const supplierSchema = z.object({
   name: z.string().trim().min(1).max(120),
   kind: z.enum(["energy", "merchant"]),
   submissionEmail: z.string().trim().email().nullable().optional().or(z.literal("").transform(() => null)),
+  /** Workflow rules by supplier: what a renewal needs, whether a change of entity needs the outgoing holder's consent, black and white copies. */
+  renewalRoute: z.enum(RENEWAL_ROUTES).optional(),
+  outgoingConsentRequired: z.boolean().optional(),
+  monoCopyRequired: z.boolean().optional(),
   active: z.boolean().optional(),
 });
 
@@ -126,7 +130,7 @@ export class AdminService {
   }
 
   async setSetting(actor: Actor, key: string, value: unknown) {
-    this.need(actor, key.startsWith("retention") ? "admin.retention" : "admin.integrations");
+    this.need(actor, key.startsWith("retention") ? "admin.retention" : key.startsWith("workflow") ? "admin.pipeline" : "admin.integrations");
     await this.prisma.setting.upsert({ where: { key }, create: { key, value: value as Prisma.InputJsonValue }, update: { value: value as Prisma.InputJsonValue } });
     await this.audit.log(actor, { action: "setting.update", entityType: "setting", entityId: key, summary: `Changed setting ${key}` });
   }

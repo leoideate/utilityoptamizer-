@@ -69,6 +69,9 @@ Generated from `apps/api/prisma/schema.prisma` (`node scripts/gen-field-dictiona
 | name | String | ✓ |  |
 | kind | Enum: energy, merchant | ✓ |  |
 | submission_email | String |  | Where "Send submission pack" emails applications. Optional |
+| renewal_route | Enum: full_form, rate_card_only | ✓ | What a renewal with this supplier needs: its full form, or the signed rate card alone. Default full_form |
+| outgoing_consent_required | Boolean | ✓ | A change of legal entity also needs the outgoing account holder's consent. Default false |
+| mono_copy_required | Boolean | ✓ | Submissions must include a black and white copy of each signed form. Default false |
 | active | Boolean | ✓ | Default true |
 
 ## customers
@@ -486,6 +489,10 @@ One filled copy of a template for an opportunity. Never edited; regenerating sup
 | document_item_id | UUID | ✓ |  |
 | version_id | UUID | ✓ | The unsigned generated PDF |
 | signed_version_id | UUID |  | The PDF with signatures applied, once every required signer has one |
+| mono_version_id | UUID |  | Black and white copy of the signed (or unsigned) PDF, for suppliers that need one |
+| previous_form_id | UUID |  | The customer's previous form from the same template (renewals), compared field by field |
+| changed_since_previous | Json | ✓ | Labels of fields whose value differs from the previous form. Default "[]" |
+| change_reason | String |  |  |
 | status | Enum: generated, awaiting_review, approved, rejected, superseded | ✓ | Default generated |
 | qc_passed | Boolean | ✓ |  |
 | qc_issues | Json | ✓ | Default "[]" |
@@ -532,6 +539,117 @@ Verification of the previous supplier's bill for a change of supplier.
 | notes | String |  |  |
 | verified_by_id | UUID |  |  |
 | verified_at | DateTime | ✓ | Default now() |
+
+## workflow_cases
+
+The back-office case on an opportunity: how the request came in, the customer and supply
+paths, and for a change of entity the supply point taken over and the outgoing account.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| opportunity_id | UUID | ✓ | Unique |
+| customer_path | Enum: existing_client, new_to_us |  |  |
+| request_channel | String |  |  |
+| request_received_at | Date |  |  |
+| request_note | String |  |  |
+| supply_path | Enum: known_supply_point, new_supply_point |  |  |
+| site_id | UUID |  | A supply site already in our records (known supply point). It keeps its history |
+| outgoing_customer_id | UUID |  |  |
+| outgoing_account_ref | String |  |  |
+| outgoing_contract_ref | String |  |  |
+| occupancy_date | Date |  |  |
+| supply_source | String |  | Where a new supply point's MPRN/GPRN and address came from, and who verified it |
+| supply_verified_by_id | UUID |  |  |
+| supply_verified_at | DateTime |  |  |
+| notice_deadline | Date |  |  |
+| target_submission_date | Date |  |  |
+| created_by_id | UUID |  |  |
+| created_at | DateTime | ✓ | Default now() |
+| updated_at | DateTime | ✓ |  |
+
+## lease_checks
+
+A check of one lease version. Append-only: a draft and the signed copy are separate rows.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| opportunity_id | UUID | ✓ |  |
+| document_version_id | UUID | ✓ |  |
+| status | Enum: draft, signed | ✓ |  |
+| landlord_name | String | ✓ |  |
+| tenant_name | String | ✓ |  |
+| tenancy_start_date | Date |  |  |
+| landlord_matches | Boolean | ✓ |  |
+| tenant_matches | Boolean | ✓ |  |
+| address_matches | Boolean | ✓ |  |
+| dates_match | Boolean | ✓ |  |
+| signed_by_landlord | Boolean | ✓ |  |
+| signed_by_tenant | Boolean | ✓ |  |
+| passed | Boolean | ✓ |  |
+| notes | String |  |  |
+| verified_by_id | UUID |  |  |
+| verified_at | DateTime | ✓ | Default now() |
+
+## terms_checks
+
+Admin's verification of the proposed terms. Only counts while the terms are unchanged (hash).
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| opportunity_id | UUID | ✓ |  |
+| snapshot_hash | String | ✓ |  |
+| terms | Json | ✓ | The terms that were verified (rates, term, dates, supplier); no personal data |
+| verified_by_id | UUID |  |  |
+| verified_at | DateTime | ✓ | Default now() |
+
+## Submission
+
+What was sent to the external party: recipient, channel, the exact file versions and proof of delivery.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| opportunity_id | UUID | ✓ |  |
+| recipient | String | ✓ |  |
+| channel | String | ✓ |  |
+| sent_at | Date | ✓ |  |
+
+## submission_responses
+
+The external party's answer to a submission. Append-only.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| submission_id | UUID | ✓ |  |
+| opportunity_id | UUID | ✓ |  |
+| outcome | Enum: accepted, changes_required, rejected, change_confirmed | ✓ |  |
+| received_via | String | ✓ |  |
+| received_at | Date | ✓ |  |
+| external_reference | String |  |  |
+| effective_date | Date |  |  |
+| reason | String |  |  |
+| correction_owner_id | UUID |  |  |
+| correction_due_date | Date |  |  |
+| recorded_by_id | UUID |  |  |
+| recorded_at | DateTime | ✓ | Default now() |
+
+## supply_occupancies
+
+Who occupies a supply point from when. Append-only, so the outgoing customer's history is kept.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| site_id | UUID | ✓ |  |
+| customer_id | UUID | ✓ |  |
+| from_date | Date |  | Null when the start is unknown (an occupant recorded before this history existed) |
+| opportunity_id | UUID |  |  |
+| recorded_by_id | UUID |  |  |
+| recorded_at | DateTime | ✓ | Default now() |
 
 ## signature_templates
 

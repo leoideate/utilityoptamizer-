@@ -69,6 +69,16 @@ export class EnergyService {
   private async site(actor: Actor, siteId: string) {
     const site = await this.prisma.supplySite.findUnique({ where: { id: siteId } });
     if (!site) throw new NotFound("Supply site");
+    // A change-of-entity case that matched this supply point may also maintain it (e.g. the landlord's details).
+    const viaCase = await this.prisma.workflowCase.findMany({ where: { siteId }, select: { opportunityId: true } });
+    for (const c of viaCase) {
+      try {
+        await this.energyOpp(actor, c.opportunityId);
+        return site;
+      } catch {
+        // fall through to the site's own deal
+      }
+    }
     if (site.opportunityId) await this.energyOpp(actor, site.opportunityId);
     else {
       const viaContract = await this.prisma.energyContract.findFirst({ where: { siteId } });

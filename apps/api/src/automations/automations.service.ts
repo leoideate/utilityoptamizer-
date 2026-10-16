@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { type StageKey, addDays, missingInformation, outstandingDocuments, stagesBetween, today } from "@uo/shared";
+import { type StageKey, addDays, daysBetween, missingInformation, outstandingDocuments, stagesBetween, today } from "@uo/shared";
 import { ActivitiesService } from "../activities/activities.service";
 import { AuditService } from "../audit/audit.service";
 import { SYSTEM } from "../common/actor";
@@ -7,7 +7,11 @@ import { PrismaService } from "../common/prisma.service";
 import { dateOnly, isoDay } from "../common/values";
 import { NotificationsService } from "../notifications/notifications.service";
 import { loadGateFacts } from "../opportunities/facts";
+import { workflowReminders } from "../workflows/workflows.service";
 import { RenewalsService } from "./renewals.service";
+
+/** Automated tasks that belong to the back-office workflows; overdue ones are escalated to a manager. */
+export const WORKFLOW_TASK_KEYS = ["renewal_call", "renewal_deadline", "submission_follow_up", "submission_correction"] as const;
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -34,6 +38,8 @@ export interface AutomationReport {
   worldpayFollowUps: number;
   activationDue: number;
   documentExpiry: number;
+  renewalDeadlines: number;
+  escalations: number;
   renewalsCreated: number;
   renewalsSkipped: number;
 }
@@ -72,6 +78,8 @@ export class AutomationsService {
       worldpayFollowUps: await this.submissionFollowUps(asOf, now, "merchant"),
       activationDue: await this.activationDue(asOf),
       documentExpiry: await this.documentExpiry(asOf),
+      renewalDeadlines: await this.renewalDeadlines(asOf),
+      escalations: await this.escalateOverdue(asOf),
       renewalsCreated: 0,
       renewalsSkipped: 0,
     };
@@ -320,6 +328,86 @@ export class AutomationsService {
           dueDate: asOf,
           ownerId: d.opportunity.ownerId,
           automationKey: `document_expiry:${d.id}`,
+        })
+      )
+        n++;
+    }
+    return n;
+  }
+
+  /**
+   * Open renewals not yet sent get a deadline task at each configured point before the current
+   * contract ends (Settings → workflow.reminders), and when the case's target submission date nears.
+   */
+  async renewalDeadlines(asOf: string): Promise<number> {
+    const { renewalReminderDays } = await workflowReminders(this.prisma);
+    const furthest = Math.max(...renewalReminderDays);
+    const opps = await this.prisma.opportunity.findMany({
+      where: {
+        outcome: "open",
+        saleType: "renewal",
+        serviceType: { in: ["electricity", "gas", "dual_fuel"] },
+        submissions: { none: {} },
+        OR: [{ renewalDate: { lte: dateOnly(addDays(asOf, furthest)) } }, { workflowCase: { targetSubmissionDate: { lte: dateOnly(addDays(asOf, 7)) } } }],
+      },
+      include: { workflowCase: { select: { targetSubmissionDate: true } } },
+    });
+    let n = 0;
+    for (const o of opps) {
+      const end = isoDay(o.renewalDate);
+      const target = isoDay(o.workflowCase?.targetSubmissionDate);
+      const left = end ? daysBetween(asOf, end) : null;
+      const reached = left !== null && renewalReminderDays.some((d) => left <= d);
+      const targetNear = !!target && daysBetween(asOf, target) <= 7;
+      if (!reached && !targetNear) continue;
+      const summary =
+        targetNear && (!end || target! < end)
+          ? `Renewal must be submitted by ${target}`
+          : left! < 0
+            ? `Renewal overdue: the contract ended ${end}`
+            : `Renewal deadline: the contract ends ${end} (${left} days)`;
+      if (
+        await this.activities.ensureAutomated(this.prisma, {
+          opportunityId: o.id,
+          customerId: o.customerId,
+          type: "renewal_review",
+          summary,
+          dueDate: asOf,
+          priority: (left !== null && left <= 30) || targetNear ? "urgent" : "high",
+          ownerId: o.ownerId ?? (await this.activities.leastLoaded(this.prisma, "operations")),
+          automationKey: "renewal_deadline",
+        })
+      )
+        n++;
+    }
+    return n;
+  }
+
+  /** Workflow tasks overdue by the configured days, or with nobody to do them, go to a manager. */
+  async escalateOverdue(asOf: string): Promise<number> {
+    const { escalateAfterDays } = await workflowReminders(this.prisma);
+    const overdue = await this.prisma.activity.findMany({
+      where: {
+        status: "open",
+        automationKey: { in: [...WORKFLOW_TASK_KEYS] },
+        opportunity: { outcome: "open" },
+        OR: [{ dueDate: { lt: dateOnly(addDays(asOf, -escalateAfterDays)) } }, { ownerId: null }],
+      },
+      include: { owner: { select: { name: true } } },
+    });
+    let n = 0;
+    for (const a of overdue) {
+      const manager = await this.activities.leastLoaded(this.prisma, "manager");
+      if (
+        await this.activities.ensureAutomated(this.prisma, {
+          opportunityId: a.opportunityId!,
+          customerId: a.customerId,
+          type: "todo",
+          summary: a.ownerId ? `Escalated: "${a.summary}" is overdue (${a.owner?.name}, due ${isoDay(a.dueDate)})` : `Escalated: nobody is assigned "${a.summary}"`,
+          dueDate: asOf,
+          priority: "urgent",
+          ownerId: manager,
+          automationKey: `escalation:${a.automationKey}`,
         })
       )
         n++;

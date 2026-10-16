@@ -36,6 +36,8 @@ interface Profile {
   contacts: { id: string; firstName: string; lastName: string | null; jobTitle: string | null; email: string | null; phone: string | null; mobile: string | null; isPrimary: boolean }[];
   sites: { id: string; label: string | null; line1: string; meterPoints: { id: string; fuel: string; mprn: string | null; gprn: string | null }[] }[];
   bankAccounts: { id: string; ibanLast4: string; createdAt: string }[];
+  /** Supply points this customer has occupied (change of entity history), including ones since taken over. */
+  occupancies: { id: string; fromDate: string | null; recordedAt: string; site: { id: string; label: string | null; line1: string; customerId: string | null; meterPoints: { mprn: string | null; gprn: string | null }[] } }[];
   opportunities: { id: string; number: number; name: string; serviceType: "electricity"; saleType: string; outcome: "open"; stage: { name: string }; owner: { name: string } | null; createdAt: string }[];
   canReadBank: boolean;
 }
@@ -202,6 +204,19 @@ export default function CustomerPage() {
               ))}
               {!data.sites.length && <li className="px-5 py-4 text-sm text-muted">None yet.</li>}
             </ul>
+            {!!data.occupancies?.length && (
+              <div className="border-t border-border px-5 py-3 text-sm">
+                <p className="mb-1 font-medium">Occupancy history</p>
+                <ul className="space-y-0.5 text-xs text-muted">
+                  {data.occupancies.map((o) => (
+                    <li key={o.id}>
+                      {o.site.label || o.site.line1} ({o.site.meterPoints.map((m) => m.mprn ?? m.gprn).filter(Boolean).join(", ") || "no meters"}): {o.fromDate ? `from ${date(o.fromDate)}` : "before the change of entity"}
+                      {o.site.customerId !== data.id && " · since taken over by a new occupier"}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </Card>
           <Card>
             <CardHeader

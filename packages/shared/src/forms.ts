@@ -71,6 +71,11 @@ export const FORM_SOURCES = {
   "site.meterNumber": { label: "Meter number", group: "Supply site" },
   "site.mccCode": { label: "MCC / DUoS group", group: "Supply site" },
   "site.annualConsumptionKwh": { label: "Annual consumption (kWh)", group: "Supply site" },
+  "landlord.name": { label: "Landlord: name", group: "Property and tenancy" },
+  "landlord.contact": { label: "Landlord: contact details", group: "Property and tenancy" },
+  "tenancy.occupancyDate": { label: "Incoming occupancy date", group: "Property and tenancy" },
+  "outgoing.legalName": { label: "Previous occupier: name", group: "Previous occupier" },
+  "outgoing.accountRef": { label: "Previous occupier: account number", group: "Previous occupier" },
   "contract.existingSupplier": { label: "Current supplier", group: "Contract" },
   "contract.existingSupplierAccount": { label: "Current supplier account number", group: "Contract" },
   "contract.newSupplier": { label: "New supplier", group: "Contract" },
@@ -82,6 +87,7 @@ export const FORM_SOURCES = {
   "contract.peakRate": { label: "Peak rate", group: "Contract" },
   "contract.gasRate": { label: "Gas unit rate", group: "Contract" },
   "contract.standingCharge": { label: "Standing charge", group: "Contract" },
+  "contract.endDate": { label: "New contract end date", group: "Contract" },
   "bank.accountName": { label: "Bank: account name", group: "Bank (restricted)", restricted: true },
   "bank.iban": { label: "Bank: IBAN", group: "Bank (restricted)", restricted: true },
   "bank.bic": { label: "Bank: BIC", group: "Bank (restricted)", restricted: true },
@@ -103,7 +109,7 @@ export const FORM_SOURCE_KEYS = Object.keys(FORM_SOURCES) as FormSource[];
 export const isRestrictedSource = (s: string | null | undefined) => !!s && !!(FORM_SOURCES as Record<string, { restricted?: boolean }>)[s]?.restricted;
 
 /** Document types a template can produce. */
-export const FORM_DOCUMENT_TYPES = ["application_form", "rate_card", "direct_debit_mandate", "commercial_agreement", "letter_of_authority", "supplier_contract"] as const;
+export const FORM_DOCUMENT_TYPES = ["application_form", "rate_card", "direct_debit_mandate", "commercial_agreement", "letter_of_authority", "supplier_contract", "change_of_tenancy", "lease_agreement"] as const;
 export type FormDocumentType = (typeof FORM_DOCUMENT_TYPES)[number];
 
 // --- Schemas ---------------------------------------------------------------------
@@ -152,6 +158,8 @@ export const generateFormSchema = z.object({
   values: z.record(z.string(), z.union([z.string().max(500), z.boolean()])).default({}),
   /** Required when an IBAN differs from the one on file. */
   confirmIbanChange: z.boolean().optional(),
+  /** Why values changed since the customer's previous form (renewals); kept with the form. */
+  changeReason: z.string().trim().max(500).nullable().optional(),
 });
 
 export const formSignatureSchema = z.object({

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, Building2, CalendarCheck, FileSignature, MessagesSquare, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Menu as MenuIcon, ScanLine, Search, Settings, Zap } from "lucide-react";
+import { Bell, Building2, CalendarCheck, ClipboardList, FileSignature, MessagesSquare, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Menu as MenuIcon, ScanLine, Search, Settings, Zap } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -19,6 +19,7 @@ const NAV = [
   { href: "/opportunities", label: "Opportunities", icon: ListChecks },
   { href: "/customers", label: "Customers", icon: Building2 },
   { href: "/activities", label: "My tasks", icon: CalendarCheck },
+  { href: "/cases", label: "Cases", icon: ClipboardList },
   { href: "/chat", label: "Chat", icon: MessagesSquare },
   { href: "/scan", label: "Scan business card", icon: ScanLine },
 ];

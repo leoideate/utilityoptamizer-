@@ -1,5 +1,5 @@
 import { type TestApp, createTestApp, expectStatus, userAndClient } from "../support/app";
-import { type Team, createOpportunity, readyEnergy, readyMerchant, supplier } from "../support/fixtures";
+import { type Team, createOpportunity, readyEnergy, readyMerchant, sendAndAccept, supplier } from "../support/fixtures";
 
 let t: TestApp;
 let team: Team;
@@ -194,6 +194,11 @@ describe("customer linking and won retention (scenarios 10–12)", () => {
     const { oppId } = await readyEnergy(t, team);
     expectStatus(await team.ops.post(`/opportunities/${oppId}/stage`, { stage: "submitted" }), 204);
     expectStatus(await team.sales.post(`/opportunities/${oppId}/activate`, { activationDate: "2026-11-01" }), 403);
+    // Submitted is not accepted: the supplier's acceptance must be recorded first.
+    expect(expectStatus(await team.ops.post(`/opportunities/${oppId}/activate`, { activationDate: "2026-11-01" }), 422).body.issues).toContain(
+      "Record what was sent to the external party (recipient, files and proof of delivery).",
+    );
+    await sendAndAccept(team, oppId);
     expectStatus(await team.ops.post(`/opportunities/${oppId}/activate`, { activationDate: "2026-11-01", supplierReference: "EN-1001" }), 204);
 
     const ws = expectStatus(await team.sales.get(`/opportunities/${oppId}`), 200).body;
@@ -238,6 +243,7 @@ describe("customer linking and won retention (scenarios 10–12)", () => {
   it("only a manager can reopen a won deal", async () => {
     const { oppId } = await readyEnergy(t, team, "gas");
     await team.ops.post(`/opportunities/${oppId}/stage`, { stage: "submitted" });
+    await sendAndAccept(team, oppId);
     expectStatus(await team.ops.post(`/opportunities/${oppId}/activate`, { activationDate: "2026-10-01" }), 204);
     expectStatus(await team.sales.post(`/opportunities/${oppId}/reopen`), 403);
     expectStatus(await team.manager.post(`/opportunities/${oppId}/reopen`), 204);

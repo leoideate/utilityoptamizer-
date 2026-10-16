@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { CAPABILITIES, ROLES, ROLE_LABELS, type Role } from "@uo/shared";
+import { CAPABILITIES, DEFAULT_WORKFLOW_REMINDERS, RENEWAL_ROUTES, RENEWAL_ROUTE_LABELS, ROLES, ROLE_LABELS, type RenewalRoute, type Role, type WorkflowReminders } from "@uo/shared";
 import type { Supplier } from "@/components/domain";
 import { Dialog, TabPanel, Tabs } from "@/components/ui/overlays";
 import { Badge, Button, Card, CardHeader, Checkbox, Field, Input, IssueList, PageHeader, Select, Skeleton } from "@/components/ui/primitives";
@@ -203,7 +203,11 @@ function SuppliersAdmin() {
             <li key={s.id} className="flex items-center justify-between gap-2 px-5 py-2.5 text-sm">
               <span>
                 <span className={s.active ? "" : "text-muted line-through"}>{s.name}</span> <Badge>{s.kind === "energy" ? "Energy" : "Merchant"}</Badge>
-                <span className="block text-xs text-muted">{s.submissionEmail ?? "No submission email"}</span>
+                <span className="block text-xs text-muted">
+                  {s.submissionEmail ?? "No submission email"}
+                  {s.kind === "energy" &&
+                    ` · renewals: ${RENEWAL_ROUTE_LABELS[s.renewalRoute ?? "full_form"].toLowerCase()}${s.monoCopyRequired ? " · black and white copies" : ""}${s.outgoingConsentRequired ? " · outgoing holder's consent" : ""}`}
+                </span>
               </span>
               <Button size="sm" variant="ghost" onClick={() => setEditing(s)}>
                 Edit
@@ -229,7 +233,50 @@ function SuppliersAdmin() {
           ))}
         </ol>
       </Card>
+      <WorkflowReminderSettings />
     </div>
+  );
+}
+
+/** Reminder and escalation intervals for renewals, submissions and corrections. */
+function WorkflowReminderSettings() {
+  const qc = useQueryClient();
+  const saved = useQuery({ queryKey: ["admin", "workflow"], queryFn: () => api.get<WorkflowReminders>("/admin/settings/workflow") });
+  const [v, setV] = useState<{ followUp: string; renewal: string; escalate: string } | null>(null);
+  useEffect(() => {
+    const s = saved.data ?? (saved.isError ? DEFAULT_WORKFLOW_REMINDERS : null);
+    if (s && !v) setV({ followUp: String(s.submissionFollowUpDays), renewal: s.renewalReminderDays.join(", "), escalate: String(s.escalateAfterDays) });
+  }, [saved.data, saved.isError, v]);
+  const save = useAction(() => qc.invalidateQueries({ queryKey: ["admin", "workflow"] }));
+  if (!v) return <Skeleton className="h-40" />;
+  const days = v.renewal
+    .split(/[,\s]+/)
+    .filter(Boolean)
+    .map(Number);
+  return (
+    <Card>
+      <CardHeader title="Workflow reminders" description="When renewals, unanswered submissions and overdue workflow tasks create tasks or go to a manager." />
+      <div className="space-y-3 p-5">
+        <Field label="Chase an unanswered submission after (days)">
+          {(p) => <Input {...p} inputMode="numeric" value={v.followUp} onChange={(e) => setV({ ...v, followUp: e.target.value })} />}
+        </Field>
+        <Field label="Renewal deadline tasks (days before the contract ends)" hint="Comma-separated, e.g. 90, 60, 30, 14">
+          {(p) => <Input {...p} value={v.renewal} onChange={(e) => setV({ ...v, renewal: e.target.value })} />}
+        </Field>
+        <Field label="Escalate overdue workflow tasks to a manager after (days)">
+          {(p) => <Input {...p} inputMode="numeric" value={v.escalate} onChange={(e) => setV({ ...v, escalate: e.target.value })} />}
+        </Field>
+        <IssueList issues={save.issues} />
+        <div className="flex justify-end">
+          <Button
+            loading={save.running}
+            onClick={() => save.run(() => api.put("/admin/settings/workflow", { submissionFollowUpDays: Number(v.followUp), renewalReminderDays: days, escalateAfterDays: Number(v.escalate) }))}
+          >
+            Save
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -251,7 +298,15 @@ function StageRow({ index, stage }: { index: number; stage: { id: string; name: 
 }
 
 function SupplierDialog({ supplier, onClose }: { supplier?: Supplier; onClose: () => void }) {
-  const [v, setV] = useState({ name: supplier?.name ?? "", kind: supplier?.kind ?? "energy", submissionEmail: supplier?.submissionEmail ?? "", active: supplier?.active ?? true });
+  const [v, setV] = useState({
+    name: supplier?.name ?? "",
+    kind: supplier?.kind ?? "energy",
+    submissionEmail: supplier?.submissionEmail ?? "",
+    active: supplier?.active ?? true,
+    renewalRoute: supplier?.renewalRoute ?? ("full_form" as RenewalRoute),
+    monoCopyRequired: supplier?.monoCopyRequired ?? false,
+    outgoingConsentRequired: supplier?.outgoingConsentRequired ?? false,
+  });
   const { run, running, issues } = useAction(onClose);
   return (
     <Dialog
@@ -277,6 +332,24 @@ function SupplierDialog({ supplier, onClose }: { supplier?: Supplier; onClose: (
         <Field label="Submissions email" hint="Where “Send submission pack” emails applications.">
           {(p) => <Input {...p} type="email" value={v.submissionEmail} onChange={(e) => setV({ ...v, submissionEmail: e.target.value })} />}
         </Field>
+        {v.kind === "energy" && (
+          <fieldset className="space-y-2 rounded-lg border border-border p-3">
+            <legend className="px-1 text-sm font-medium">Workflow rules</legend>
+            <Field label="A renewal needs">
+              {(p) => (
+                <Select {...p} value={v.renewalRoute} onChange={(e) => setV({ ...v, renewalRoute: e.target.value as RenewalRoute })}>
+                  {RENEWAL_ROUTES.map((r) => (
+                    <option key={r} value={r}>
+                      {RENEWAL_ROUTE_LABELS[r]}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Checkbox label="Submissions need black and white copies of signed forms" checked={v.monoCopyRequired} onChange={(e) => setV({ ...v, monoCopyRequired: e.target.checked })} />
+            <Checkbox label="A change of entity needs the outgoing account holder's consent" checked={v.outgoingConsentRequired} onChange={(e) => setV({ ...v, outgoingConsentRequired: e.target.checked })} />
+          </fieldset>
+        )}
         <Checkbox label="Active" checked={v.active} onChange={(e) => setV({ ...v, active: e.target.checked })} />
         <IssueList issues={issues} />
       </div>

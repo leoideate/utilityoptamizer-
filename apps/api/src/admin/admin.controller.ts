@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
-import { createUserSchema, passwordSchema, updateUserSchema } from "@uo/shared";
+import { DEFAULT_WORKFLOW_REMINDERS, type WorkflowReminders, createUserSchema, passwordSchema, updateUserSchema, workflowRemindersSchema } from "@uo/shared";
 import { z } from "zod";
 import type { Actor } from "../common/actor";
 import { CurrentUser, RequireCapability } from "../common/decorators";
@@ -110,6 +110,21 @@ export class AdminController {
   async saveWorldpay(@CurrentUser() a: Actor, @Body(new ZodPipe(z.object({ submissionEmail: z.string().email().nullable(), autoAssignLeads: z.boolean() }))) body: { submissionEmail: string | null; autoAssignLeads: boolean }) {
     await this.admin.setSetting(a, "worldpay.submissionEmail", body.submissionEmail);
     await this.admin.setSetting(a, "automation.autoAssignLeads", body.autoAssignLeads);
+  }
+
+  /** Reminder and escalation intervals for the back-office workflows. */
+  @Get("admin/settings/workflow")
+  @RequireCapability("admin.pipeline")
+  async workflowSettings() {
+    const saved = workflowRemindersSchema.safeParse(await this.admin.getSetting<unknown>("workflow.reminders", null));
+    return saved.success ? saved.data : DEFAULT_WORKFLOW_REMINDERS;
+  }
+
+  @Put("admin/settings/workflow")
+  @RequireCapability("admin.pipeline")
+  @HttpCode(204)
+  async saveWorkflow(@CurrentUser() a: Actor, @Body(new ZodPipe(workflowRemindersSchema)) body: WorkflowReminders) {
+    await this.admin.setSetting(a, "workflow.reminders", body);
   }
 
   @Get("admin/retention")

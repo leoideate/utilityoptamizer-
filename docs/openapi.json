@@ -2037,6 +2037,29 @@
         ]
       }
     },
+    "/api/forms/{id}/mono": {
+      "post": {
+        "operationId": "FormsController_mono",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      }
+    },
     "/api/opportunities/{id}/bill-checks": {
       "get": {
         "operationId": "FormsController_billChecks",
@@ -2101,6 +2124,170 @@
         },
         "tags": [
           "forms"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/case": {
+      "get": {
+        "operationId": "WorkflowsController_overview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
+        ]
+      },
+      "put": {
+        "operationId": "WorkflowsController_save",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/supply-points": {
+      "get": {
+        "operationId": "WorkflowsController_search",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/lease-checks": {
+      "post": {
+        "operationId": "WorkflowsController_lease",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/terms-checks": {
+      "post": {
+        "operationId": "WorkflowsController_terms",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/submissions": {
+      "post": {
+        "operationId": "WorkflowsController_submit",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/submissions/{id}/responses": {
+      "post": {
+        "operationId": "WorkflowsController_respond",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/cases": {
+      "get": {
+        "operationId": "WorkflowsController_dashboard",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
         ]
       }
     },
@@ -2713,6 +2900,32 @@
       },
       "put": {
         "operationId": "AdminController_saveWorldpay",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/settings/workflow": {
+      "get": {
+        "operationId": "AdminController_workflowSettings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ]
+      },
+      "put": {
+        "operationId": "AdminController_saveWorkflow",
         "parameters": [],
         "responses": {
           "204": {

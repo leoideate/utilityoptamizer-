@@ -6,7 +6,7 @@ import { IntegrationsService } from "../../src/integrations/integrations.service
 import { StagesService } from "../../src/opportunities/stages.service";
 import { signWebhook } from "../../src/signatures/provider";
 import { type TestApp, createTestApp, expectStatus, userAndClient } from "../support/app";
-import { type Team, createOpportunity, readyEnergy, readyMerchant } from "../support/fixtures";
+import { type Team, createOpportunity, readyEnergy, readyMerchant, sendAndAccept } from "../support/fixtures";
 
 let t: TestApp;
 let team: Team;
@@ -28,6 +28,7 @@ afterAll(() => t.close());
 async function liveDualFuel(daysToEnd: number) {
   const { oppId } = await readyEnergy(t, team, "dual_fuel");
   expectStatus(await team.ops.post(`/opportunities/${oppId}/stage`, { stage: "submitted" }), 204);
+  await sendAndAccept(team, oppId);
   expectStatus(await team.ops.post(`/opportunities/${oppId}/activate`, { activationDate: addDays(today(), -600) }), 204);
   await t.prisma.energyContract.updateMany({ where: { opportunityId: oppId }, data: { contractEndDate: new Date(`${addDays(today(), daysToEnd)}T00:00:00Z`) } });
   return oppId;
@@ -52,7 +53,8 @@ describe("renewals (scenarios 15–17)", () => {
       outcome: "open",
       leadSource: "renewal",
       internalApproval: "not_requested",
-      selectedSupplierId: null,
+      // An existing-supplier renewal stays with the current supplier unless the customer switches.
+      selectedSupplierId: origOpp.selectedSupplierId,
     });
     expect(renewal.stage.key).toBe("renewal_scheduled");
     expect(renewal.contracts).toHaveLength(2);

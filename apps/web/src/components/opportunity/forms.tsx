@@ -20,6 +20,7 @@ import { type ApiError, api } from "@/lib/api";
 import { cn, date, dateTime, ref } from "@/lib/format";
 import { useCan, useUser } from "@/lib/session";
 import type { Workspace } from "@/lib/types";
+import { CaseCard } from "./case";
 import { useRefreshOpportunity } from "./common";
 
 interface TemplateOption {
@@ -33,6 +34,9 @@ interface PrefillField extends FormField {
   restricted: boolean;
   value: string | boolean | null;
   hasCrmValue: boolean;
+  /** On the customer's last approved copy of this form (returning customers). */
+  previousValue?: string | boolean | null;
+  changedSincePrevious?: boolean;
 }
 interface FormRow {
   id: string;
@@ -42,9 +46,12 @@ interface FormRow {
   qcPassed: boolean;
   qcIssues: string[];
   changedFields: string[];
+  changedSincePrevious: string[];
+  changeReason: string | null;
   ibanChangeConfirmed: boolean;
   versionId: string;
   signedVersionId: string | null;
+  monoVersionId: string | null;
   requiredSigners: FormSignerRole[];
   signatures: { id: string; role: FormSignerRole; signerName: string; signerCapacity: string | null; authorisation: SignatureAuthorisation; note: string | null; uploadedAt: string; uploadedBy: string | null; uploadedById: string | null }[];
   createdAt: string;
@@ -61,6 +68,7 @@ export function FormsTab({ opp }: { opp: Workspace }) {
   const switching = isEnergyService(opp.serviceType) && opp.supplyChanges.includes("change_of_supplier");
   return (
     <div className="space-y-6">
+      {isEnergyService(opp.serviceType) && <CaseCard opp={opp} />}
       {switching && <SwitchCard opp={opp} />}
       <FillCard opp={opp} />
       <FormsList opp={opp} />
@@ -225,14 +233,16 @@ function FillCard({ opp }: { opp: Workspace }) {
   const prefill = useQuery({
     queryKey: ["opportunity", opp.id, "prefill", templateId],
     enabled: !!templateId,
-    queryFn: () => api.get<{ template: { name: string; version: number }; fields: PrefillField[] }>(`/opportunities/${opp.id}/forms/prefill?templateId=${templateId}`),
+    queryFn: () =>
+      api.get<{ template: { name: string; version: number }; previousForm: { opportunityNumber: number; createdAt: string } | null; fields: PrefillField[] }>(`/opportunities/${opp.id}/forms/prefill?templateId=${templateId}`),
   });
   const [values, setValues] = useState<Record<string, string | boolean>>({});
   const [confirmIban, setConfirmIban] = useState(false);
+  const [changeReason, setChangeReason] = useState("");
   const [issues, setIssues] = useState<string[]>([]);
   const [result, setResult] = useState<{ qcPassed: boolean; qcIssues: string[] } | null>(null);
   const [showTyped, setShowTyped] = useState(false);
-  useEffect(() => (setValues({}), setConfirmIban(false), setIssues([]), setResult(null), setShowTyped(false)), [templateId]);
+  useEffect(() => (setValues({}), setConfirmIban(false), setChangeReason(""), setIssues([]), setResult(null), setShowTyped(false)), [templateId]);
 
   // Fields filled from the CRM first; boxes with no CRM link are typed only when needed.
   const editable = useMemo(() => {
@@ -250,11 +260,16 @@ function FillCard({ opp }: { opp: Workspace }) {
     mutationFn: () => {
       const sent: Record<string, string | boolean> = {};
       for (const f of editable) if (changed(f)) sent[f.id] = values[f.id];
-      return api.post<{ id: string; qcPassed: boolean; qcIssues: string[] }>(`/opportunities/${opp.id}/forms`, { templateId, values: sent, confirmIbanChange: confirmIban || undefined });
+      return api.post<{ id: string; qcPassed: boolean; qcIssues: string[] }>(`/opportunities/${opp.id}/forms`, { templateId, values: sent, confirmIbanChange: confirmIban || undefined, changeReason: changeReason.trim() || null });
     },
     onSuccess: (r) => (setIssues([]), setResult(r), qc.invalidateQueries({ queryKey: ["opportunity", opp.id, "forms"] }), refresh()),
     onError: (e) => setIssues(issuesOf(e)),
   });
+
+  const previous = prefill.data?.previousForm;
+  const differs = (f: PrefillField) =>
+    !!previous && f.previousValue !== undefined && (changed(f) ? (values[f.id] ?? null) !== (f.previousValue ?? (f.kind === "check" ? false : "")) : !!f.changedSincePrevious);
+  const changedSince = editable.filter((f) => differs(f));
 
   if (!opp.permissions.write) return null;
   return (
@@ -285,6 +300,7 @@ function FillCard({ opp }: { opp: Workspace }) {
                     <th className="px-3 py-2 font-medium">Field</th>
                     <th className="px-3 py-2 font-medium">Value on the form</th>
                     <th className="px-3 py-2 font-medium">Source</th>
+                    {previous && <th className="px-3 py-2 font-medium">Last time ({ref(previous.opportunityNumber)})</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -313,6 +329,17 @@ function FillCard({ opp }: { opp: Workspace }) {
                         <td className="px-3 py-1.5 text-xs">
                           {changed(f) ? <Badge tone="warning">Changed by you</Badge> : f.restricted ? <Badge>Restricted</Badge> : f.hasCrmValue ? <span className="text-muted">CRM</span> : <span className="text-muted">{f.source ? "Not in the CRM" : "Typed"}</span>}
                         </td>
+                        {previous && (
+                          <td className="px-3 py-1.5 text-xs">
+                            {f.previousValue === undefined ? (
+                              <span className="text-muted">—</span>
+                            ) : differs(f) ? (
+                              <Badge tone="info">Was: {f.restricted && f.previousValue === null ? "restricted" : typeof f.previousValue === "boolean" ? (f.previousValue ? "ticked" : "not ticked") : f.previousValue || "empty"}</Badge>
+                            ) : (
+                              <span className="text-muted">Unchanged</span>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -328,6 +355,11 @@ function FillCard({ opp }: { opp: Workspace }) {
               <p className="text-sm text-muted">Signature boxes: {[...new Set(signatureBoxes.map((f) => FORM_SIGNER_ROLE_LABELS[f.signer ?? "customer"]))].join(", ")}. Add signatures after generating.</p>
             )}
             {ibanChanged && <Checkbox label="I've confirmed the new IBAN with the customer" checked={confirmIban} onChange={(e) => setConfirmIban(e.target.checked)} />}
+            {!!changedSince.length && (
+              <Field label="Why these changed since last time" hint={`Changed: ${changedSince.map((f) => f.label).join(", ")}. Kept with the form and on the timeline.`}>
+                {(p) => <Input {...p} value={changeReason} onChange={(e) => setChangeReason(e.target.value)} />}
+              </Field>
+            )}
             {missingRequired.length > 0 && <p className="text-sm text-warning">Required but empty: {missingRequired.map((f) => f.label).join(", ")}.</p>}
             <IssueList issues={issues} title="The form wasn't generated:" />
             {result && (
@@ -394,6 +426,7 @@ function FormsList({ opp }: { opp: Workspace }) {
                     <span className="block text-xs text-muted">
                       Template version {f.templateVersion} · generated by {f.createdBy ?? "system"} {dateTime(f.createdAt)}
                       {!!f.changedFields.length && ` · changed by hand: ${f.changedFields.join(", ")}`}
+                      {!!f.changedSincePrevious.length && ` · changed since the previous form: ${f.changedSincePrevious.join(", ")}${f.changeReason ? ` (${f.changeReason})` : ""}`}
                       {f.ibanChangeConfirmed && " · IBAN change confirmed"}
                     </span>
                   </div>
@@ -406,6 +439,12 @@ function FormsList({ opp }: { opp: Workspace }) {
                         <Eye /> Signed
                       </Button>
                     )}
+                    {f.monoVersionId && (
+                      <Button size="sm" variant="secondary" onClick={() => open.mutate({ versionId: f.monoVersionId!, title: `${f.name} (black and white)` })}>
+                        <Eye /> B&amp;W
+                      </Button>
+                    )}
+                    {opp.permissions.write && f.qcPassed && (f.status === "approved" || (f.status === "generated" && !f.requiredSigners.length)) && <MonoButton opp={opp} form={f} />}
                     {f.status === "awaiting_review" && can("document.review") && (
                       <Button size="sm" disabled={uploadedByMe} title={uploadedByMe ? "Someone else must review signatures you uploaded." : undefined} onClick={() => setReviewing(f)}>
                         <ShieldCheck /> Review
@@ -477,6 +516,21 @@ function FormsList({ opp }: { opp: Workspace }) {
         {preview && <iframe src={preview.url} title={preview.title} className="h-[65vh] w-full rounded-lg border border-border" />}
       </Dialog>
     </Card>
+  );
+}
+
+/** Makes the black and white copy some suppliers need, directly from the PDF (no printing or rescanning). */
+function MonoButton({ opp, form }: { opp: Workspace; form: FormRow }) {
+  const qc = useQueryClient();
+  const refresh = useRefreshOpportunity(opp.id);
+  const make = useMutation({
+    mutationFn: () => api.post<{ versionId: string }>(`/forms/${form.id}/mono`, {}),
+    onSuccess: () => (qc.invalidateQueries({ queryKey: ["opportunity", opp.id, "forms"] }), qc.invalidateQueries({ queryKey: ["opportunity", opp.id, "case"] }), refresh()),
+  });
+  return (
+    <Button size="sm" variant="ghost" loading={make.isPending} onClick={() => make.mutate()}>
+      {form.monoVersionId ? "Remake B&W copy" : "Make B&W copy"}
+    </Button>
   );
 }
 

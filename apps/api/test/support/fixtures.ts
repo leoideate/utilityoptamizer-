@@ -101,3 +101,19 @@ export async function readyMerchant(t: TestApp, team: Team) {
   expectStatus(await team.manager.post(`/opportunities/${oppId}/approval`, { decision: "approved" }), 204);
   return { oppId, appId };
 }
+
+/** Records that every current file was sent to the supplier and that the supplier accepted it (needed before activation). */
+export async function sendAndAccept(team: Team, oppId: string, reference = "SUP-ACCEPT-1") {
+  const kase = expectStatus(await team.ops.get(`/opportunities/${oppId}/case`), 200).body as { files: { versionId: string }[] };
+  const sub = expectStatus(
+    await team.ops.post(`/opportunities/${oppId}/submissions`, {
+      recipient: "submissions@supplier.test",
+      channel: "email",
+      documentVersionIds: kase.files.map((f) => f.versionId),
+      deliveryEvidence: "Sent from ops@utilityoptimizer.ie",
+    }),
+    201,
+  ).body.id as string;
+  expectStatus(await team.ops.post(`/submissions/${sub}/responses`, { outcome: "accepted", receivedVia: "email", externalReference: reference }), 201);
+  return sub;
+}

@@ -93,6 +93,40 @@ test("salesperson captures an electricity lead and sees electricity-only fields"
   await expect(page.getByRole("dialog")).toContainText("Select the supplier.");
 });
 
+test("a change of entity case shows its status and guided checklist, and records where the supply details came from", async ({ page }) => {
+  await signIn(page, users.sales);
+  await page.goto("/opportunities/new");
+  const name = `E2E Change of entity ${Date.now()}`;
+  await page.getByLabel("Opportunity name").fill(name);
+  await page.getByLabel("Service", { exact: true }).selectOption("electricity");
+  await page.getByLabel("Business name").fill("E2E Incoming Ltd");
+  await page.getByRole("button", { name: "Create opportunity" }).click();
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  const id = page.url().split("/opportunities/")[1].split("?")[0];
+  // Mark it as a change of legal entity through the API (the same call the details form makes).
+  const status = await page.evaluate(async (oppId) => {
+    const csrf = decodeURIComponent(document.cookie.split("; ").find((c) => c.startsWith("uo_csrf="))?.split("=")[1] ?? "");
+    const res = await fetch(`/api/opportunities/${oppId}`, { method: "PATCH", headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf }, body: JSON.stringify({ supplyChanges: ["change_of_legal_entity"] }) });
+    return res.status;
+  }, id);
+  expect(status).toBe(204);
+
+  await page.goto(`/opportunities/${id}?tab=forms`);
+  await expect(page.getByRole("heading", { name: "Change of legal entity New request" })).toBeVisible();
+  await expect(page.getByText("Incoming customer's IBAN on file")).toBeVisible();
+  await page.getByRole("button", { name: "Case details" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Request came by").selectOption("whatsapp");
+  await dialog.getByLabel("Supply point", { exact: true }).selectOption("new_supply_point");
+  await dialog.getByLabel("Where the MPRN/GPRN and address came from").fill("ESB Networks connection letter");
+  await expectAccessible(page, "case details");
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /^Change of legal entity (Awaiting incoming details|Request received)$/ })).toBeVisible();
+  await expect(page.getByText(/ESB Networks connection letter \(verified by/)).toBeVisible();
+  await expectAccessible(page, "forms tab with case");
+});
+
 test("Worldpay opportunity shows the merchant workspace and hides energy sections", async ({ page }) => {
   await signIn(page, users.sales);
   await page.goto("/opportunities/new");
@@ -159,7 +193,7 @@ test("main pages pass automated accessibility checks, with no Content-Security-P
     if (/Content Security Policy|Refused to (load|execute|connect|frame)/i.test(m.text())) violations.push(m.text());
   });
   await signIn(page, users.admin);
-  for (const path of ["/", "/opportunities", "/pipeline", "/customers", "/activities", "/chat", "/scan", "/admin", "/account", "/forms"]) {
+  for (const path of ["/", "/opportunities", "/pipeline", "/customers", "/activities", "/cases", "/chat", "/scan", "/admin", "/account", "/forms"]) {
     await page.goto(path);
     await expect(page.locator("main h1").first()).toBeVisible();
     if (path !== "/" && path !== "/pipeline" && path !== "/chat") await expectAccessible(page, path);

@@ -167,6 +167,8 @@ export class RenewalsService {
         leadSourceDetail: `Contract ending ${endDate}`,
         campaign: orig.campaign,
         renewalDate: dateOnly(endDate),
+        // A renewal stays with the current supplier unless the customer decides to switch.
+        selectedSupplierId: serviceType === "merchant_services" ? null : orig.selectedSupplierId,
         previousOpportunityId: orig.id,
         renewalSourceKey: key,
         nextAction: "Contact customer about renewal",

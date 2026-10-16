@@ -17,6 +17,10 @@ export interface Supplier {
   kind: "energy" | "merchant";
   active: boolean;
   submissionEmail: string | null;
+  /** Workflow rules (energy suppliers). */
+  renewalRoute?: "full_form" | "rate_card_only";
+  outgoingConsentRequired?: boolean;
+  monoCopyRequired?: boolean;
 }
 
 export const useAssignableUsers = () => useQuery({ queryKey: ["users", "assignable"], queryFn: () => api.get<UserLite[]>("/users/assignable"), staleTime: 5 * 60_000 });

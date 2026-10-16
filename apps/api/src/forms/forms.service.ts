@@ -11,10 +11,14 @@ import {
   SUPPLY_CHANGE_LABELS,
   billCheckPassed,
   can,
+  caseKind,
   formFieldSchema,
   isRestrictedSource,
+  addDays,
+  addMonths,
   today,
 } from "@uo/shared";
+import type { SaleType, ServiceType, SupplyChange } from "@uo/shared";
 import type { billCheckSchema, formReviewSchema, formSignatureSchema, formTemplateMetaSchema, formTemplateUpdateSchema, generateFormSchema } from "@uo/shared";
 import type { z } from "zod";
 import { AuditService } from "../audit/audit.service";
@@ -26,8 +30,9 @@ import { dateOnly, isoDay, num } from "../common/values";
 import { ENV, type Env } from "../config/env";
 import { DocumentsService, type UploadedFile, sniffMatches } from "../documents/documents.service";
 import { OpportunityAccess } from "../opportunities/access.service";
+import { loadGateFacts } from "../opportunities/facts";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/storage";
-import { type FillValue, fillPdf, inspectTemplate } from "./pdf";
+import { type FillValue, fillPdf, greyscaleCopy, inspectTemplate } from "./pdf";
 
 type Values = Record<string, FillValue>;
 const normIban = (v: unknown) => (typeof v === "string" ? v.replace(/\s+/g, "").toUpperCase() : "");
@@ -150,14 +155,19 @@ export class FormsService {
         selectedSupplier: { select: { name: true } },
         customer: { include: { contacts: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] }, addresses: true, bankAccounts: { orderBy: { createdAt: "desc" }, take: 1 } } },
         sites: { include: { meterPoints: true }, orderBy: { createdAt: "asc" } },
-        contracts: { include: { selectedSupplier: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
+        contracts: { include: { selectedSupplier: { select: { name: true } }, site: { include: { meterPoints: true } } }, orderBy: { createdAt: "asc" } },
+        workflowCase: { include: { site: { include: { meterPoints: true } }, outgoingCustomer: { select: { legalName: true } } } },
       },
     });
+    // Only the incoming customer (this deal's customer) fills customer, contact, billing and bank
+    // fields. The outgoing occupier of a known supply point has separate "previous occupier" fields.
     const c = opp.customer;
     const contact = c?.contacts[0];
     const billing = c?.addresses.find((a) => a.kind === "billing") ?? c?.addresses.find((a) => a.kind === "registered") ?? c?.addresses.find((a) => a.kind === "trading") ?? c?.addresses[0];
-    const site = opp.sites[0];
-    const meters = opp.sites.flatMap((s) => s.meterPoints);
+    // The deal's own site, else the supply point the case matched, else the site its contracts renew.
+    const sites = opp.sites.length ? opp.sites : opp.workflowCase?.site ? [opp.workflowCase.site] : opp.contracts.flatMap((k) => (k.site ? [k.site] : [])).filter((x, i, all) => all.findIndex((y) => y.id === x.id) === i);
+    const site = sites[0];
+    const meters = sites.flatMap((s) => s.meterPoints);
     const elec = meters.find((m) => m.fuel === "electricity");
     const gas = meters.find((m) => m.fuel === "gas");
     const contract = opp.contracts.find((k) => k.status !== "cancelled") ?? opp.contracts[0];
@@ -198,6 +208,11 @@ export class FormsService {
       "site.meterNumber": (elec ?? gas)?.meterNumber ?? null,
       "site.mccCode": elec?.mccCode ?? null,
       "site.annualConsumptionKwh": site?.annualConsumptionKwh ? String(num(site.annualConsumptionKwh)) : null,
+      "landlord.name": sites.find((s) => s.landlordName)?.landlordName ?? null,
+      "landlord.contact": sites.find((s) => s.landlordContact)?.landlordContact ?? null,
+      "tenancy.occupancyDate": opp.workflowCase?.occupancyDate ? fmtDate(isoDay(opp.workflowCase.occupancyDate)!) : null,
+      "outgoing.legalName": opp.workflowCase?.outgoingCustomer?.legalName ?? null,
+      "outgoing.accountRef": opp.workflowCase?.outgoingAccountRef ?? null,
       "contract.existingSupplier": contract?.existingSupplierName ?? null,
       "contract.existingSupplierAccount": contract?.existingSupplierAccount ?? null,
       "contract.newSupplier": contract?.selectedSupplier?.name ?? opp.selectedSupplier?.name ?? null,
@@ -209,6 +224,7 @@ export class FormsService {
       "contract.peakRate": rate(contract?.peakRate),
       "contract.gasRate": rate(contract?.gasRate),
       "contract.standingCharge": rate(contract?.standingCharge),
+      "contract.endDate": contract?.proposedActivationDate && contract.termMonths ? fmtDate(addDays(addMonths(isoDay(contract.proposedActivationDate)!, contract.termMonths), -1)) : null,
       "bank.accountName": bank ? this.crypto.decrypt(bank.accountNameEnc) : null,
       "bank.iban": bank ? this.crypto.decrypt(bank.ibanEnc) : null,
       "bank.bic": bank?.bicEnc ? this.crypto.decrypt(bank.bicEnc) : null,
@@ -234,23 +250,53 @@ export class FormsService {
     return f.kind === "check" ? v === true : typeof v === "string" ? v : v === true ? "Yes" : null;
   }
 
-  /** What the form would contain: each field with its CRM value. Restricted values are hidden without bank.read. */
+  /**
+   * What the form would contain: each field with its CRM value and, for a returning customer, the
+   * value on their last approved copy of the same form. Restricted values are hidden without bank.read.
+   */
   async prefill(actor: Actor, opportunityId: string, templateId: string) {
-    await this.access.writable(actor, opportunityId);
+    const opp = await this.access.writable(actor, opportunityId);
     const t = await this.template(templateId);
     const fields = formFieldSchema.array().parse(t.fields);
     const crm = await this.crmValues(opportunityId);
     const seeBank = can(actor, "bank.read");
-    const restrictedShown = fields.some((f) => isRestrictedSource(f.source) && seeBank && crm[f.source!]);
+    const previous = await this.previousForm(opp, t.id);
+    const restrictedShown = fields.some((f) => isRestrictedSource(f.source) && seeBank && (crm[f.source!] || previous?.values[f.id]));
     if (restrictedShown) await this.audit.sensitiveAccess(actor, "opportunity", opportunityId, "bank details for a supplier form");
     return {
       template: { id: t.id, name: t.name, version: t.version, documentType: t.documentType, supplier: t.supplier },
+      previousForm: previous ? { id: previous.id, opportunityId: previous.opportunityId, opportunityNumber: previous.opportunityNumber, createdAt: previous.createdAt } : null,
       fields: fields.map((f) => {
         const restricted = isRestrictedSource(f.source);
         const value = FormsService.fieldValue(f, crm);
-        return { ...f, restricted, value: restricted && !seeBank ? null : value, hasCrmValue: value !== null && value !== "" && value !== false };
+        const before = previous && f.id in previous.values ? (previous.values[f.id] ?? null) : undefined;
+        return {
+          ...f,
+          restricted,
+          value: restricted && !seeBank ? null : value,
+          hasCrmValue: value !== null && value !== "" && value !== false,
+          ...(before !== undefined ? { previousValue: restricted && !seeBank ? null : before, changedSincePrevious: !sameValue(f, before, value) } : {}),
+        };
       }),
     };
+  }
+
+  /**
+   * The customer's last approved copy of this form on another of their deals (a renewal's
+   * previous contract, usually), with its values, for a field-by-field comparison.
+   */
+  private async previousForm(opp: { id: string; customerId: string | null; previousOpportunityId: string | null }, templateId: string) {
+    const scope: Prisma.OpportunityWhereInput[] = [];
+    if (opp.customerId) scope.push({ customerId: opp.customerId });
+    if (opp.previousOpportunityId) scope.push({ id: opp.previousOpportunityId });
+    if (!scope.length) return null;
+    const form = await this.prisma.generatedForm.findFirst({
+      where: { templateId, status: "approved", opportunityId: { not: opp.id }, opportunity: { OR: scope } },
+      orderBy: { createdAt: "desc" },
+      include: { opportunity: { select: { number: true } } },
+    });
+    if (!form) return null;
+    return { id: form.id, opportunityId: form.opportunityId, opportunityNumber: form.opportunity.number, createdAt: form.createdAt, values: this.crypto.decryptJson<Values>(form.valuesEnc) ?? {} };
   }
 
   async list(actor: Actor, opportunityId: string) {
@@ -272,9 +318,13 @@ export class FormsService {
       qcIssues: f.qcIssues as string[],
       changedFields: (f.changedFields as string[]).map((id) => (f.fields as FormField[]).find((x) => x.id === id)?.label ?? id),
       ibanChangeConfirmed: f.ibanChangeConfirmed,
+      changedSincePrevious: f.changedSincePrevious as string[],
+      previousFormId: f.previousFormId,
+      changeReason: f.changeReason,
       documentItemId: f.documentItemId,
       versionId: f.versionId,
       signedVersionId: f.signedVersionId,
+      monoVersionId: f.monoVersionId,
       requiredSigners: requiredSigners(f.fields as FormField[]),
       signatures: f.signatures.map((s) => ({
         id: s.id,
@@ -306,6 +356,7 @@ export class FormsService {
     if (opp.outcome !== "open") throw new RuleViolation(["Forms can only be generated for open opportunities."]);
     const t = await this.template(input.templateId);
     if (!t.active) throw new RuleViolation(["This template has been retired."]);
+    await this.checkWorkflowBeforeGenerating(opp);
     const fields = formFieldSchema.array().parse(t.fields);
     const crm = await this.crmValues(opportunityId);
     const seeBank = can(actor, "bank.read");
@@ -340,6 +391,9 @@ export class FormsService {
     }
     if (ibanChanged && !input.confirmIbanChange) issues.push("The IBAN on this form differs from the one on file. Confirm the change with the customer, then tick to confirm it.");
     if (issues.length) throw new RuleViolation(issues);
+    // A returning customer's form is compared with their last approved copy, so every change stays visible.
+    const previous = await this.previousForm(opp, t.id);
+    const sincePrevious = previous ? fields.filter((f) => f.kind !== "signature" && f.kind !== "signed_date" && f.id in previous.values && !sameValue(f, previous.values[f.id], values[f.id])).map((f) => f.label) : [];
 
     const template = await this.storage.get(t.storageKey);
     const title = `${t.name} – UO-${String(opp.number).padStart(6, "0")}`;
@@ -360,6 +414,9 @@ export class FormsService {
           valuesEnc: this.crypto.encryptJson(values),
           changedFields: changed,
           ibanChangeConfirmed: ibanChanged,
+          previousFormId: previous?.id ?? null,
+          changedSincePrevious: sincePrevious,
+          changeReason: input.changeReason ?? null,
           documentItemId: itemId,
           versionId: version.id,
           status: "generated",
@@ -376,7 +433,7 @@ export class FormsService {
           entityType: "generated_form",
           entityId: created.id,
           summary: `Generated ${t.name} v${t.version}`,
-          data: { templateId: t.id, templateVersion: t.version, changedFields: changedLabels, ibanChanged, qcPassed: filled.issues.length === 0 },
+          data: { templateId: t.id, templateVersion: t.version, changedFields: changedLabels, ibanChanged, qcPassed: filled.issues.length === 0, previousFormId: previous?.id ?? null, changedSincePrevious: sincePrevious },
         },
         {
           opportunityId,
@@ -384,6 +441,7 @@ export class FormsService {
           kind: "document",
           body:
             `Generated "${t.name}" from the CRM${changedLabels.length ? `; changed by hand: ${changedLabels.join(", ")}` : ""}${ibanChanged ? " (IBAN change confirmed)" : ""}.` +
+            (previous ? (sincePrevious.length ? ` Changed since the previous form (UO-${String(previous.opportunityNumber).padStart(6, "0")}): ${sincePrevious.join(", ")}${input.changeReason ? ` (${input.changeReason})` : ""}.` : " Unchanged since the previous form.") : "") +
             (filled.issues.length ? ` Quality check failed: ${filled.issues.length} problem${filled.issues.length === 1 ? "" : "s"}.` : " Quality check passed."),
         },
         tx,
@@ -391,6 +449,25 @@ export class FormsService {
       return created;
     });
     return { id: form.id, qcPassed: filled.issues.length === 0, qcIssues: filled.issues };
+  }
+
+  /**
+   * Workflow rules that apply before any supplier document is filled: a change of entity fills
+   * only the incoming customer's details (never the outgoing account holder's), and a renewal's
+   * terms must have been verified by Admin.
+   */
+  private async checkWorkflowBeforeGenerating(opp: { id: string; serviceType: string; saleType: SaleType; supplyChanges: SupplyChange[]; customerId: string | null }) {
+    const kind = caseKind({ serviceType: opp.serviceType as ServiceType, saleType: opp.saleType, supplyChanges: opp.supplyChanges });
+    if (kind !== "change_of_entity" && kind !== "renewal") return;
+    const w = (await loadGateFacts(this.prisma, opp.id, this.crypto)).workflow!;
+    const issues: string[] = [];
+    if (kind === "change_of_entity") {
+      if (!opp.customerId) issues.push("Create or link the incoming customer before filling forms, so their own details are used.");
+      if (w.incomingIsOutgoing) issues.push("This deal is linked to the outgoing account holder. Link the incoming customer before filling forms.");
+      if (w.sharedIban) issues.push("The incoming customer's IBAN is the same as the outgoing customer's. Record the incoming customer's own bank account first.");
+    }
+    if (kind === "renewal" && !w.terms.verified) issues.push("Verify the renewal terms before generating documents.");
+    if (issues.length) throw new RuleViolation(issues);
   }
 
   /** The checklist item a template's output is stored under (created if the checklist doesn't have one). */
@@ -506,6 +583,41 @@ export class FormsService {
     });
   }
 
+  /**
+   * Creates the black and white copy some external parties need, straight from the signed PDF
+   * (or the unsigned one for forms without signatures). It is stored as a new document version.
+   */
+  async monoCopy(actor: Actor, formId: string) {
+    const { form, opp } = await this.loadForm(actor, formId);
+    if (form.status === "superseded" || form.status === "rejected") throw new RuleViolation([`This form is ${FORM_STATUS_WORD[form.status]}; generate a new one first.`]);
+    if (!form.qcPassed) throw new RuleViolation(["This form failed its quality check. Generate it again first."]);
+    const needsSignatures = requiredSigners(form.fields as FormField[]).length > 0;
+    if (needsSignatures && !form.signedVersionId) throw new RuleViolation(["Add the signatures first: the black and white copy is made from the signed form."]);
+    const sourceId = form.signedVersionId ?? form.versionId;
+    const source = await this.prisma.documentVersion.findUniqueOrThrow({ where: { id: sourceId } });
+    const title = `${form.template.name} – UO-${String(opp.number).padStart(6, "0")}`;
+    const copy = await greyscaleCopy(await this.storage.get(source.storageKey), title);
+    if (copy.issues.length) throw new RuleViolation(copy.issues);
+    // Its own optional checklist item, so the reviewed form's approval isn't reset by a new version.
+    const existing = form.monoVersionId ? await this.prisma.documentVersion.findUnique({ where: { id: form.monoVersionId } }) : null;
+    if (existing?.sha256 === CryptoService.sha256(Buffer.from(copy.bytes))) return { versionId: existing.id };
+    const original = await this.prisma.documentItem.findUniqueOrThrow({ where: { id: form.documentItemId } });
+    const itemId =
+      existing?.itemId ??
+      (await this.prisma.documentItem.create({ data: { opportunityId: opp.id, customerId: opp.customerId, documentType: original.documentType, required: false, sensitive: original.sensitive } })).id;
+    const version = await this.documents.upload(actor, itemId, { originalname: `${slug(title)}-black-and-white.pdf`, mimetype: "application/pdf", buffer: Buffer.from(copy.bytes), size: copy.bytes.length });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.generatedForm.update({ where: { id: formId }, data: { monoVersionId: version.id } });
+      await this.audit.record(
+        actor,
+        { action: "form.mono_copy", entityType: "generated_form", entityId: formId, summary: `Black and white copy of ${form.template.name}`, data: { sourceVersionId: sourceId, versionId: version.id } },
+        { opportunityId: opp.id, customerId: opp.customerId, kind: "document", body: `Black and white copy of "${form.template.name}" created from the ${form.signedVersionId ? "signed" : "generated"} PDF and checked.` },
+        tx,
+      );
+    });
+    return { versionId: version.id };
+  }
+
   // --- Change of supplier -------------------------------------------------------------
 
   /** The latest version of the previous supplier's bill (the energy bill checklist item). */
@@ -555,13 +667,21 @@ export class FormsService {
   /** Other open opportunities switching the same MPRN/GPRN. Deals the user can't see are only counted. */
   async switchConflicts(actor: Actor, opportunityId: string) {
     const opp = await this.access.readable(actor, opportunityId);
-    const meters = await this.prisma.meterPoint.findMany({ where: { site: { opportunityId } }, select: { mprn: true, gprn: true } });
+    // The deal's own sites, the sites its contracts renew and the supply point its case matched.
+    const meters = await this.prisma.meterPoint.findMany({
+      where: { site: { OR: [{ opportunityId }, { contracts: { some: { opportunityId } } }, { cases: { some: { opportunityId } } }] } },
+      select: { mprn: true, gprn: true },
+    });
     const ids = meters.flatMap((m) => [m.mprn, m.gprn]).filter((x): x is string => !!x && /^\d{7,11}$/.test(x));
     if (!ids.length) return { supplyChanges: opp.supplyChanges.map((c) => SUPPLY_CHANGE_LABELS[c]), conflicts: [], hiddenCount: 0 };
     const where: Prisma.OpportunityWhereInput = {
       id: { not: opportunityId },
       outcome: "open",
-      sites: { some: { meterPoints: { some: { OR: [{ mprn: { in: ids } }, { gprn: { in: ids } }] } } } },
+      OR: [
+        { sites: { some: { meterPoints: { some: { OR: [{ mprn: { in: ids } }, { gprn: { in: ids } }] } } } } },
+        { contracts: { some: { site: { meterPoints: { some: { OR: [{ mprn: { in: ids } }, { gprn: { in: ids } }] } } } } } },
+        { workflowCase: { site: { meterPoints: { some: { OR: [{ mprn: { in: ids } }, { gprn: { in: ids } }] } } } } },
+      ],
     };
     const [visible, total] = await Promise.all([
       this.prisma.opportunity.findMany({ where: { AND: [where, this.access.visibleWhere(actor)] }, select: { id: true, number: true, name: true, stage: { select: { name: true } } }, take: 20 }),
@@ -575,9 +695,18 @@ export function requiredSigners(fields: FormField[]): FormSignerRole[] {
   return [...new Set(fields.filter((f) => f.kind === "signature" && f.signer).map((f) => f.signer!))];
 }
 
+/** Equal for form purposes: IBANs ignore spacing and case, empty text equals no value, unticked equals no tick. */
+function sameValue(f: FormField, a: FillValue, b: FillValue) {
+  if (f.source === "bank.iban") return normIban(a) === normIban(b);
+  if (f.kind === "check") return (a === true) === (b === true);
+  return (typeof a === "string" ? a.trim() : "") === (typeof b === "string" ? b.trim() : "");
+}
+
 function fmtDate(iso: string) {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 }
+
+const FORM_STATUS_WORD: Record<string, string> = { superseded: "superseded", rejected: "rejected" };
 
 const slug = (s: string) => s.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").slice(0, 120);

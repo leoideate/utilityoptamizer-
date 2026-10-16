@@ -44,6 +44,33 @@ enum FormStatus {
   superseded
 }
 
+enum CustomerPath {
+  existing_client
+  new_to_us
+}
+
+enum SupplyPath {
+  known_supply_point
+  new_supply_point
+}
+
+enum LeaseStatus {
+  draft
+  signed
+}
+
+enum RenewalRoute {
+  full_form
+  rate_card_only
+}
+
+enum ResponseOutcome {
+  accepted
+  changes_required
+  rejected
+  change_confirmed
+}
+
 enum SupplyChange {
   change_of_supplier
   change_of_legal_entity
@@ -365,16 +392,22 @@ model Stage {
 }
 
 model Supplier {
-  id              String            @id @default(uuid()) @db.Uuid
-  name            String
-  kind            SupplierKind
+  id                      String            @id @default(uuid()) @db.Uuid
+  name                    String
+  kind                    SupplierKind
   /// Where "Send submission pack" emails applications. Optional.
-  submissionEmail String?           @map("submission_email")
-  active          Boolean           @default(true)
-  opps            Opportunity[]
-  contracts       EnergyContract[]  @relation("SelectedSupplier")
-  quotes          ComparisonQuote[]
-  formTemplates   FormTemplate[]
+  submissionEmail         String?           @map("submission_email")
+  /// What a renewal with this supplier needs: its full form, or the signed rate card alone.
+  renewalRoute            RenewalRoute      @default(full_form) @map("renewal_route")
+  /// A change of legal entity also needs the outgoing account holder's consent.
+  outgoingConsentRequired Boolean           @default(false) @map("outgoing_consent_required")
+  /// Submissions must include a black and white copy of each signed form.
+  monoCopyRequired        Boolean           @default(false) @map("mono_copy_required")
+  active                  Boolean           @default(true)
+  opps                    Opportunity[]
+  contracts               EnergyContract[]  @relation("SelectedSupplier")
+  quotes                  ComparisonQuote[]
+  formTemplates           FormTemplate[]
 
   @@unique([name, kind])
   @@map("suppliers")
@@ -408,11 +441,13 @@ model Customer {
   createdAt              DateTime   @default(now()) @map("created_at")
   updatedAt              DateTime   @updatedAt @map("updated_at")
 
-  addresses    CustomerAddress[]
-  contacts     CustomerContact[]
-  bankAccounts BankAccount[]
-  opps         Opportunity[]
-  sites        SupplySite[]
+  addresses     CustomerAddress[]
+  contacts      CustomerContact[]
+  bankAccounts  BankAccount[]
+  opps          Opportunity[]
+  sites         SupplySite[]
+  outgoingCases WorkflowCase[]    @relation("OutgoingCustomer")
+  occupancies   SupplyOccupancy[]
 
   @@index([createdById])
   @@index([email])
@@ -555,6 +590,10 @@ model Opportunity {
   commissions    Commission[]
   generatedForms GeneratedForm[]
   billChecks     BillCheck[]
+  workflowCase   WorkflowCase?
+  leaseChecks    LeaseCheck[]
+  termsChecks    TermsCheck[]
+  submissions    Submission[]
 
   @@index([updatedAt])
   @@index([stageId])
@@ -607,6 +646,8 @@ model SupplySite {
 
   meterPoints MeterPoint[]
   contracts   EnergyContract[]
+  cases       WorkflowCase[]
+  occupancies SupplyOccupancy[]
 
   @@index([customerId])
   @@index([opportunityId])
@@ -904,33 +945,40 @@ model FormTemplate {
 
 /// One filled copy of a template for an opportunity. Never edited; regenerating supersedes it.
 model GeneratedForm {
-  id                  String          @id @default(uuid()) @db.Uuid
-  opportunityId       String          @map("opportunity_id") @db.Uuid
-  opportunity         Opportunity     @relation(fields: [opportunityId], references: [id])
-  templateId          String          @map("template_id") @db.Uuid
-  template            FormTemplate    @relation(fields: [templateId], references: [id])
-  templateVersion     Int             @map("template_version")
+  id                   String          @id @default(uuid()) @db.Uuid
+  opportunityId        String          @map("opportunity_id") @db.Uuid
+  opportunity          Opportunity     @relation(fields: [opportunityId], references: [id])
+  templateId           String          @map("template_id") @db.Uuid
+  template             FormTemplate    @relation(fields: [templateId], references: [id])
+  templateVersion      Int             @map("template_version")
   /// Field layout used, so the exact copy can be reproduced.
-  fields              Json
+  fields               Json
   /// Encrypted JSON of the values written (may include an IBAN).
-  valuesEnc           String          @map("values_enc")
+  valuesEnc            String          @map("values_enc")
   /// Field ids whose value was typed or changed instead of coming from the CRM.
-  changedFields       Json            @default("[]") @map("changed_fields")
-  ibanChangeConfirmed Boolean         @default(false) @map("iban_change_confirmed")
-  documentItemId      String          @map("document_item_id") @db.Uuid
+  changedFields        Json            @default("[]") @map("changed_fields")
+  ibanChangeConfirmed  Boolean         @default(false) @map("iban_change_confirmed")
+  documentItemId       String          @map("document_item_id") @db.Uuid
   /// The unsigned generated PDF.
-  versionId           String          @map("version_id") @db.Uuid
+  versionId            String          @map("version_id") @db.Uuid
   /// The PDF with signatures applied, once every required signer has one.
-  signedVersionId     String?         @map("signed_version_id") @db.Uuid
-  status              FormStatus      @default(generated)
-  qcPassed            Boolean         @map("qc_passed")
-  qcIssues            Json            @default("[]") @map("qc_issues")
-  reviewedById        String?         @map("reviewed_by_id") @db.Uuid
-  reviewedAt          DateTime?       @map("reviewed_at")
-  reviewNote          String?         @map("review_note")
-  createdById         String?         @map("created_by_id") @db.Uuid
-  createdAt           DateTime        @default(now()) @map("created_at")
-  signatures          FormSignature[]
+  signedVersionId      String?         @map("signed_version_id") @db.Uuid
+  /// Black and white copy of the signed (or unsigned) PDF, for suppliers that need one.
+  monoVersionId        String?         @map("mono_version_id") @db.Uuid
+  /// The customer's previous form from the same template (renewals), compared field by field.
+  previousFormId       String?         @map("previous_form_id") @db.Uuid
+  /// Labels of fields whose value differs from the previous form.
+  changedSincePrevious Json            @default("[]") @map("changed_since_previous")
+  changeReason         String?         @map("change_reason")
+  status               FormStatus      @default(generated)
+  qcPassed             Boolean         @map("qc_passed")
+  qcIssues             Json            @default("[]") @map("qc_issues")
+  reviewedById         String?         @map("reviewed_by_id") @db.Uuid
+  reviewedAt           DateTime?       @map("reviewed_at")
+  reviewNote           String?         @map("review_note")
+  createdById          String?         @map("created_by_id") @db.Uuid
+  createdAt            DateTime        @default(now()) @map("created_at")
+  signatures           FormSignature[]
 
   @@index([opportunityId])
   @@map("generated_forms")
@@ -975,6 +1023,140 @@ model BillCheck {
 
   @@index([opportunityId])
   @@map("bill_checks")
+}
+
+/// The back-office case on an opportunity: how the request came in, the customer and supply
+/// paths, and for a change of entity the supply point taken over and the outgoing account.
+model WorkflowCase {
+  id                   String        @id @default(uuid()) @db.Uuid
+  opportunityId        String        @unique @map("opportunity_id") @db.Uuid
+  opportunity          Opportunity   @relation(fields: [opportunityId], references: [id])
+  customerPath         CustomerPath? @map("customer_path")
+  requestChannel       String?       @map("request_channel")
+  requestReceivedAt    DateTime?     @map("request_received_at") @db.Date
+  requestNote          String?       @map("request_note")
+  supplyPath           SupplyPath?   @map("supply_path")
+  /// A supply site already in our records (known supply point). It keeps its history.
+  siteId               String?       @map("site_id") @db.Uuid
+  site                 SupplySite?   @relation(fields: [siteId], references: [id])
+  outgoingCustomerId   String?       @map("outgoing_customer_id") @db.Uuid
+  outgoingCustomer     Customer?     @relation("OutgoingCustomer", fields: [outgoingCustomerId], references: [id])
+  outgoingAccountRef   String?       @map("outgoing_account_ref")
+  outgoingContractRef  String?       @map("outgoing_contract_ref")
+  occupancyDate        DateTime?     @map("occupancy_date") @db.Date
+  /// Where a new supply point's MPRN/GPRN and address came from, and who verified it.
+  supplySource         String?       @map("supply_source")
+  supplyVerifiedById   String?       @map("supply_verified_by_id") @db.Uuid
+  supplyVerifiedAt     DateTime?     @map("supply_verified_at")
+  noticeDeadline       DateTime?     @map("notice_deadline") @db.Date
+  targetSubmissionDate DateTime?     @map("target_submission_date") @db.Date
+  createdById          String?       @map("created_by_id") @db.Uuid
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+
+  @@index([siteId])
+  @@index([outgoingCustomerId])
+  @@map("workflow_cases")
+}
+
+/// A check of one lease version. Append-only: a draft and the signed copy are separate rows.
+model LeaseCheck {
+  id                String      @id @default(uuid()) @db.Uuid
+  opportunityId     String      @map("opportunity_id") @db.Uuid
+  opportunity       Opportunity @relation(fields: [opportunityId], references: [id])
+  documentVersionId String      @map("document_version_id") @db.Uuid
+  status            LeaseStatus
+  landlordName      String      @map("landlord_name")
+  tenantName        String      @map("tenant_name")
+  tenancyStartDate  DateTime?   @map("tenancy_start_date") @db.Date
+  landlordMatches   Boolean     @map("landlord_matches")
+  tenantMatches     Boolean     @map("tenant_matches")
+  addressMatches    Boolean     @map("address_matches")
+  datesMatch        Boolean     @map("dates_match")
+  signedByLandlord  Boolean     @map("signed_by_landlord")
+  signedByTenant    Boolean     @map("signed_by_tenant")
+  passed            Boolean
+  notes             String?
+  verifiedById      String?     @map("verified_by_id") @db.Uuid
+  verifiedAt        DateTime    @default(now()) @map("verified_at")
+
+  @@index([opportunityId])
+  @@map("lease_checks")
+}
+
+/// Admin's verification of the proposed terms. Only counts while the terms are unchanged (hash).
+model TermsCheck {
+  id            String      @id @default(uuid()) @db.Uuid
+  opportunityId String      @map("opportunity_id") @db.Uuid
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id])
+  snapshotHash  String      @map("snapshot_hash")
+  /// The terms that were verified (rates, term, dates, supplier); no personal data.
+  terms         Json
+  verifiedById  String?     @map("verified_by_id") @db.Uuid
+  verifiedAt    DateTime    @default(now()) @map("verified_at")
+
+  @@index([opportunityId])
+  @@map("terms_checks")
+}
+
+/// What was sent to the external party: recipient, channel, the exact file versions and proof of delivery.
+model Submission {
+  id               String               @id @default(uuid()) @db.Uuid
+  opportunityId    String               @map("opportunity_id") @db.Uuid
+  opportunity      Opportunity          @relation(fields: [opportunityId], references: [id])
+  recipient        String
+  channel          String
+  sentAt           DateTime             @map("sent_at") @db.Date
+  /// [{ documentVersionId, documentType, filename, version, sha256 }] as sent.
+  files            Json
+  deliveryEvidence String               @map("delivery_evidence")
+  note             String?
+  recordedById     String?              @map("recorded_by_id") @db.Uuid
+  recordedAt       DateTime             @default(now()) @map("recorded_at")
+  responses        SubmissionResponse[]
+
+  @@index([opportunityId])
+  @@map("submissions")
+}
+
+/// The external party's answer to a submission. Append-only.
+model SubmissionResponse {
+  id                String          @id @default(uuid()) @db.Uuid
+  submissionId      String          @map("submission_id") @db.Uuid
+  submission        Submission      @relation(fields: [submissionId], references: [id])
+  opportunityId     String          @map("opportunity_id") @db.Uuid
+  outcome           ResponseOutcome
+  receivedVia       String          @map("received_via")
+  receivedAt        DateTime        @map("received_at") @db.Date
+  externalReference String?         @map("external_reference")
+  effectiveDate     DateTime?       @map("effective_date") @db.Date
+  reason            String?
+  correctionOwnerId String?         @map("correction_owner_id") @db.Uuid
+  correctionDueDate DateTime?       @map("correction_due_date") @db.Date
+  recordedById      String?         @map("recorded_by_id") @db.Uuid
+  recordedAt        DateTime        @default(now()) @map("recorded_at")
+
+  @@index([submissionId])
+  @@index([opportunityId])
+  @@map("submission_responses")
+}
+
+/// Who occupies a supply point from when. Append-only, so the outgoing customer's history is kept.
+model SupplyOccupancy {
+  id            String     @id @default(uuid()) @db.Uuid
+  siteId        String     @map("site_id") @db.Uuid
+  site          SupplySite @relation(fields: [siteId], references: [id])
+  customerId    String     @map("customer_id") @db.Uuid
+  customer      Customer   @relation(fields: [customerId], references: [id])
+  /// Null when the start is unknown (an occupant recorded before this history existed).
+  fromDate      DateTime?  @map("from_date") @db.Date
+  opportunityId String?    @map("opportunity_id") @db.Uuid
+  recordedById  String?    @map("recorded_by_id") @db.Uuid
+  recordedAt    DateTime   @default(now()) @map("recorded_at")
+
+  @@index([siteId])
+  @@index([customerId])
+  @@map("supply_occupancies")
 }
 
 model SignatureTemplate {

@@ -34,6 +34,7 @@ const GATE_LABELS: Record<keyof Workspace["gates"], string> = {
   supplier_selected: "Supplier or product selected",
   documents_prepared: "Ready to prepare documents",
   submitted: "Ready to submit",
+  live_won: "Ready to complete (accepted by the external party)",
 };
 
 export function OverviewTab({ opp, onGoTo }: { opp: Workspace; onGoTo: (tab: string) => void }) {
