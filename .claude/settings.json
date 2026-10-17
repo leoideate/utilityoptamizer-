@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/rebuild-shared.js\"",
+            "timeout": 120,
+            "statusMessage": "Rebuilding @uo/shared"
+          }
+        ]
+      }
+    ]
+  }
+}
