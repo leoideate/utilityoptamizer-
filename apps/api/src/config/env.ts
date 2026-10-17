@@ -89,6 +89,15 @@ const envSchema = z
     /** Comma-separated email domains allowed to sign in with SSO (e.g. utilityoptimizer.com). Empty = any domain of an existing user. */
     SSO_ALLOWED_DOMAINS: z.string().optional(),
 
+    /**
+     * Mailboxes: people connect their own Outlook (Microsoft 365) or Gmail mailbox, using the SSO app
+     * registrations above with mail scopes. Redirect URI to register: {WEB_ORIGIN}/api/mailboxes/{microsoft|google}/callback
+     */
+    MAIL_GRAPH_URL: z.string().url().default("https://graph.microsoft.com/v1.0"),
+    MAIL_GMAIL_URL: z.string().url().default("https://gmail.googleapis.com"),
+    /** How far back to fetch mail when someone first connects their mailbox. */
+    MAIL_BACKFILL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+
     /** Click-to-call: "manual" (opens the phone's dialler) or "ringcentral" (RingOut: rings the salesperson's phone, then the customer). */
     TELEPHONY_PROVIDER: z.enum(["manual", "ringcentral"]).default("manual"),
     /** https://platform.ringcentral.com (production) or https://platform.devtest.ringcentral.com (sandbox). */

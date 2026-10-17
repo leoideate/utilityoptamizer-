@@ -1,9 +1,12 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { Button, Card, CardHeader, Field, Input, IssueList, PageHeader } from "@/components/ui/primitives";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
+import { Badge, Button, Card, CardHeader, Field, Input, IssueList, PageHeader } from "@/components/ui/primitives";
 import { type ApiError, api } from "@/lib/api";
+import { PROVIDER_LABELS, useMailboxes } from "@/lib/email";
+import { relative } from "@/lib/format";
 import { useUser } from "@/lib/session";
 
 export default function AccountPage() {
@@ -31,7 +34,10 @@ export default function AccountPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <PageHeader title="Security & phone" description={me.name} />
+      <PageHeader title="My account" description={me.name} />
+      <Suspense>
+        <MailboxCard />
+      </Suspense>
       <PhoneCard />
       <Card>
         <CardHeader title="Two-factor authentication" description="Adds a 6-digit code from an authenticator app (Microsoft Authenticator, Google Authenticator…) when you sign in." />
@@ -106,6 +112,68 @@ function PhoneCard() {
         <div className="w-full">
           <IssueList issues={issues} title="Please check:" />
         </div>
+      </div>
+    </Card>
+  );
+}
+
+const CONNECT_RESULTS: Record<string, { ok: boolean; text: string }> = {
+  connected: { ok: true, text: "Mailbox connected. Your email will appear under Email within a couple of minutes." },
+  mailbox_wrong_address: { ok: false, text: "That mailbox isn't your CRM email address. Sign in to your own work mailbox and try again." },
+  mailbox_cancelled: { ok: false, text: "Connecting was cancelled." },
+  mailbox_expired: { ok: false, text: "That took too long, or was started in another browser. Try again." },
+  mailbox_unavailable: { ok: false, text: "That kind of mailbox isn't set up for the CRM yet. Ask an administrator." },
+  mailbox_failed: { ok: false, text: "The mailbox couldn't be connected. Try again, or ask an administrator if it keeps happening." },
+};
+
+/** Connect your own Outlook or Gmail: the CRM syncs your inbox and sent mail, and sends as you. */
+function MailboxCard() {
+  const qc = useQueryClient();
+  const params = useSearchParams();
+  const { data } = useMailboxes();
+  const result = CONNECT_RESULTS[params.get("mailbox") ?? ""];
+  const disconnect = useMutation({ mutationFn: (id: string) => api.del(`/mailboxes/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: ["mailboxes"] }) });
+  const providers = (["microsoft", "google"] as const).filter((p) => data?.available[p] || data?.mailboxes.some((m) => m.provider === p));
+
+  return (
+    <Card id="mailbox">
+      <CardHeader
+        title="My mailbox"
+        description="Connect your work email to see your inbox and sent mail in the CRM, send from your own address, and have emails with customers added to their deals."
+      />
+      <div className="space-y-4 p-5 text-sm">
+        {result && <p className={result.ok ? "text-success" : "text-danger"} role="status">{result.text}</p>}
+        {data && !providers.length && <p className="text-muted">Email isn't set up for the CRM yet. An administrator needs to connect Microsoft 365 or Google Workspace first.</p>}
+        {providers.map((p) => {
+          const box = data?.mailboxes.find((m) => m.provider === p);
+          return (
+            <div key={p} className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-3">
+              <div className="min-w-0 flex-1">
+                <p className="font-medium">{PROVIDER_LABELS[p]}</p>
+                {box ? (
+                  <p className="text-xs text-muted">
+                    {box.address} · {box.lastSyncedAt ? `last checked ${relative(box.lastSyncedAt)}` : "first sync in progress"}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted">Not connected</p>
+                )}
+              </div>
+              {box?.status === "active" && <Badge tone="success">Connected</Badge>}
+              {box?.status === "reauth_required" && <Badge tone="warning">Needs reconnecting</Badge>}
+              {(!box || box.status === "reauth_required") && data?.available[p] && (
+                <Button asChild size="sm">
+                  {/* A full page navigation: the provider's sign-in page comes next. */}
+                  <a href={`/api/mailboxes/${p}/connect`}>{box ? "Reconnect" : "Connect"}</a>
+                </Button>
+              )}
+              {box && (
+                <Button size="sm" variant="ghost" loading={disconnect.isPending} onClick={() => confirm(`Disconnect ${box.address}? Email already in the CRM stays on its deals.`) && disconnect.mutate(box.id)}>
+                  Disconnect
+                </Button>
+              )}
+            </div>
+          );
+        })}
       </div>
     </Card>
   );

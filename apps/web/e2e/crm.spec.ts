@@ -227,7 +227,7 @@ test("main pages pass automated accessibility checks, with no Content-Security-P
     if (/Content Security Policy|Refused to (load|execute|connect|frame)/i.test(m.text())) violations.push(m.text());
   });
   await signIn(page, users.admin);
-  for (const path of ["/", "/opportunities", "/pipeline", "/customers", "/activities", "/cases", "/chat", "/scan", "/admin", "/account", "/forms"]) {
+  for (const path of ["/", "/opportunities", "/pipeline", "/customers", "/activities", "/cases", "/chat", "/inbox", "/scan", "/admin", "/account", "/forms"]) {
     await page.goto(path);
     await expect(page.locator("main h1").first()).toBeVisible();
     if (path !== "/" && path !== "/pipeline" && path !== "/chat") await expectAccessible(page, path);

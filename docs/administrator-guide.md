@@ -31,6 +31,19 @@ Two-factor: a user who has CRM two-factor turned on is asked for their authentic
 
 SSO-only accounts: once someone signs in with SSO, untick **Allow password sign-in** on their user (**Users & roles** → Edit). Their CRM password then stops working (sign-in attempts get the usual "incorrect" message and are audit-logged as `auth.password_login_refused`), they can't change it, and any open sessions end so they sign back in with SSO. Leaving a company account in Entra ID or Google then removes their CRM access too. The CRM won't turn it off for your own account, when no SSO provider is configured, or when the user's email domain isn't in `SSO_ALLOWED_DOMAINS`, so nobody is left without a way in. Tick the box again to restore password sign-in (reset their password if they don't know it).
 
+## Email (each person's Outlook or Gmail)
+
+People connect their own work mailbox under **My account → My mailbox**. The CRM then syncs their inbox and sent mail every two minutes (the first sync fetches the last `MAIL_BACKFILL_DAYS`, default 30), shows it under **Email**, and sends from their own address so replies stay in their Outlook or Gmail thread. Only a mailbox whose address equals the person's CRM email can be connected.
+
+Emails with a customer are added to the matching deal's timeline (and the deal owner is notified live): a reply in a thread already linked keeps that deal; otherwise the other party's address is matched to customers, their contacts and leads. If a customer has several open deals, the one owned by the mailbox owner is used, or else the email is linked to the customer only. Anyone who can see the deal can open the email; mail that matches no customer (and mail between staff) stays visible to its owner only. Synced email is never deleted, even if the mailbox is disconnected. Email HTML is converted to plain text; attachments stay in Outlook or Gmail.
+
+Setup uses the same app registrations as single sign-on, plus mail permissions:
+
+- **Microsoft 365**: in the Entra app, add the redirect URI `https://<your CRM>/api/mailboxes/microsoft/callback` and the delegated Microsoft Graph permissions `Mail.ReadWrite`, `Mail.Send`, `User.Read` and `offline_access`, then **Grant admin consent**.
+- **Google Workspace**: in the OAuth client, add the redirect URI `https://<your CRM>/api/mailboxes/google/callback`, enable the **Gmail API**, and add the scopes `gmail.modify` and `gmail.send` to the consent screen. Keep the app **Internal** to your Workspace; an external app needs Google's security assessment for these scopes.
+
+If someone changes their password or revokes access, their mailbox shows **Needs reconnecting** and they get a notification; sending from the CRM then asks them to reconnect.
+
 ## Calling customers with RingCentral
 
 The **Call** button on an opportunity uses RingCentral **RingOut**. RingCentral rings the salesperson's own phone first (desk phone, the RingCentral app or a mobile), and when they answer it dials the customer, showing your company number. No softphone or browser plug-in is needed.

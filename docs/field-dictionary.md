@@ -135,8 +135,6 @@ Permanent customer record. Merged duplicates are kept with merged_into_id set.
 
 ## bank_accounts
 
-Restricted (bank.read). Values encrypted; only the IBAN's last four digits are stored in clear.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -202,8 +200,6 @@ One sale (new or renewal). Permanent: can't be deleted or archived (database tri
 | updated_at | DateTime | ✓ |  |
 
 ## stage_history
-
-One row per stage visit; drives "average time in each stage".
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -365,7 +361,7 @@ Live/ended contracts are read-only history; renewals create new rows.
 
 ## principals
 
-Restricted. Date of birth and nationality are encrypted; presence flags let rules run without decrypting. Restricted. Personal values are encrypted; has_* flags let validation run without decrypting.
+Restricted. Personal values are encrypted; has_* flags let validation run without decrypting.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -386,8 +382,6 @@ Restricted. Date of birth and nationality are encrypted; presence flags let rule
 | created_at | DateTime | ✓ | Default now() |
 
 ## principal_addresses
-
-Residential address history (restricted, address encrypted).
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -442,7 +436,7 @@ Residential address history (restricted, address encrypted).
 
 ## document_versions
 
-Every upload is a new version; nothing is overwritten. Every upload is a new version; nothing is overwritten.
+Every upload is a new version; nothing is overwritten.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -460,8 +454,6 @@ Every upload is a new version; nothing is overwritten. Every upload is a new ver
 
 ## FormTemplate
 
-A supplier PDF with positioned fields. Field layout changes bump `version`; generated forms keep a snapshot.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -474,8 +466,6 @@ A supplier PDF with positioned fields. Field layout changes bump `version`; gene
 | sha256 | String | ✓ |  |
 
 ## generated_forms
-
-One filled copy of a template for an opportunity. Never edited; regenerating supersedes it.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -505,8 +495,6 @@ One filled copy of a template for an opportunity. Never edited; regenerating sup
 
 ## form_signatures
 
-An uploaded signature image, authorised for one generated form only.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -522,8 +510,6 @@ An uploaded signature image, authorised for one generated form only.
 | uploaded_at | DateTime | ✓ | Default now() |
 
 ## bill_checks
-
-Verification of the previous supplier's bill for a change of supplier.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -542,9 +528,6 @@ Verification of the previous supplier's bill for a change of supplier.
 | verified_at | DateTime | ✓ | Default now() |
 
 ## workflow_cases
-
-The back-office case on an opportunity: how the request came in, the customer and supply
-paths, and for a change of entity the supply point taken over and the outgoing account.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -571,8 +554,6 @@ paths, and for a change of entity the supply point taken over and the outgoing a
 
 ## lease_checks
 
-A check of one lease version. Append-only: a draft and the signed copy are separate rows.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -595,8 +576,6 @@ A check of one lease version. Append-only: a draft and the signed copy are separ
 
 ## terms_checks
 
-Admin's verification of the proposed terms. Only counts while the terms are unchanged (hash).
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -608,8 +587,6 @@ Admin's verification of the proposed terms. Only counts while the terms are unch
 
 ## Submission
 
-What was sent to the external party: recipient, channel, the exact file versions and proof of delivery.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -619,8 +596,6 @@ What was sent to the external party: recipient, channel, the exact file versions
 | sent_at | Date | ✓ |  |
 
 ## submission_responses
-
-The external party's answer to a submission. Append-only.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -639,8 +614,6 @@ The external party's answer to a submission. Append-only.
 | recorded_at | DateTime | ✓ | Default now() |
 
 ## supply_occupancies
-
-Who occupies a supply point from when. Append-only, so the outgoing customer's history is kept.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -717,7 +690,7 @@ Who occupies a supply point from when. Append-only, so the outgoing customer's h
 
 ## timeline_entries
 
-Append-only (a database trigger blocks UPDATE and DELETE). Corrections are new entries with `correctsId`. Append-only (trigger). Corrections are new entries with corrects_id.
+Append-only (trigger). Corrections are new entries with corrects_id.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -735,7 +708,7 @@ Append-only (a database trigger blocks UPDATE and DELETE). Corrections are new e
 
 ## audit_logs
 
-Append-only security/audit log (trigger-protected). Never contains sensitive values. Append-only (trigger). Never contains restricted values.
+Append-only (trigger). Never contains restricted values.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -796,9 +769,6 @@ Append-only security/audit log (trigger-protected). Never contains sensitive val
 
 ## integration_jobs
 
-Outbound integration work (supplier/Worldpay submission, email, WhatsApp, accounting).
-Executed by BullMQ with retries; jobs that exhaust retries become `dead` (dead-letter).
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -815,8 +785,6 @@ Executed by BullMQ with retries; jobs that exhaust retries become `dead` (dead-l
 | updated_at | DateTime | ✓ |  |
 
 ## webhook_events
-
-Inbound webhooks, recorded once per provider event id (idempotency).
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -838,8 +806,6 @@ Inbound webhooks, recorded once per provider event id (idempotency).
 | updated_at | DateTime | ✓ |  |
 
 ## chat_channels
-
-A conversation: a direct message between two users, a team channel, or the internal discussion on one opportunity.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -879,8 +845,6 @@ A conversation: a direct message between two users, a team channel, or the inter
 | created_at | DateTime | ✓ | Default now() |
 
 ## chat_message_revisions
-
-Previous text of edited or deleted messages (append-only), for administrators and disputes.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -925,4 +889,39 @@ Previous text of edited or deleted messages (append-only), for administrators an
 | outcome | String |  |  |
 | notes | String |  |  |
 | logged_at | DateTime |  | Set once the call has been written to the opportunity timeline (exactly once) |
+
+## Mailbox
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| user_id | UUID | ✓ |  |
+| provider | Enum: microsoft, google | ✓ |  |
+| address | String | ✓ |  |
+
+## email_messages
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| mailbox_id | UUID | ✓ |  |
+| provider_message_id | String | ✓ |  |
+| thread_id | String |  |  |
+| internet_message_id | String |  | RFC 5322 Message-ID, used for reply threading |
+| direction | String | ✓ |  |
+| from_address | String | ✓ |  |
+| from_name | String |  |  |
+| to_addresses | String | ✓ |  |
+| cc_addresses | String | ✓ |  |
+| subject | String | ✓ |  |
+| snippet | String | ✓ |  |
+| body_enc | String |  | Plain text (HTML is converted on the server and never rendered), encrypted at rest |
+| sent_at | DateTime | ✓ |  |
+| unread | Boolean | ✓ | Default false |
+| has_attachments | Boolean | ✓ | Default false |
+| customer_id | UUID |  |  |
+| opportunity_id | UUID |  |  |
+| timeline_logged_at | DateTime |  | Set once the email has been written to the customer/opportunity timeline (exactly once) |
+| created_at | DateTime | ✓ | Default now() |
+| updated_at | DateTime | ✓ |  |
 

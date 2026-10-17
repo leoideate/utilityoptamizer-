@@ -9,6 +9,7 @@ import { IntegrationsService } from "./integrations.service";
 const Id = new ParseUUIDPipe({ version: "4" });
 /** The client sends a fresh idempotency key per message, so a double-click or retry doesn't send twice. */
 const emailSchema = z.object({ to: z.string().email(), subject: z.string().min(1).max(300), body: z.string().min(1).max(20000), idempotencyKey: z.string().min(8).max(100) });
+const replySchema = z.object({ body: z.string().min(1).max(20000), idempotencyKey: z.string().min(8).max(100) });
 const whatsappSchema = z.object({ to: z.string().regex(/^\+?\d{8,15}$/, "Use international format, e.g. +353871234567."), body: z.string().min(1).max(4000), idempotencyKey: z.string().min(8).max(100) });
 
 @ApiTags("integrations")
@@ -32,8 +33,13 @@ export class IntegrationsController {
   }
 
   @Get("integrations/status")
-  status() {
-    return this.integrations.status();
+  status(@CurrentUser() a: Actor) {
+    return this.integrations.status(a);
+  }
+
+  @Post("emails/:id/reply")
+  reply(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(replySchema)) body: z.infer<typeof replySchema>) {
+    return this.integrations.replyEmail(a, id, body);
   }
 
   @Get("admin/integration-jobs")
