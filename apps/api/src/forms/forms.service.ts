@@ -14,6 +14,8 @@ import {
   caseKind,
   formFieldSchema,
   isRestrictedSource,
+  LEGAL_ENTITY_LABELS,
+  sourceMatches,
   addDays,
   addMonths,
   today,
@@ -33,6 +35,7 @@ import { OpportunityAccess } from "../opportunities/access.service";
 import { loadGateFacts } from "../opportunities/facts";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/storage";
 import { type FillValue, fillPdf, greyscaleCopy, inspectTemplate } from "./pdf";
+import { presetFor } from "./presets";
 
 type Values = Record<string, FillValue>;
 const normIban = (v: unknown) => (typeof v === "string" ? v.replace(/\s+/g, "").toUpperCase() : "");
@@ -96,23 +99,34 @@ export class FormsService {
     } catch {
       throw new RuleViolation(["This PDF can't be used as a template (it may be password-protected or damaged)."]);
     }
+    // A supplier form we've already set up: its fields arrive placed and linked to the CRM.
+    const sha256 = CryptoService.sha256(file.buffer);
+    const preset = presetFor(sha256);
+    const fields = preset && preset.fields.every((f) => inspected.pages[f.page]) ? preset.fields.map((f) => formFieldSchema.parse(f)) : inspected.fields;
+    const presetSupplier = preset && !meta.supplierId ? await this.prisma.supplier.findFirst({ where: { name: { equals: preset.supplier, mode: "insensitive" } }, select: { id: true } }) : null;
     const storageKey = `form-templates/${randomUUID()}.pdf`;
     await this.storage.put(storageKey, file.buffer, "application/pdf");
     const t = await this.prisma.formTemplate.create({
       data: {
         name: meta.name,
-        supplierId: meta.supplierId ?? null,
+        supplierId: meta.supplierId ?? presetSupplier?.id ?? null,
         documentType: meta.documentType,
         storageKey,
         filename: file.originalname.slice(0, 200),
-        sha256: CryptoService.sha256(file.buffer),
+        sha256,
         pages: inspected.pages as unknown as Prisma.InputJsonValue,
-        fields: inspected.fields as unknown as Prisma.InputJsonValue,
+        fields: fields as unknown as Prisma.InputJsonValue,
         createdById: actorRef(actor),
       },
     });
-    await this.audit.log(actor, { action: "form_template.create", entityType: "form_template", entityId: t.id, summary: `Added form template ${t.name} (${inspected.fields.length} fields found)` });
-    return { id: t.id, fieldsFound: inspected.fields.length };
+    const recognised = fields === inspected.fields ? null : preset!.name;
+    await this.audit.log(actor, {
+      action: "form_template.create",
+      entityType: "form_template",
+      entityId: t.id,
+      summary: recognised ? `Added form template ${t.name} (recognised ${recognised}: ${fields.length} fields)` : `Added form template ${t.name} (${fields.length} fields found)`,
+    });
+    return { id: t.id, fieldsFound: fields.length, preset: recognised };
   }
 
   async updateTemplate(actor: Actor, id: string, input: z.infer<typeof formTemplateUpdateSchema>) {
@@ -152,11 +166,11 @@ export class FormsService {
       where: { id: opportunityId },
       include: {
         owner: { select: { name: true } },
-        selectedSupplier: { select: { name: true } },
+        selectedSupplier: { select: { name: true, agencyId: true } },
         customer: { include: { contacts: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] }, addresses: true, bankAccounts: { orderBy: { createdAt: "desc" }, take: 1 } } },
-        sites: { include: { meterPoints: true }, orderBy: { createdAt: "asc" } },
-        contracts: { include: { selectedSupplier: { select: { name: true } }, site: { include: { meterPoints: true } } }, orderBy: { createdAt: "asc" } },
-        workflowCase: { include: { site: { include: { meterPoints: true } }, outgoingCustomer: { select: { legalName: true } } } },
+        sites: { include: { meterPoints: { include: { readings: { orderBy: { readingDate: "desc" } } } } }, orderBy: { createdAt: "asc" } },
+        contracts: { include: { selectedSupplier: { select: { name: true, agencyId: true } }, site: { include: { meterPoints: { include: { readings: { orderBy: { readingDate: "desc" } } } } } } }, orderBy: { createdAt: "asc" } },
+        workflowCase: { include: { site: { include: { meterPoints: { include: { readings: { orderBy: { readingDate: "desc" } } } } } }, outgoingCustomer: { select: { legalName: true } } } },
       },
     });
     // Only the incoming customer (this deal's customer) fills customer, contact, billing and bank
@@ -176,6 +190,32 @@ export class FormsService {
       a ? [a.line1, a.line2, a.city, a.county, a.postcode].filter(Boolean).join(", ") : null;
     const rate = (v: unknown) => (num(v as Prisma.Decimal | null) === null ? null : String(num(v as Prisma.Decimal | null)));
     const fullName = contact ? [contact.firstName, contact.lastName].filter(Boolean).join(" ") : opp.contactName;
+    const home = c?.addresses.find((a) => a.kind === "home");
+    const cent = (v: unknown) => {
+      const n = num(v as Prisma.Decimal | null);
+      return n === null ? null : String(Math.round(n * 100 * 10_000) / 10_000);
+    };
+    const qty = (v: unknown) => {
+      const n = num(v as Prisma.Decimal | null);
+      return n === null ? null : String(n);
+    };
+    // Latest reading per register across the deal's meters (registers were free text before, so normalise).
+    const readings = meters.flatMap((m) => m.readings);
+    const register = (r: string | null) => {
+      const k = (r ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (["24h", "24hr", "24hour", "24hours", "general"].includes(k)) return "24h";
+      if (k === "nightstorage" || k === "storage") return "night_storage";
+      return ["day", "night", "wattless", "gas"].includes(k) ? k : null;
+    };
+    const latest = (reg: string, fuel?: "gas") => readings.find((r) => register(r.register) === reg || (fuel && !r.register && meters.find((m) => m.id === r.meterPointId)?.fuel === fuel));
+    const reading = (reg: string, fuel?: "gas") => (latest(reg, fuel) ? String(num(latest(reg, fuel)!.value)) : null);
+    const readDate = readings[0]?.readingDate;
+    // Time at the premises, as whole years plus remaining months.
+    const since = site?.occupiedSince ? isoDay(site.occupiedSince)! : null;
+    const months = since ? Math.max(0, (Number(today().slice(0, 4)) - Number(since.slice(0, 4))) * 12 + (Number(today().slice(5, 7)) - Number(since.slice(5, 7))) - (Number(today().slice(8, 10)) < Number(since.slice(8, 10)) ? 1 : 0)) : null;
+    const aq = num(gas?.annualQuantityKwh as Prisma.Decimal | null) ?? (gas ? num(site?.annualConsumptionKwh as Prisma.Decimal | null) : null);
+    const newSupplierName = contract?.selectedSupplier?.name ?? opp.selectedSupplier?.name ?? null;
+    const broker = await this.brokerProfile();
 
     return {
       "customer.legalName": c?.legalName ?? opp.companyName,
@@ -229,7 +269,6 @@ export class FormsService {
       "bank.iban": bank ? this.crypto.decrypt(bank.ibanEnc) : null,
       "bank.bic": bank?.bicEnc ? this.crypto.decrypt(bank.bicEnc) : null,
       "broker.name": opp.owner?.name ?? null,
-      "broker.company": "Utility Optimizer Limited",
       "opportunity.number": `UO-${String(opp.number).padStart(6, "0")}`,
       today: fmtDate(today()),
       "is.electricity": opp.serviceType === "electricity" || opp.serviceType === "dual_fuel",
@@ -238,16 +277,98 @@ export class FormsService {
       "is.changeOfLegalEntity": opp.supplyChanges.includes("change_of_legal_entity"),
       "is.reenergise": opp.supplyChanges.includes("reenergise_meter"),
       "is.vatRegistered": c?.vatRegistered === "yes",
-      "is.limitedCompany": /limited|ltd|plc|dac|clg/i.test(c?.businessType ?? "") || /\b(ltd|limited|dac|plc|clg)\b/i.test(c?.legalName ?? ""),
-      "is.soleTrader": /sole/i.test(c?.businessType ?? ""),
+      // The legal entity on the customer record; older records without one fall back to the old guess.
+      "is.limitedCompany": c?.legalEntity ? c.legalEntity === "limited_company" || c.legalEntity === "plc" : /limited|ltd|plc|dac|clg/i.test(c?.businessType ?? "") || /\b(ltd|limited|dac|plc|clg)\b/i.test(c?.legalName ?? ""),
+      "is.soleTrader": c?.legalEntity ? c.legalEntity === "sole_trader" : /sole/i.test(c?.businessType ?? ""),
+      "is.renewal": opp.saleType === "renewal",
+      "is.newBusiness": opp.saleType !== "renewal",
+      "is.existingCustomerOfSupplier": !!newSupplierName && !!contract?.existingSupplierName && contract.existingSupplierName.trim().toLowerCase() === newSupplierName.trim().toLowerCase(),
+
+      "customer.legalEntity": c?.legalEntity ?? null,
+      "customer.legalEntityName": c?.legalEntity ? LEGAL_ENTITY_LABELS[c.legalEntity] : null,
+      "customer.dateEstablished": c?.incorporationDate ? fmtDate(isoDay(c.incorporationDate)!) : null,
+      "customer.employees": c?.employees != null ? String(c.employees) : null,
+      "customer.vatExemptNumber": c?.vatExemptNumber ?? null,
+      "customer.charityNumber": c?.charityNumber ?? null,
+      "customer.vatExempt": c?.vatExempt ?? null,
+      "customer.carbonTaxExempt": c?.carbonTaxExempt ?? null,
+      "customer.priorityCustomer": c?.priorityCustomer ?? null,
+      "customer.paperlessBilling": c?.paperlessBilling ?? null,
+      "marketing.email": c?.marketingEmail ?? null,
+      "marketing.post": c?.marketingPost ?? null,
+      "marketing.phone": c?.marketingPhone ?? null,
+      "marketing.sms": c?.marketingSms ?? null,
+      "home.full": full(home),
+      "home.line1": home?.line1 ?? null,
+      "home.line2": home?.line2 ?? null,
+      "home.city": home?.city ?? null,
+      "home.county": home?.county ?? null,
+      "home.postcode": home?.postcode ?? null,
+      "contact.title": contact?.title ?? null,
+      "contact.mobile": contact?.mobile ?? null,
+      "contact.landline": contact?.phone ?? null,
+      "site.name": site?.label ?? null,
+      "site.occupancy": site?.occupancyType ?? null,
+      "site.ownsPremises": site?.occupancyType ? site.occupancyType === "owner_occupied" : null,
+      "site.yearsAtPremises": months === null ? null : String(Math.floor(months / 12)),
+      "site.monthsAtPremises": months === null ? null : String(months % 12),
+      "site.leaseTerms": site?.leaseTerms ?? null,
+      "meter.mic": elec ? qty(elec.mic) : null,
+      "meter.dgCode": elec?.dgCode ?? null,
+      "meter.voltage": elec?.voltage ?? null,
+      "meter.profileClass": elec?.profileClass ?? null,
+      "meter.serial2": elec?.meterSerial2 ?? null,
+      "meter.spc": gas ? qty(gas.supplyPointCapacityKwh) : null,
+      "meter.aq": aq === null ? null : String(aq),
+      // Flogas and Gas Networks Ireland draw the line between small and medium business users at 73,000 kWh a year.
+      "meter.gasSector": aq === null ? null : aq >= 73_000 ? "medium" : "small",
+      "reading.24h": reading("24h"),
+      "reading.day": reading("day"),
+      "reading.night": reading("night"),
+      "reading.nightStorage": reading("night_storage"),
+      "reading.wattless": reading("wattless"),
+      "reading.gas": reading("gas", "gas"),
+      "reading.date": readDate ? fmtDate(isoDay(readDate)!) : null,
+      "contract.priceType": contract?.priceType ?? null,
+      "contract.isFixed": contract?.priceType ? contract.priceType !== "variable" : null,
+      "contract.termText": contract?.termMonths ? `${contract.termMonths} months` : null,
+      "contract.rate24hCent": contract && num(contract.nightRate) === null ? cent(contract.dayRate) : null,
+      "contract.rateDayCent": contract && num(contract.nightRate) !== null ? cent(contract.dayRate) : null,
+      "contract.standingChargeCent": cent(contract?.standingCharge),
+      "site.street": site ? [site.line1, site.line2].filter(Boolean).join(", ") : null,
+      "site.locality": site ? [site.city, site.county, site.postcode].filter(Boolean).join(", ") || null : null,
+      "billing.street": billing ? [billing.line1, billing.line2].filter(Boolean).join(", ") : null,
+      "billing.locality": billing ? [billing.city, billing.county, billing.postcode].filter(Boolean).join(", ") || null : null,
+      "contract.tariff": contract ? (num(contract.nightRate) !== null ? "night_saver" : "24h") : null,
+      "contract.nightStorageRate": rate(contract?.nightStorageRate),
+      "contract.summerDayRate": rate(contract?.summerDayRate),
+      "contract.winterDayRate": rate(contract?.winterDayRate),
+      "contract.dayRateCent": cent(contract?.dayRate),
+      "contract.nightRateCent": cent(contract?.nightRate),
+      "contract.gasRateCent": cent(contract?.gasRate),
+      "contract.nightStorageRateCent": cent(contract?.nightStorageRate),
+      "contract.summerDayRateCent": cent(contract?.summerDayRate),
+      "contract.winterDayRateCent": cent(contract?.winterDayRate),
+      "opportunity.saleType": opp.saleType,
+      "broker.agencyId": contract?.selectedSupplier?.agencyId ?? opp.selectedSupplier?.agencyId ?? null,
+      "broker.company": broker.companyName,
     };
+  }
+
+  private async brokerProfile(): Promise<{ companyName: string }> {
+    const saved = (await this.prisma.setting.findUnique({ where: { key: "broker.profile" } }))?.value as { companyName?: string } | undefined;
+    return { companyName: saved?.companyName ?? "Utility Optimizer Limited" };
   }
 
   private static fieldValue(f: FormField, crm: Record<FormSource, FillValue>): FillValue {
     if (f.kind === "signature" || f.kind === "signed_date") return null;
-    if (!f.source) return f.kind === "check" ? false : null;
+    const empty = f.kind === "check" ? false : null;
+    if (f.onlyIf && !sourceMatches(crm[f.onlyIf.source], f.onlyIf.equals)) return empty;
+    if (!f.source) return empty;
     const v = crm[f.source];
-    return f.kind === "check" ? v === true : typeof v === "string" ? v : v === true ? "Yes" : null;
+    if (f.match !== undefined && !sourceMatches(v, f.match)) return empty;
+    if (f.kind === "check") return f.match !== undefined ? true : v === true;
+    return typeof v === "string" ? v : v === true ? "Yes" : null;
   }
 
   /**

@@ -105,6 +105,19 @@ export type Fuel = (typeof FUELS)[number];
 export const READING_TYPES = ["actual", "estimated", "customer", "smart"] as const;
 export type ReadingType = (typeof READING_TYPES)[number];
 
+/** Meter registers a reading can be for (supplier forms ask for each separately). */
+export const METER_REGISTERS = ["24h", "day", "night", "night_storage", "wattless", "gas"] as const;
+export type MeterRegister = (typeof METER_REGISTERS)[number];
+export const METER_REGISTER_LABELS = labels<MeterRegister>({ "24h": "24 hour", day: "Day", night: "Night", night_storage: "Night storage", wattless: "Wattless", gas: "Gas" });
+
+/** How the unit rates are priced on a contract. */
+export const PRICE_TYPES = ["fixed", "variable", "fully_fixed"] as const;
+export type PriceType = (typeof PRICE_TYPES)[number];
+export const PRICE_TYPE_LABELS = labels<PriceType>({ fixed: "Fixed energy rate", variable: "Variable rate", fully_fixed: "Fully fixed rate" });
+
+export const CONTACT_TITLES = ["Mr", "Mrs", "Ms", "Miss", "Dr"] as const;
+export type ContactTitle = (typeof CONTACT_TITLES)[number];
+
 export const CONTRACT_STATUSES = ["draft", "quoted", "selected", "signed", "submitted", "live", "ended", "cancelled"] as const;
 export type ContractStatus = (typeof CONTRACT_STATUSES)[number];
 

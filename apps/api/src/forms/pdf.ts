@@ -113,6 +113,11 @@ export async function fillPdf(input: FillInput): Promise<{ bytes: Uint8Array; is
   const expect = new Map<number, Expectation>();
   const exp = (page: number) => expect.get(page) ?? (expect.set(page, { page, text: [], images: 0 }), expect.get(page)!);
 
+  // White boxes over what a scanned template already shows, drawn first so no value is covered.
+  for (const f of input.fields) {
+    if (f.mask && pages[f.page]) pages[f.page].drawRectangle({ x: f.x, y: f.y, width: f.w, height: f.h, color: rgb(1, 1, 1) });
+  }
+
   for (const f of input.fields) {
     const page = pages[f.page];
     if (!page) {
@@ -142,7 +147,8 @@ export async function fillPdf(input: FillInput): Promise<{ bytes: Uint8Array; is
       continue;
     }
     const raw = f.kind === "signed_date" ? (f.signer ? input.signedDates?.[f.signer] : undefined) : input.values[f.id];
-    const value = typeof raw === "string" ? raw.replace(/\s*[\r\n]+\s*/g, ", ").trim() : "";
+    const flat = typeof raw === "string" ? raw.replace(/\s*[\r\n]+\s*/g, ", ").trim() : "";
+    const value = f.upper ? flat.toLocaleUpperCase("en-IE") : flat;
     if (!value) {
       if (f.required && f.kind === "text") issues.push(`"${f.label}" is required but empty.`);
       continue;

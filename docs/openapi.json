@@ -3091,6 +3091,32 @@
         ]
       }
     },
+    "/api/admin/settings/broker": {
+      "get": {
+        "operationId": "AdminController_brokerSettings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ]
+      },
+      "put": {
+        "operationId": "AdminController_saveBroker",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/api/admin/settings/workflow": {
       "get": {
         "operationId": "AdminController_workflowSettings",

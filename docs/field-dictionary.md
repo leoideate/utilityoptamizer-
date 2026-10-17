@@ -74,6 +74,7 @@ Generated from `apps/api/prisma/schema.prisma` (`node scripts/gen-field-dictiona
 | renewal_route | Enum: full_form, rate_card_only | ✓ | What a renewal with this supplier needs: its full form, or the signed rate card alone. Default full_form |
 | outgoing_consent_required | Boolean | ✓ | A change of legal entity also needs the outgoing account holder's consent. Default false |
 | mono_copy_required | Boolean | ✓ | Submissions must include a black and white copy of each signed form. Default false |
+| agency_id | String |  | Our agency / broker ID with this supplier, printed on its application forms |
 | active | Boolean | ✓ | Default true |
 
 ## customers
@@ -97,6 +98,18 @@ Permanent customer record. Merged duplicates are kept with merged_into_id set.
 | phone_key | String |  | Last 9 digits of phone, for duplicate detection |
 | email | String |  |  |
 | advertising_method | String |  |  |
+| legal_entity | Enum: sole_trader, partnership, limited_company, plc, charity_club, other |  |  |
+| employees | Int |  |  |
+| vat_exempt | Boolean |  |  |
+| vat_exempt_number | String |  |  |
+| carbon_tax_exempt | Boolean |  |  |
+| charity_number | String |  |  |
+| priority_customer | Boolean |  | Someone at the premises relies on life-support or medical equipment, or has special needs |
+| marketing_email | Boolean |  | Marketing preferences (null = not asked) |
+| marketing_post | Boolean |  |  |
+| marketing_phone | Boolean |  |  |
+| marketing_sms | Boolean |  |  |
+| paperless_billing | Boolean |  |  |
 | active | Boolean | ✓ | Default true |
 | merged_into_id | UUID |  | Set when this record was merged into another. The record is kept, never deleted |
 | created_by_id | UUID |  |  |
@@ -109,7 +122,7 @@ Permanent customer record. Merged duplicates are kept with merged_into_id set.
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
 | customer_id | UUID | ✓ |  |
-| kind | Enum: registered, trading, billing, postal | ✓ | Default trading |
+| kind | Enum: registered, trading, billing, postal, ///, Sole, traders', and, partners', home, address, (some, supplier, forms, ask, for, it)., home | ✓ | Default trading |
 | line1 | String | ✓ |  |
 | line2 | String |  |  |
 | city | String |  |  |
@@ -123,6 +136,7 @@ Permanent customer record. Merged duplicates are kept with merged_into_id set.
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
 | customer_id | UUID | ✓ |  |
+| title | String |  | Mr, Mrs, Ms, Miss or Dr |
 | first_name | String | ✓ |  |
 | last_name | String |  |  |
 | job_title | String |  |  |
@@ -135,6 +149,8 @@ Permanent customer record. Merged duplicates are kept with merged_into_id set.
 | created_at | DateTime | ✓ | Default now() |
 
 ## bank_accounts
+
+Restricted (bank.read). Values encrypted; only the IBAN's last four digits are stored in clear.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -203,6 +219,8 @@ One sale (new or renewal). Permanent: can't be deleted or archived (database tri
 
 ## stage_history
 
+One row per stage visit; drives "average time in each stage".
+
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -232,6 +250,8 @@ One sale (new or renewal). Permanent: can't be deleted or archived (database tri
 | landlord_contact | String |  |  |
 | customer_sector | String |  |  |
 | annual_consumption_kwh | Decimal(14, 2) |  |  |
+| occupied_since | Date |  | When the customer moved in (forms ask how long they've been at the premises) |
+| lease_terms | String |  |  |
 | created_at | DateTime | ✓ | Default now() |
 
 ## meter_points
@@ -247,6 +267,13 @@ One sale (new or renewal). Permanent: can't be deleted or archived (database tri
 | meter_number | String |  |  |
 | mcc_code | String |  |  |
 | format_exception_reason | String |  | Why an identifier doesn't match the standard format (new connection, NI site...) |
+| mic | Decimal(10, 2) |  | Electricity: maximum import capacity (kVA), DUoS group, voltage, profile class, second meter serial |
+| dg_code | String |  |  |
+| voltage | String |  |  |
+| profile_class | String |  |  |
+| meter_serial_2 | String |  |  |
+| supply_point_capacity_kwh | Decimal(14, 2) |  | Gas: supply point capacity and annual quantity (kWh), from Gas Networks Ireland |
+| annual_quantity_kwh | Decimal(14, 2) |  |  |
 
 ## meter_readings
 
@@ -289,6 +316,10 @@ Live/ended contracts are read-only history; renewals create new rows.
 | other_rate | Decimal(10, 4) |  |  |
 | gas_rate | Decimal(10, 4) |  |  |
 | standing_charge | Decimal(10, 4) |  |  |
+| price_type | Enum: fixed, variable, fully_fixed |  |  |
+| night_storage_rate | Decimal(10, 4) |  |  |
+| summer_day_rate | Decimal(10, 4) |  |  |
+| winter_day_rate | Decimal(10, 4) |  |  |
 | supplier_reference | String |  |  |
 | status | Enum: draft, quoted, selected, signed, submitted, live, ended, cancelled | ✓ | Default draft |
 | previous_contract_id | UUID |  | The contract this one renews. Historical contracts are never modified |
@@ -363,7 +394,7 @@ Live/ended contracts are read-only history; renewals create new rows.
 
 ## principals
 
-Restricted. Personal values are encrypted; has_* flags let validation run without decrypting.
+Restricted. Date of birth and nationality are encrypted; presence flags let rules run without decrypting. Restricted. Personal values are encrypted; has_* flags let validation run without decrypting.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -384,6 +415,8 @@ Restricted. Personal values are encrypted; has_* flags let validation run withou
 | created_at | DateTime | ✓ | Default now() |
 
 ## principal_addresses
+
+Residential address history (restricted, address encrypted).
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -438,7 +471,7 @@ Restricted. Personal values are encrypted; has_* flags let validation run withou
 
 ## document_versions
 
-Every upload is a new version; nothing is overwritten.
+Every upload is a new version; nothing is overwritten. Every upload is a new version; nothing is overwritten.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -456,6 +489,8 @@ Every upload is a new version; nothing is overwritten.
 
 ## FormTemplate
 
+A supplier PDF with positioned fields. Field layout changes bump `version`; generated forms keep a snapshot.
+
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -468,6 +503,8 @@ Every upload is a new version; nothing is overwritten.
 | sha256 | String | ✓ |  |
 
 ## generated_forms
+
+One filled copy of a template for an opportunity. Never edited; regenerating supersedes it.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -497,6 +534,8 @@ Every upload is a new version; nothing is overwritten.
 
 ## form_signatures
 
+An uploaded signature image, authorised for one generated form only.
+
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -512,6 +551,8 @@ Every upload is a new version; nothing is overwritten.
 | uploaded_at | DateTime | ✓ | Default now() |
 
 ## bill_checks
+
+Verification of the previous supplier's bill for a change of supplier.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -530,6 +571,9 @@ Every upload is a new version; nothing is overwritten.
 | verified_at | DateTime | ✓ | Default now() |
 
 ## workflow_cases
+
+The back-office case on an opportunity: how the request came in, the customer and supply
+paths, and for a change of entity the supply point taken over and the outgoing account.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -556,6 +600,8 @@ Every upload is a new version; nothing is overwritten.
 
 ## lease_checks
 
+A check of one lease version. Append-only: a draft and the signed copy are separate rows.
+
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -578,6 +624,8 @@ Every upload is a new version; nothing is overwritten.
 
 ## terms_checks
 
+Admin's verification of the proposed terms. Only counts while the terms are unchanged (hash).
+
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -589,6 +637,8 @@ Every upload is a new version; nothing is overwritten.
 
 ## Submission
 
+What was sent to the external party: recipient, channel, the exact file versions and proof of delivery.
+
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -598,6 +648,8 @@ Every upload is a new version; nothing is overwritten.
 | sent_at | Date | ✓ |  |
 
 ## submission_responses
+
+The external party's answer to a submission. Append-only.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -616,6 +668,8 @@ Every upload is a new version; nothing is overwritten.
 | recorded_at | DateTime | ✓ | Default now() |
 
 ## supply_occupancies
+
+Who occupies a supply point from when. Append-only, so the outgoing customer's history is kept.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -692,7 +746,7 @@ Every upload is a new version; nothing is overwritten.
 
 ## timeline_entries
 
-Append-only (trigger). Corrections are new entries with corrects_id.
+Append-only (a database trigger blocks UPDATE and DELETE). Corrections are new entries with `correctsId`. Append-only (trigger). Corrections are new entries with corrects_id.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -710,7 +764,7 @@ Append-only (trigger). Corrections are new entries with corrects_id.
 
 ## audit_logs
 
-Append-only (trigger). Never contains restricted values.
+Append-only security/audit log (trigger-protected). Never contains sensitive values. Append-only (trigger). Never contains restricted values.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -771,6 +825,9 @@ Append-only (trigger). Never contains restricted values.
 
 ## integration_jobs
 
+Outbound integration work (supplier/Worldpay submission, email, WhatsApp, accounting).
+Executed by BullMQ with retries; jobs that exhaust retries become `dead` (dead-letter).
+
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -787,6 +844,8 @@ Append-only (trigger). Never contains restricted values.
 | updated_at | DateTime | ✓ |  |
 
 ## webhook_events
+
+Inbound webhooks, recorded once per provider event id (idempotency).
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -808,6 +867,8 @@ Append-only (trigger). Never contains restricted values.
 | updated_at | DateTime | ✓ |  |
 
 ## chat_channels
+
+A conversation: a direct message between two users, a team channel, or the internal discussion on one opportunity.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -847,6 +908,8 @@ Append-only (trigger). Never contains restricted values.
 | created_at | DateTime | ✓ | Default now() |
 
 ## chat_message_revisions
+
+Previous text of edited or deleted messages (append-only), for administrators and disputes.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -902,6 +965,8 @@ Append-only (trigger). Never contains restricted values.
 
 ## Mailbox
 
+A user's connected mailbox. Tokens are encrypted; the address always equals the user's CRM email.
+
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -910,6 +975,8 @@ Append-only (trigger). Never contains restricted values.
 | address | String | ✓ |  |
 
 ## email_messages
+
+One email from a connected mailbox (inbox or sent). Kept after a mailbox is disconnected; never deleted.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|

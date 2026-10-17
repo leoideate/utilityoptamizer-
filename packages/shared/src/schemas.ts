@@ -21,6 +21,7 @@ import {
   CONTRACT_STATUSES,
   MERCHANT_STATUSES,
   SIGNER_ROLES,
+  PRICE_TYPES,
 } from "./enums";
 import { STAGE_KEYS } from "./stages";
 
@@ -78,7 +79,7 @@ export const updateUserSchema = z.object({
 // --- Customers -------------------------------------------------------------
 
 export const addressSchema = z.object({
-  kind: z.enum(["registered", "trading", "billing", "postal"]).default("trading"),
+  kind: z.enum(["registered", "trading", "billing", "postal", "home"]).default("trading"),
   line1: text(200).min(1, "Enter the first line of the address."),
   line2: optText(200),
   city: optText(100),
@@ -102,10 +103,26 @@ export const customerSchema = z.object({
   email: optEmail,
   advertisingMethod: optText(200),
   addresses: z.array(addressSchema).optional(),
+  // Details supplier application forms ask for.
+  legalEntity: z.enum(LEGAL_ENTITIES).nullable().optional(),
+  employees: z.number().int().min(0).max(1_000_000).nullable().optional(),
+  vatExempt: z.boolean().nullable().optional(),
+  vatExemptNumber: optText(40),
+  carbonTaxExempt: z.boolean().nullable().optional(),
+  charityNumber: optText(40),
+  /** Someone at the premises relies on life-support or medical equipment, or has special needs. */
+  priorityCustomer: z.boolean().nullable().optional(),
+  /** Marketing preferences (null = not asked). */
+  marketingEmail: z.boolean().nullable().optional(),
+  marketingPost: z.boolean().nullable().optional(),
+  marketingPhone: z.boolean().nullable().optional(),
+  marketingSms: z.boolean().nullable().optional(),
+  paperlessBilling: z.boolean().nullable().optional(),
 });
 export const customerUpdateSchema = customerSchema.partial().extend({ legalName: text(200).min(1).optional() });
 
 export const contactSchema = z.object({
+  title: optText(20),
   firstName: text(100).min(1, "Enter a first name."),
   lastName: optText(100),
   jobTitle: optText(100),
@@ -225,6 +242,9 @@ export const supplySiteSchema = z.object({
   landlordContact: optText(200),
   customerSector: optText(100),
   annualConsumptionKwh: optMoney("Annual consumption"),
+  /** When the customer moved in (forms ask how long they've been at the premises). */
+  occupiedSince: optDate,
+  leaseTerms: optText(200),
 });
 
 export const meterPointSchema = z.object({
@@ -235,6 +255,15 @@ export const meterPointSchema = z.object({
   meterNumber: optText(40),
   mccCode: optText(10),
   formatExceptionReason: optText(300),
+  // Electricity
+  mic: z.number().min(0).max(100_000).nullable().optional(),
+  dgCode: optText(10),
+  voltage: optText(20),
+  profileClass: optText(10),
+  meterSerial2: optText(40),
+  // Gas
+  supplyPointCapacityKwh: optMoney("Supply point capacity"),
+  annualQuantityKwh: optMoney("Annual quantity"),
 });
 
 export const meterReadingSchema = z.object({
@@ -263,6 +292,10 @@ export const energyContractSchema = z.object({
   otherRate: rate("Other/wattless rate").nullable().optional(),
   gasRate: rate("Gas rate").nullable().optional(),
   standingCharge: rate("Standing charge").nullable().optional(),
+  priceType: z.enum(PRICE_TYPES).nullable().optional(),
+  nightStorageRate: rate("Night storage rate").nullable().optional(),
+  summerDayRate: rate("Summer day rate").nullable().optional(),
+  winterDayRate: rate("Winter day rate").nullable().optional(),
   supplierReference: optText(100),
   status: z.enum(CONTRACT_STATUSES).optional(),
 });

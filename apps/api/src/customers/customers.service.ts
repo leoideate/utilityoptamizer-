@@ -143,6 +143,18 @@ export class CustomersService {
       phoneKey: input.phone === undefined ? undefined : phoneKey(input.phone),
       email: input.email,
       advertisingMethod: input.advertisingMethod,
+      legalEntity: input.legalEntity,
+      employees: input.employees,
+      vatExempt: input.vatExempt,
+      vatExemptNumber: input.vatExemptNumber,
+      carbonTaxExempt: input.carbonTaxExempt,
+      charityNumber: input.charityNumber,
+      priorityCustomer: input.priorityCustomer,
+      marketingEmail: input.marketingEmail,
+      marketingPost: input.marketingPost,
+      marketingPhone: input.marketingPhone,
+      marketingSms: input.marketingSms,
+      paperlessBilling: input.paperlessBilling,
     });
   }
 

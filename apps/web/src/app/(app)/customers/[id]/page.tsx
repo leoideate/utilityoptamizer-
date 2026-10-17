@@ -6,10 +6,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { CustomerFields, type CustomerFormValues, emptyCustomer, toCustomerPayload } from "@/components/customer-form";
+import { CustomerFields, type CustomerFormValues, emptyCustomer, formAddresses, needsHomeAddress, toCustomerPayload, toYesNo } from "@/components/customer-form";
 import { OutcomeBadge, ServiceBadge } from "@/components/domain";
 import { Dialog } from "@/components/ui/overlays";
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, IssueList, PageHeader, Skeleton } from "@/components/ui/primitives";
+import { CONTACT_TITLES } from "@uo/shared";
 import { type ApiError, api } from "@/lib/api";
 import { date, isoDay, ref } from "@/lib/format";
 import { useCan } from "@/lib/session";
@@ -30,10 +31,22 @@ interface Profile {
   phone: string | null;
   email: string | null;
   advertisingMethod: string | null;
+  legalEntity: string | null;
+  employees: number | null;
+  vatExempt: boolean | null;
+  vatExemptNumber: string | null;
+  carbonTaxExempt: boolean | null;
+  charityNumber: string | null;
+  priorityCustomer: boolean | null;
+  paperlessBilling: boolean | null;
+  marketingEmail: boolean | null;
+  marketingPost: boolean | null;
+  marketingPhone: boolean | null;
+  marketingSms: boolean | null;
   active: boolean;
   mergedInto: { id: string; legalName: string } | null;
-  addresses: { id: string; kind: string; line1: string; city: string | null; county: string | null; postcode: string | null }[];
-  contacts: { id: string; firstName: string; lastName: string | null; jobTitle: string | null; email: string | null; phone: string | null; mobile: string | null; isPrimary: boolean }[];
+  addresses: { id: string; kind: string; line1: string; line2: string | null; city: string | null; county: string | null; postcode: string | null; country: string }[];
+  contacts: Contact[];
   sites: { id: string; label: string | null; line1: string; meterPoints: { id: string; fuel: string; mprn: string | null; gprn: string | null }[] }[];
   bankAccounts: { id: string; ibanLast4: string; createdAt: string }[];
   /** Supply points this customer has occupied (change of entity history), including ones since taken over. */
@@ -42,8 +55,21 @@ interface Profile {
   canReadBank: boolean;
 }
 
+interface Contact {
+  id: string;
+  title: string | null;
+  firstName: string;
+  lastName: string | null;
+  jobTitle: string | null;
+  email: string | null;
+  phone: string | null;
+  mobile: string | null;
+  isPrimary: boolean;
+}
+
 function toForm(p: Profile): CustomerFormValues {
-  const a = p.addresses[0];
+  const a = p.addresses.find((x) => x.kind === "trading") ?? p.addresses.find((x) => x.kind !== "home");
+  const home = p.addresses.find((x) => x.kind === "home");
   return {
     ...emptyCustomer,
     legalName: p.legalName,
@@ -59,10 +85,26 @@ function toForm(p: Profile): CustomerFormValues {
     phone: p.phone ?? "",
     email: p.email ?? "",
     advertisingMethod: p.advertisingMethod ?? "",
+    legalEntity: p.legalEntity ?? "",
+    employees: p.employees == null ? "" : String(p.employees),
+    vatExempt: toYesNo(p.vatExempt),
+    vatExemptNumber: p.vatExemptNumber ?? "",
+    carbonTaxExempt: toYesNo(p.carbonTaxExempt),
+    charityNumber: p.charityNumber ?? "",
+    priorityCustomer: toYesNo(p.priorityCustomer),
+    paperlessBilling: toYesNo(p.paperlessBilling),
+    marketingEmail: toYesNo(p.marketingEmail),
+    marketingPost: toYesNo(p.marketingPost),
+    marketingPhone: toYesNo(p.marketingPhone),
+    marketingSms: toYesNo(p.marketingSms),
     line1: a?.line1 ?? "",
     city: a?.city ?? "",
     county: a?.county ?? "",
     postcode: a?.postcode ?? "",
+    homeLine1: home?.line1 ?? "",
+    homeCity: home?.city ?? "",
+    homeCounty: home?.county ?? "",
+    homePostcode: home?.postcode ?? "",
   };
 }
 
@@ -77,14 +119,18 @@ export default function CustomerPage() {
   }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
   const [issues, setIssues] = useState<string[]>([]);
   const [dialog, setDialog] = useState<null | "contact" | "bank" | "merge">(null);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [revealed, setRevealed] = useState<Record<string, { accountName: string; iban: string; bic: string | null }>>({});
   const refresh = () => qc.invalidateQueries({ queryKey: ["customer", id] });
   const save = useMutation({
     meta: { silent: true },
     mutationFn: (v: CustomerFormValues) => {
       const payload = toCustomerPayload(v, false);
-      const address = v.line1.trim() ? [{ kind: "trading", line1: v.line1.trim(), city: v.city || null, county: v.county || null, postcode: v.postcode || null, country: "IE" }] : [];
-      return api.patch(`/customers/${id}`, { ...payload, addresses: address });
+      // The API replaces the whole address list: send back the kinds this form doesn't edit (billing, registered…).
+      const all = data?.addresses ?? [];
+      const shownAsTrading = all.find((x) => x.kind === "trading") ?? all.find((x) => x.kind !== "home");
+      const kept = all.filter((x) => x !== shownAsTrading && !(x.kind === "home" && needsHomeAddress(v.legalEntity))).map(({ id: _id, ...rest }) => rest);
+      return api.patch(`/customers/${id}`, { ...payload, addresses: [...kept, ...formAddresses(v)] });
     },
     onSuccess: () => (setIssues([]), refresh()),
     onError: (e) => setIssues((e as ApiError).issues.length ? (e as ApiError).issues : [(e as ApiError).message]),
@@ -183,8 +229,13 @@ export default function CustomerPage() {
             <ul className="divide-y divide-border">
               {data.contacts.map((c) => (
                 <li key={c.id} className="px-5 py-3 text-sm">
-                  <p className="font-medium">
-                    {c.firstName} {c.lastName} {c.isPrimary && <Badge tone="primary">Primary</Badge>}
+                  <p className="flex items-center gap-2 font-medium">
+                    <span className="min-w-0 flex-1">
+                      {[c.title, c.firstName, c.lastName].filter(Boolean).join(" ")} {c.isPrimary && <Badge tone="primary">Primary</Badge>}
+                    </span>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingContact(c)} aria-label={`Edit ${c.firstName}`}>
+                      Edit
+                    </Button>
                   </p>
                   {c.jobTitle && <p className="text-muted">{c.jobTitle}</p>}
                   <p className="text-muted">{[c.email, c.mobile, c.phone].filter(Boolean).join(" · ")}</p>
@@ -259,18 +310,33 @@ export default function CustomerPage() {
         </div>
       </div>
       {dialog === "contact" && <ContactDialog customerId={id} onClose={() => (setDialog(null), refresh())} />}
+      {editingContact && <ContactDialog customerId={id} contact={editingContact} onClose={() => (setEditingContact(null), refresh())} />}
       {dialog === "bank" && <BankDialog customerId={id} onClose={() => (setDialog(null), refresh())} />}
       {dialog === "merge" && <MergeDialog target={data} onClose={() => (setDialog(null), refresh())} />}
     </>
   );
 }
 
-function ContactDialog({ customerId, onClose }: { customerId: string; onClose: () => void }) {
-  const { register, handleSubmit } = useForm({ defaultValues: { firstName: "", lastName: "", jobTitle: "", email: "", phone: "", mobile: "", isPrimary: false } });
+function ContactDialog({ customerId, contact, onClose }: { customerId: string; contact?: Contact; onClose: () => void }) {
+  const { register, handleSubmit } = useForm({
+    defaultValues: {
+      title: contact?.title ?? "",
+      firstName: contact?.firstName ?? "",
+      lastName: contact?.lastName ?? "",
+      jobTitle: contact?.jobTitle ?? "",
+      email: contact?.email ?? "",
+      phone: contact?.phone ?? "",
+      mobile: contact?.mobile ?? "",
+      isPrimary: contact?.isPrimary ?? false,
+    },
+  });
   const [issues, setIssues] = useState<string[]>([]);
   const m = useMutation({
     meta: { silent: true },
-    mutationFn: (v: Record<string, unknown>) => api.post(`/customers/${customerId}/contacts`, Object.fromEntries(Object.entries(v).map(([k, x]) => [k, x === "" ? null : x]))),
+    mutationFn: (v: Record<string, unknown>) => {
+      const body = Object.fromEntries(Object.entries(v).map(([k, x]) => [k, x === "" ? null : x]));
+      return contact ? api.patch(`/contacts/${contact.id}`, body) : api.post(`/customers/${customerId}/contacts`, body);
+    },
     onSuccess: onClose,
     onError: (e) => setIssues((e as ApiError).issues.length ? (e as ApiError).issues : [(e as ApiError).message]),
   });
@@ -278,7 +344,7 @@ function ContactDialog({ customerId, onClose }: { customerId: string; onClose: (
     <Dialog
       open
       onOpenChange={(o) => !o && onClose()}
-      title="Add contact"
+      title={contact ? "Edit contact" : "Add contact"}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -291,6 +357,18 @@ function ContactDialog({ customerId, onClose }: { customerId: string; onClose: (
       }
     >
       <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Title">
+          {(p) => (
+            <>
+              <Input {...p} {...register("title")} list="contact-titles" placeholder="Mr, Ms, Dr…" />
+              <datalist id="contact-titles">
+                {CONTACT_TITLES.map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
+            </>
+          )}
+        </Field>
         <Field label="First name" required>{(p) => <Input {...p} {...register("firstName")} />}</Field>
         <Field label="Last name">{(p) => <Input {...p} {...register("lastName")} />}</Field>
         <Field label="Job title">{(p) => <Input {...p} {...register("jobTitle")} />}</Field>

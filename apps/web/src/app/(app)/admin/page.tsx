@@ -325,6 +325,7 @@ function SupplierDialog({ supplier, onClose }: { supplier?: Supplier; onClose: (
     renewalRoute: supplier?.renewalRoute ?? ("full_form" as RenewalRoute),
     monoCopyRequired: supplier?.monoCopyRequired ?? false,
     outgoingConsentRequired: supplier?.outgoingConsentRequired ?? false,
+    agencyId: supplier?.agencyId ?? "",
   });
   const { run, running, issues } = useAction(onClose);
   return (
@@ -350,6 +351,9 @@ function SupplierDialog({ supplier, onClose }: { supplier?: Supplier; onClose: (
         </Field>
         <Field label="Submissions email" hint="Where “Send submission pack” emails applications.">
           {(p) => <Input {...p} type="email" value={v.submissionEmail} onChange={(e) => setV({ ...v, submissionEmail: e.target.value })} />}
+        </Field>
+        <Field label="Our agency ID" hint="Printed in the agency boxes on this supplier's forms.">
+          {(p) => <Input {...p} value={v.agencyId} onChange={(e) => setV({ ...v, agencyId: e.target.value })} />}
         </Field>
         {v.kind === "energy" && (
           <fieldset className="space-y-2 rounded-lg border border-border p-3">
@@ -383,6 +387,31 @@ interface Job {
   attempts: number;
   lastError: string | null;
   updatedAt: string;
+}
+
+/** How the brokerage is named on supplier forms. */
+function BrokerCard() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["admin", "broker"], queryFn: () => api.get<{ companyName: string }>("/admin/settings/broker") });
+  const [companyName, setCompanyName] = useState("");
+  useEffect(() => {
+    if (q.data) setCompanyName(q.data.companyName);
+  }, [q.data]);
+  const save = useAction(() => qc.invalidateQueries({ queryKey: ["admin", "broker"] }));
+  return (
+    <Card>
+      <CardHeader title="Supplier forms" description="Agency boxes on supplier forms. Each supplier's agency ID is set under Suppliers." />
+      <div className="flex flex-wrap items-end gap-4 p-5">
+        <Field label="Broker company name" className="min-w-72 flex-1">
+          {(p) => <Input {...p} value={companyName} onChange={(e) => setCompanyName(e.target.value)} />}
+        </Field>
+        <Button loading={save.running} onClick={() => save.run(() => api.put("/admin/settings/broker", { companyName }))}>
+          Save
+        </Button>
+        <IssueList issues={save.issues} />
+      </div>
+    </Card>
+  );
 }
 
 function IntegrationsAdmin() {
@@ -423,6 +452,7 @@ function IntegrationsAdmin() {
           <IssueList issues={save.issues} />
         </div>
       </Card>
+      <BrokerCard />
       <Card>
         <CardHeader
           title="Outbound jobs"

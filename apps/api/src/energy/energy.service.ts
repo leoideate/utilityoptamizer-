@@ -56,7 +56,7 @@ export class EnergyService {
     const { address, ...rest } = input;
     const { kind: _kind, ...addressFields } = address;
     const site = await this.prisma.supplySite.create({
-      data: { ...rest, ...addressFields, opportunityId, customerId: opp.customerId, annualConsumptionKwh: input.annualConsumptionKwh ?? null },
+      data: { ...rest, ...addressFields, opportunityId, customerId: opp.customerId, annualConsumptionKwh: input.annualConsumptionKwh ?? null, occupiedSince: dateOnly(input.occupiedSince) ?? null },
     });
     await this.audit.record(
       actor,
@@ -92,7 +92,7 @@ export class EnergyService {
     await this.site(actor, siteId);
     const { address, ...rest } = input;
     const { kind: _kind, ...addressFields } = address ?? {};
-    await this.prisma.supplySite.update({ where: { id: siteId }, data: defined({ ...rest, ...addressFields }) });
+    await this.prisma.supplySite.update({ where: { id: siteId }, data: defined({ ...rest, ...addressFields, occupiedSince: dateOnly(input.occupiedSince) }) });
     await this.audit.log(actor, { action: "site.update", entityType: "supply_site", entityId: siteId, summary: "Updated supply site" });
   }
 
@@ -107,6 +107,14 @@ export class EnergyService {
       meterNumber: input.meterNumber ?? null,
       mccCode: normalizeIdentifier(input.mccCode),
       formatExceptionReason: input.formatExceptionReason ?? null,
+      // Electricity-only and gas-only details (cleared if the fuel doesn't match).
+      mic: input.fuel === "electricity" ? (input.mic ?? null) : null,
+      dgCode: input.fuel === "electricity" ? (input.dgCode?.toUpperCase() ?? null) : null,
+      voltage: input.fuel === "electricity" ? (input.voltage ?? null) : null,
+      profileClass: input.fuel === "electricity" ? (input.profileClass ?? null) : null,
+      meterSerial2: input.fuel === "electricity" ? (input.meterSerial2 ?? null) : null,
+      supplyPointCapacityKwh: input.fuel === "gas" ? (input.supplyPointCapacityKwh ?? null) : null,
+      annualQuantityKwh: input.fuel === "gas" ? (input.annualQuantityKwh ?? null) : null,
     };
     if (input.fuel === "electricity" && input.gprn) throw new RuleViolation(["An electricity meter can't have a GPRN."]);
     if (input.fuel === "gas" && input.mprn) throw new RuleViolation(["A gas meter can't have an MPRN."]);
@@ -168,6 +176,10 @@ export class EnergyService {
       otherRate: input.otherRate,
       gasRate: input.gasRate,
       standingCharge: input.standingCharge,
+      priceType: input.priceType,
+      nightStorageRate: input.nightStorageRate,
+      summerDayRate: input.summerDayRate,
+      winterDayRate: input.winterDayRate,
       supplierReference: input.supplierReference,
       status: input.status,
     });

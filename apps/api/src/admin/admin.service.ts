@@ -34,8 +34,15 @@ export const supplierSchema = z.object({
   renewalRoute: z.enum(RENEWAL_ROUTES).optional(),
   outgoingConsentRequired: z.boolean().optional(),
   monoCopyRequired: z.boolean().optional(),
+  /** Our agency / broker ID with this supplier, printed on its forms. */
+  agencyId: z.string().trim().max(60).nullable().optional().or(z.literal("").transform(() => null)),
   active: z.boolean().optional(),
 });
+
+/** How the brokerage appears on supplier forms. */
+export const brokerProfileSchema = z.object({ companyName: z.string().trim().min(1, "Enter the company name.").max(200) });
+export type BrokerProfile = z.infer<typeof brokerProfileSchema>;
+export const DEFAULT_BROKER_PROFILE: BrokerProfile = { companyName: "Utility Optimizer Limited" };
 
 @Injectable()
 export class AdminService {
@@ -136,6 +143,10 @@ export class AdminService {
   }
 
   // --- Settings -------------------------------------------------------------------
+
+  async brokerProfile(): Promise<BrokerProfile> {
+    return { ...DEFAULT_BROKER_PROFILE, ...(await this.getSetting<Partial<BrokerProfile>>("broker.profile", {})) };
+  }
 
   async getSetting<T>(key: string, fallback: T): Promise<T> {
     const s = await this.prisma.setting.findUnique({ where: { key } });

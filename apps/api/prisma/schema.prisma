@@ -121,6 +121,14 @@ enum AddressKind {
   trading
   billing
   postal
+  /// Sole traders' and partners' home address (some supplier forms ask for it).
+  home
+}
+
+enum PriceType {
+  fixed
+  variable
+  fully_fixed
 }
 
 enum OccupancyType {
@@ -309,30 +317,30 @@ enum JobStatus {
 // ---------------------------------------------------------------------------
 
 model User {
-  id            String     @id @default(uuid()) @db.Uuid
-  name          String
-  email         String     @unique
-  passwordHash  String     @map("password_hash")
-  active        Boolean    @default(true)
-  roles         UserRole[]
-  teamId        String?    @map("team_id") @db.Uuid
-  team          SalesTeam? @relation(fields: [teamId], references: [id])
+  id                     String     @id @default(uuid()) @db.Uuid
+  name                   String
+  email                  String     @unique
+  passwordHash           String     @map("password_hash")
+  active                 Boolean    @default(true)
+  roles                  UserRole[]
+  teamId                 String?    @map("team_id") @db.Uuid
+  team                   SalesTeam? @relation(fields: [teamId], references: [id])
   /// TOTP secret (encrypted). MFA is enforced at login when mfaEnabled is true.
-  mfaSecretEnc  String?    @map("mfa_secret_enc")
-  mfaEnabled    Boolean    @default(false) @map("mfa_enabled")
+  mfaSecretEnc           String?    @map("mfa_secret_enc")
+  mfaEnabled             Boolean    @default(false) @map("mfa_enabled")
   /// Last TOTP time step accepted, so a code can't be used twice.
-  mfaLastStep   Int?       @map("mfa_last_step")
+  mfaLastStep            Int?       @map("mfa_last_step")
   /// false = single sign-on only: password sign-in and password changes are refused.
-  passwordLoginEnabled Boolean @default(true) @map("password_login_enabled")
-  failedLogins  Int        @default(0) @map("failed_logins")
-  lockedUntil   DateTime?  @map("locked_until")
-  lastLoginAt   DateTime?  @map("last_login_at")
+  passwordLoginEnabled   Boolean    @default(true) @map("password_login_enabled")
+  failedLogins           Int        @default(0) @map("failed_logins")
+  lockedUntil            DateTime?  @map("locked_until")
+  lastLoginAt            DateTime?  @map("last_login_at")
   /// The user's own phone (E.164). Click-to-call rings this number first, then connects the customer.
-  callbackPhone String?    @map("callback_phone")
+  callbackPhone          String?    @map("callback_phone")
   /// The RingCentral extension this user answers and makes calls on (matched by email), for call-log sync.
-  ringcentralExtensionId String? @unique @map("ringcentral_extension_id")
-  createdAt     DateTime   @default(now()) @map("created_at")
-  updatedAt     DateTime   @updatedAt @map("updated_at")
+  ringcentralExtensionId String?    @unique @map("ringcentral_extension_id")
+  createdAt              DateTime   @default(now()) @map("created_at")
+  updatedAt              DateTime   @updatedAt @map("updated_at")
 
   sessions      Session[]
   ownedOpps     Opportunity[]  @relation("OppOwner")
@@ -408,6 +416,8 @@ model Supplier {
   outgoingConsentRequired Boolean           @default(false) @map("outgoing_consent_required")
   /// Submissions must include a black and white copy of each signed form.
   monoCopyRequired        Boolean           @default(false) @map("mono_copy_required")
+  /// Our agency / broker ID with this supplier, printed on its application forms.
+  agencyId                String?           @map("agency_id")
   active                  Boolean           @default(true)
   opps                    Opportunity[]
   contracts               EnergyContract[]  @relation("SelectedSupplier")
@@ -423,28 +433,43 @@ model Supplier {
 // ---------------------------------------------------------------------------
 
 model Customer {
-  id                     String     @id @default(uuid()) @db.Uuid
-  legalName              String     @map("legal_name")
-  tradingName            String?    @map("trading_name")
-  businessType           String?    @map("business_type")
+  id                     String       @id @default(uuid()) @db.Uuid
+  legalName              String       @map("legal_name")
+  tradingName            String?      @map("trading_name")
+  businessType           String?      @map("business_type")
   industry               String?
-  companyRegNumber       String?    @map("company_reg_number")
-  vatRegistered          VatStatus? @map("vat_registered")
-  vatNumber              String?    @map("vat_number")
-  incorporationDate      DateTime?  @map("incorporation_date") @db.Date
-  countryOfIncorporation String?    @map("country_of_incorporation")
+  companyRegNumber       String?      @map("company_reg_number")
+  vatRegistered          VatStatus?   @map("vat_registered")
+  vatNumber              String?      @map("vat_number")
+  incorporationDate      DateTime?    @map("incorporation_date") @db.Date
+  countryOfIncorporation String?      @map("country_of_incorporation")
   website                String?
   phone                  String?
   /// Last 9 digits of phone, for duplicate detection.
-  phoneKey               String?    @map("phone_key")
+  phoneKey               String?      @map("phone_key")
   email                  String?
-  advertisingMethod      String?    @map("advertising_method")
-  active                 Boolean    @default(true)
+  advertisingMethod      String?      @map("advertising_method")
+  // Details supplier application forms ask for.
+  legalEntity            LegalEntity? @map("legal_entity")
+  employees              Int?
+  vatExempt              Boolean?     @map("vat_exempt")
+  vatExemptNumber        String?      @map("vat_exempt_number")
+  carbonTaxExempt        Boolean?     @map("carbon_tax_exempt")
+  charityNumber          String?      @map("charity_number")
+  /// Someone at the premises relies on life-support or medical equipment, or has special needs.
+  priorityCustomer       Boolean?     @map("priority_customer")
+  /// Marketing preferences (null = not asked).
+  marketingEmail         Boolean?     @map("marketing_email")
+  marketingPost          Boolean?     @map("marketing_post")
+  marketingPhone         Boolean?     @map("marketing_phone")
+  marketingSms           Boolean?     @map("marketing_sms")
+  paperlessBilling       Boolean?     @map("paperless_billing")
+  active                 Boolean      @default(true)
   /// Set when this record was merged into another. The record is kept, never deleted.
-  mergedIntoId           String?    @map("merged_into_id") @db.Uuid
-  createdById            String?    @map("created_by_id") @db.Uuid
-  createdAt              DateTime   @default(now()) @map("created_at")
-  updatedAt              DateTime   @updatedAt @map("updated_at")
+  mergedIntoId           String?      @map("merged_into_id") @db.Uuid
+  createdById            String?      @map("created_by_id") @db.Uuid
+  createdAt              DateTime     @default(now()) @map("created_at")
+  updatedAt              DateTime     @updatedAt @map("updated_at")
 
   addresses     CustomerAddress[]
   contacts      CustomerContact[]
@@ -484,6 +509,8 @@ model CustomerContact {
   id         String   @id @default(uuid()) @db.Uuid
   customerId String   @map("customer_id") @db.Uuid
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  /// Mr, Mrs, Ms, Miss or Dr.
+  title      String?
   firstName  String   @map("first_name")
   lastName   String?  @map("last_name")
   jobTitle   String?  @map("job_title")
@@ -650,6 +677,9 @@ model SupplySite {
   landlordContact      String?        @map("landlord_contact")
   customerSector       String?        @map("customer_sector")
   annualConsumptionKwh Decimal?       @map("annual_consumption_kwh") @db.Decimal(14, 2)
+  /// When the customer moved in (forms ask how long they've been at the premises).
+  occupiedSince        DateTime?      @map("occupied_since") @db.Date
+  leaseTerms           String?        @map("lease_terms")
   createdAt            DateTime       @default(now()) @map("created_at")
 
   meterPoints MeterPoint[]
@@ -663,18 +693,27 @@ model SupplySite {
 }
 
 model MeterPoint {
-  id                    String         @id @default(uuid()) @db.Uuid
-  siteId                String         @map("site_id") @db.Uuid
-  site                  SupplySite     @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  fuel                  Fuel
-  meterType             String?        @map("meter_type")
-  mprn                  String?
-  gprn                  String?
-  meterNumber           String?        @map("meter_number")
-  mccCode               String?        @map("mcc_code")
+  id                     String         @id @default(uuid()) @db.Uuid
+  siteId                 String         @map("site_id") @db.Uuid
+  site                   SupplySite     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  fuel                   Fuel
+  meterType              String?        @map("meter_type")
+  mprn                   String?
+  gprn                   String?
+  meterNumber            String?        @map("meter_number")
+  mccCode                String?        @map("mcc_code")
   /// Why an identifier doesn't match the standard format (new connection, NI site...).
-  formatExceptionReason String?        @map("format_exception_reason")
-  readings              MeterReading[]
+  formatExceptionReason  String?        @map("format_exception_reason")
+  /// Electricity: maximum import capacity (kVA), DUoS group, voltage, profile class, second meter serial.
+  mic                    Decimal?       @db.Decimal(10, 2)
+  dgCode                 String?        @map("dg_code")
+  voltage                String?
+  profileClass           String?        @map("profile_class")
+  meterSerial2           String?        @map("meter_serial_2")
+  /// Gas: supply point capacity and annual quantity (kWh), from Gas Networks Ireland.
+  supplyPointCapacityKwh Decimal?       @map("supply_point_capacity_kwh") @db.Decimal(14, 2)
+  annualQuantityKwh      Decimal?       @map("annual_quantity_kwh") @db.Decimal(14, 2)
+  readings               MeterReading[]
 
   @@index([siteId])
   @@index([mprn])
@@ -725,6 +764,10 @@ model EnergyContract {
   otherRate                Decimal?       @map("other_rate") @db.Decimal(10, 4)
   gasRate                  Decimal?       @map("gas_rate") @db.Decimal(10, 4)
   standingCharge           Decimal?       @map("standing_charge") @db.Decimal(10, 4)
+  priceType                PriceType?     @map("price_type")
+  nightStorageRate         Decimal?       @map("night_storage_rate") @db.Decimal(10, 4)
+  summerDayRate            Decimal?       @map("summer_day_rate") @db.Decimal(10, 4)
+  winterDayRate            Decimal?       @map("winter_day_rate") @db.Decimal(10, 4)
   supplierReference        String?        @map("supplier_reference")
   status                   ContractStatus @default(draft)
   /// The contract this one renews. Historical contracts are never modified.
@@ -1487,39 +1530,39 @@ enum CallStatus {
 }
 
 model CallLog {
-  id             String     @id @default(uuid()) @db.Uuid
-  opportunityId  String?    @map("opportunity_id") @db.Uuid
-  customerId     String?    @map("customer_id") @db.Uuid
-  contactId      String?    @map("contact_id") @db.Uuid
+  id                 String      @id @default(uuid()) @db.Uuid
+  opportunityId      String?     @map("opportunity_id") @db.Uuid
+  customerId         String?     @map("customer_id") @db.Uuid
+  contactId          String?     @map("contact_id") @db.Uuid
   /// The staff member on the call; null for calls to a company number nobody in the CRM answered.
-  userId         String?    @map("user_id") @db.Uuid
+  userId             String?     @map("user_id") @db.Uuid
   /// inbound | outbound
-  direction      String     @default("outbound")
+  direction          String      @default("outbound")
   /// The customer's number (E.164), whichever way the call went.
-  toNumber       String     @map("to_number")
+  toNumber           String      @map("to_number")
   /// Our side of the call (E.164): the phone rung first for click-to-call, or the number called for inbound calls.
-  agentNumber    String?    @map("agent_number")
-  provider       String
-  providerCallId String?    @unique @map("provider_call_id")
+  agentNumber        String?     @map("agent_number")
+  provider           String
+  providerCallId     String?     @unique @map("provider_call_id")
   /// RingCentral call-log record id: calls imported from the call log (and click-to-calls matched to theirs) are stored once.
-  rcRecordId     String?    @unique @map("rc_record_id")
-  rcSessionId    String?    @map("rc_session_id")
+  rcRecordId         String?     @unique @map("rc_record_id")
+  rcSessionId        String?     @map("rc_session_id")
   /// Recording (RINGCENTRAL_RECORDINGS=true): downloaded into our storage, virus-scanned, deleted after the retention period.
-  rcRecordingId  String?    @map("rc_recording_id")
-  recordingKey   String?    @map("recording_key")
-  recordingMime  String?    @map("recording_mime")
-  recordingSize  Int?       @map("recording_size")
-  recordingScan  ScanStatus? @map("recording_scan")
-  recordingDeletedAt DateTime? @map("recording_deleted_at")
-  status         CallStatus @default(initiated)
-  startedAt      DateTime   @default(now()) @map("started_at")
-  answeredAt     DateTime?  @map("answered_at")
-  endedAt        DateTime?  @map("ended_at")
-  durationSec    Int?       @map("duration_sec")
-  outcome        String?
-  notes          String?
+  rcRecordingId      String?     @map("rc_recording_id")
+  recordingKey       String?     @map("recording_key")
+  recordingMime      String?     @map("recording_mime")
+  recordingSize      Int?        @map("recording_size")
+  recordingScan      ScanStatus? @map("recording_scan")
+  recordingDeletedAt DateTime?   @map("recording_deleted_at")
+  status             CallStatus  @default(initiated)
+  startedAt          DateTime    @default(now()) @map("started_at")
+  answeredAt         DateTime?   @map("answered_at")
+  endedAt            DateTime?   @map("ended_at")
+  durationSec        Int?        @map("duration_sec")
+  outcome            String?
+  notes              String?
   /// Set once the call has been written to the opportunity timeline (exactly once).
-  loggedAt       DateTime?  @map("logged_at")
+  loggedAt           DateTime?   @map("logged_at")
 
   @@index([opportunityId, startedAt])
   @@index([rcSessionId])

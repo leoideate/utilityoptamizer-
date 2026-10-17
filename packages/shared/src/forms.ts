@@ -48,12 +48,35 @@ export const FORM_SOURCES = {
   "customer.businessType": { label: "Customer: business type", group: "Customer" },
   "customer.phone": { label: "Customer: phone", group: "Customer" },
   "customer.email": { label: "Customer: email", group: "Customer" },
+  "customer.legalEntity": { label: "Customer: legal entity (sole_trader, partnership, limited_company, plc, charity_club, other)", group: "Customer" },
+  "customer.legalEntityName": { label: "Customer: legal entity, in words", group: "Customer" },
+  "customer.dateEstablished": { label: "Customer: date established", group: "Customer" },
+  "customer.employees": { label: "Customer: number of employees", group: "Customer" },
+  "customer.vatExemptNumber": { label: "Customer: VAT exemption number", group: "Customer" },
+  "customer.charityNumber": { label: "Customer: registered charity number", group: "Customer" },
+  "customer.vatExempt": { label: "Customer: VAT exempt (yes/no)", group: "Customer", check: true },
+  "customer.carbonTaxExempt": { label: "Customer: carbon tax exempt (yes/no)", group: "Customer", check: true },
+  "customer.priorityCustomer": { label: "Customer: priority / special needs (yes/no)", group: "Customer", check: true },
+  "customer.paperlessBilling": { label: "Customer: paperless billing (yes/no)", group: "Customer", check: true },
+  "marketing.email": { label: "Marketing by email (yes/no)", group: "Marketing preferences", check: true },
+  "marketing.post": { label: "Marketing by post (yes/no)", group: "Marketing preferences", check: true },
+  "marketing.phone": { label: "Marketing by phone (yes/no)", group: "Marketing preferences", check: true },
+  "marketing.sms": { label: "Marketing by SMS (yes/no)", group: "Marketing preferences", check: true },
+  "home.full": { label: "Home address: full", group: "Home address (sole traders)" },
+  "home.line1": { label: "Home address: line 1", group: "Home address (sole traders)" },
+  "home.line2": { label: "Home address: line 2", group: "Home address (sole traders)" },
+  "home.city": { label: "Home address: town", group: "Home address (sole traders)" },
+  "home.county": { label: "Home address: county", group: "Home address (sole traders)" },
+  "home.postcode": { label: "Home address: Eircode", group: "Home address (sole traders)" },
   "contact.fullName": { label: "Contact: full name", group: "Contact" },
   "contact.firstName": { label: "Contact: first name", group: "Contact" },
   "contact.lastName": { label: "Contact: surname", group: "Contact" },
   "contact.jobTitle": { label: "Contact: position", group: "Contact" },
   "contact.phone": { label: "Contact: phone", group: "Contact" },
   "contact.email": { label: "Contact: email", group: "Contact" },
+  "contact.title": { label: "Contact: title (Mr, Mrs, Ms…)", group: "Contact" },
+  "contact.mobile": { label: "Contact: mobile", group: "Contact" },
+  "contact.landline": { label: "Contact: landline", group: "Contact" },
   "billing.full": { label: "Billing address: full", group: "Billing address" },
   "billing.line1": { label: "Billing address: line 1", group: "Billing address" },
   "billing.line2": { label: "Billing address: line 2", group: "Billing address" },
@@ -71,6 +94,31 @@ export const FORM_SOURCES = {
   "site.meterNumber": { label: "Meter number", group: "Supply site" },
   "site.mccCode": { label: "MCC / DUoS group", group: "Supply site" },
   "site.annualConsumptionKwh": { label: "Annual consumption (kWh)", group: "Supply site" },
+  "site.name": { label: "Site name", group: "Supply site" },
+  "site.street": { label: "Supply address: street (lines 1 and 2)", group: "Supply site" },
+  "site.locality": { label: "Supply address: town, county and Eircode", group: "Supply site" },
+  "billing.street": { label: "Billing address: street (lines 1 and 2)", group: "Billing address" },
+  "billing.locality": { label: "Billing address: town, county and Eircode", group: "Billing address" },
+  "site.occupancy": { label: "Occupancy (owner_occupied, rented, landlord_supply, other)", group: "Supply site" },
+  "site.ownsPremises": { label: "Customer owns the premises (yes/no)", group: "Supply site", check: true },
+  "site.yearsAtPremises": { label: "Years at the premises", group: "Supply site" },
+  "site.monthsAtPremises": { label: "Months at the premises (after full years)", group: "Supply site" },
+  "site.leaseTerms": { label: "Terms of lease", group: "Supply site" },
+  "meter.mic": { label: "MIC (kVA)", group: "Meter" },
+  "meter.dgCode": { label: "DG / DUoS group", group: "Meter" },
+  "meter.voltage": { label: "Voltage", group: "Meter" },
+  "meter.profileClass": { label: "Profile class", group: "Meter" },
+  "meter.serial2": { label: "Meter serial no. 2", group: "Meter" },
+  "meter.spc": { label: "Gas supply point capacity (kWh)", group: "Meter" },
+  "meter.aq": { label: "Gas annual quantity (kWh)", group: "Meter" },
+  "meter.gasSector": { label: "Gas sector (small, medium: from annual quantity)", group: "Meter" },
+  "reading.24h": { label: "Meter reading: 24 hour", group: "Meter readings" },
+  "reading.day": { label: "Meter reading: day", group: "Meter readings" },
+  "reading.night": { label: "Meter reading: night", group: "Meter readings" },
+  "reading.nightStorage": { label: "Meter reading: night storage", group: "Meter readings" },
+  "reading.wattless": { label: "Meter reading: wattless", group: "Meter readings" },
+  "reading.gas": { label: "Meter reading: gas", group: "Meter readings" },
+  "reading.date": { label: "Date of the meter reading", group: "Meter readings" },
   "landlord.name": { label: "Landlord: name", group: "Property and tenancy" },
   "landlord.contact": { label: "Landlord: contact details", group: "Property and tenancy" },
   "tenancy.occupancyDate": { label: "Incoming occupancy date", group: "Property and tenancy" },
@@ -88,11 +136,29 @@ export const FORM_SOURCES = {
   "contract.gasRate": { label: "Gas unit rate", group: "Contract" },
   "contract.standingCharge": { label: "Standing charge", group: "Contract" },
   "contract.endDate": { label: "New contract end date", group: "Contract" },
+  "contract.priceType": { label: "Price type (fixed, variable, fully_fixed)", group: "Contract" },
+  "contract.isFixed": { label: "Fixed price (yes for fixed or fully fixed, no for variable)", group: "Contract", check: true },
+  "contract.termText": { label: "Term, in words (e.g. 24 months)", group: "Contract" },
+  "contract.rate24hCent": { label: "24 hour rate (cent per kWh, 24 hour meters only)", group: "Contract" },
+  "contract.rateDayCent": { label: "Day rate (cent per kWh, day/night meters only)", group: "Contract" },
+  "contract.standingChargeCent": { label: "Standing charge (cent per day)", group: "Contract" },
+  "contract.tariff": { label: "Tariff (24h, night_saver: from the night rate)", group: "Contract" },
+  "contract.nightStorageRate": { label: "Night storage rate", group: "Contract" },
+  "contract.summerDayRate": { label: "Summer day rate", group: "Contract" },
+  "contract.winterDayRate": { label: "Winter day rate", group: "Contract" },
+  "contract.dayRateCent": { label: "Day / 24h rate (cent per kWh)", group: "Contract" },
+  "contract.nightRateCent": { label: "Night rate (cent per kWh)", group: "Contract" },
+  "contract.gasRateCent": { label: "Gas unit rate (cent per kWh)", group: "Contract" },
+  "contract.nightStorageRateCent": { label: "Night storage rate (cent per kWh)", group: "Contract" },
+  "contract.summerDayRateCent": { label: "Summer day rate (cent per kWh)", group: "Contract" },
+  "contract.winterDayRateCent": { label: "Winter day rate (cent per kWh)", group: "Contract" },
+  "opportunity.saleType": { label: "Sale type (new_sale, renewal)", group: "Contract" },
   "bank.accountName": { label: "Bank: account name", group: "Bank (restricted)", restricted: true },
   "bank.iban": { label: "Bank: IBAN", group: "Bank (restricted)", restricted: true },
   "bank.bic": { label: "Bank: BIC", group: "Bank (restricted)", restricted: true },
   "broker.name": { label: "Broker: salesperson name", group: "Broker" },
   "broker.company": { label: "Broker: company name", group: "Broker" },
+  "broker.agencyId": { label: "Broker: our agency ID with this supplier", group: "Broker" },
   "opportunity.number": { label: "Opportunity number", group: "Other" },
   "today": { label: "Today's date", group: "Other" },
   "is.electricity": { label: "Tick if electricity", group: "Tick boxes", check: true },
@@ -103,6 +169,9 @@ export const FORM_SOURCES = {
   "is.vatRegistered": { label: "Tick if VAT registered", group: "Tick boxes", check: true },
   "is.limitedCompany": { label: "Tick if limited company", group: "Tick boxes", check: true },
   "is.soleTrader": { label: "Tick if sole trader", group: "Tick boxes", check: true },
+  "is.renewal": { label: "Tick if a renewal", group: "Tick boxes", check: true },
+  "is.newBusiness": { label: "Tick if new business (not a renewal)", group: "Tick boxes", check: true },
+  "is.existingCustomerOfSupplier": { label: "Tick if already a customer of the new supplier", group: "Tick boxes", check: true },
 } as const satisfies Record<string, { label: string; group: string; restricted?: boolean; check?: boolean }>;
 export type FormSource = keyof typeof FORM_SOURCES;
 export const FORM_SOURCE_KEYS = Object.keys(FORM_SOURCES) as FormSource[];
@@ -135,10 +204,29 @@ export const formFieldSchema = z
     /** Number of character boxes for comb fields (e.g. an MPRN written one digit per box). */
     comb: z.number().int().min(2).max(60).optional(),
     required: z.boolean().optional(),
+    /** Tick (or print) only when the source's value equals this, e.g. "24" for a 24-month box, "false" for "do not contact". */
+    match: z.string().trim().min(1).max(60).optional(),
+    /** Fill only when another value matches, e.g. rates in the row for the deal's price type. */
+    onlyIf: z.object({ source: z.enum(FORM_SOURCE_KEYS as [FormSource, ...FormSource[]]), equals: z.string().trim().min(1).max(60) }).optional(),
+    /** Cover what the template already shows here with a white box (for scanned forms). */
+    mask: z.boolean().optional(),
+    /** Write in block capitals. */
+    upper: z.boolean().optional(),
   })
   .superRefine((f, ctx) => {
     if ((f.kind === "signature" || f.kind === "signed_date") && !f.signer) ctx.addIssue({ code: "custom", path: ["signer"], message: `Choose whose signature "${f.label}" is.` });
+    if (f.kind === "check" && f.source && !(FORM_SOURCES as Record<string, { check?: boolean }>)[f.source]?.check && !f.match) {
+      ctx.addIssue({ code: "custom", path: ["match"], message: `Say which value ticks "${f.label}".` });
+    }
   });
+
+/** Whether a CRM value equals what a field is waiting for (case-insensitive; yes/no values as true/false). */
+export function sourceMatches(value: string | boolean | null | undefined, want: string): boolean {
+  if (value === null || value === undefined) return false;
+  const w = want.trim().toLowerCase();
+  if (typeof value === "boolean") return w === String(value) || (value ? w === "yes" : w === "no");
+  return value.trim().toLowerCase() === w;
+}
 export type FormField = z.infer<typeof formFieldSchema>;
 
 export const formTemplateMetaSchema = z.object({

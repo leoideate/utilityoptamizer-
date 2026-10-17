@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Flame, Gauge, MapPin, Plus, Star, Zap } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { type Fuel, OCCUPANCY_LABELS, OCCUPANCY_TYPES, occupancyNeedsLandlord, READING_TYPES, needsElectricity, needsGas } from "@uo/shared";
+import { type Fuel, METER_REGISTERS, METER_REGISTER_LABELS, OCCUPANCY_LABELS, OCCUPANCY_TYPES, PRICE_TYPES, PRICE_TYPE_LABELS, occupancyNeedsLandlord, READING_TYPES, needsElectricity, needsGas } from "@uo/shared";
 import { useSuppliers } from "@/components/domain";
 import { Dialog } from "@/components/ui/overlays";
 import { Badge, Button, Card, CardHeader, Checkbox, EmptyState, Field, Input, IssueList, Select, Skeleton } from "@/components/ui/primitives";
@@ -22,6 +22,13 @@ interface MeterPoint {
   meterNumber: string | null;
   mccCode: string | null;
   formatExceptionReason: string | null;
+  mic: number | null;
+  dgCode: string | null;
+  voltage: string | null;
+  profileClass: string | null;
+  meterSerial2: string | null;
+  supplyPointCapacityKwh: number | null;
+  annualQuantityKwh: number | null;
   readings: { id: string; readingType: string; value: number; readingDate: string; register: string | null }[];
 }
 interface Site {
@@ -38,6 +45,8 @@ interface Site {
   landlordContact: string | null;
   customerSector: string | null;
   annualConsumptionKwh: number | null;
+  occupiedSince: string | null;
+  leaseTerms: string | null;
   meterPoints: MeterPoint[];
 }
 interface Contract {
@@ -61,6 +70,10 @@ interface Contract {
   otherRate: number | null;
   gasRate: number | null;
   standingCharge: number | null;
+  priceType: string | null;
+  nightStorageRate: number | null;
+  summerDayRate: number | null;
+  winterDayRate: number | null;
   supplierReference: string | null;
   status: string;
   previousContractId: string | null;
@@ -91,7 +104,7 @@ const rate = (n: number | null) => (n == null ? "—" : `${(n * 100).toFixed(2)}
 
 export function EnergyTab({ opp }: { opp: Workspace }) {
   const { data, isLoading } = useQuery({ queryKey: ["opportunity", opp.id, "energy"], queryFn: () => api.get<EnergyWorkspace>(`/opportunities/${opp.id}/energy`) });
-  const [dialog, setDialog] = useState<null | { kind: "site" } | { kind: "meter"; site: Site } | { kind: "reading"; meter: MeterPoint } | { kind: "contract"; contract?: Contract } | { kind: "quote" }>(null);
+  const [dialog, setDialog] = useState<null | { kind: "site"; site?: Site } | { kind: "meter"; site: Site; meter?: MeterPoint } | { kind: "reading"; meter: MeterPoint } | { kind: "contract"; contract?: Contract } | { kind: "quote" }>(null);
   const fuels: Fuel[] = [...(needsElectricity(opp.serviceType) ? (["electricity"] as const) : []), ...(needsGas(opp.serviceType) ? (["gas"] as const) : [])];
   const write = opp.permissions.write && opp.outcome !== "won";
 
@@ -132,9 +145,14 @@ export function EnergyTab({ opp }: { opp: Workspace }) {
                     </div>
                   </div>
                   {write && (
-                    <Button size="sm" variant="secondary" onClick={() => setDialog({ kind: "meter", site: s })}>
-                      <Plus /> Add meter
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => setDialog({ kind: "site", site: s })}>
+                        Edit site
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => setDialog({ kind: "meter", site: s })}>
+                        <Plus /> Add meter
+                      </Button>
+                    </div>
                   )}
                 </div>
                 {s.meterPoints.length > 0 ? (
@@ -167,9 +185,14 @@ export function EnergyTab({ opp }: { opp: Workspace }) {
                             <td className="tabular py-2 pr-3">{m.readings[0] ? `${num(m.readings[0].value)} (${date(m.readings[0].readingDate)})` : "—"}</td>
                             <td className="py-2 text-right">
                               {write && (
-                                <Button size="sm" variant="ghost" onClick={() => setDialog({ kind: "reading", meter: m })}>
-                                  <Gauge /> Reading
-                                </Button>
+                                <span className="inline-flex gap-1">
+                                  <Button size="sm" variant="ghost" onClick={() => setDialog({ kind: "meter", site: s, meter: m })}>
+                                    Edit
+                                  </Button>
+                                  <Button size="sm" variant="ghost" onClick={() => setDialog({ kind: "reading", meter: m })}>
+                                    <Gauge /> Reading
+                                  </Button>
+                                </span>
                               )}
                             </td>
                           </tr>
@@ -263,8 +286,8 @@ export function EnergyTab({ opp }: { opp: Workspace }) {
 
       <ComparisonCard opp={opp} quotes={data.quotes} fuels={fuels} onAdd={() => setDialog({ kind: "quote" })} write={write} />
 
-      {dialog?.kind === "site" && <SiteDialog opp={opp} onClose={close} />}
-      {dialog?.kind === "meter" && <MeterDialog opp={opp} site={dialog.site} fuels={fuels} onClose={close} />}
+      {dialog?.kind === "site" && <SiteDialog opp={opp} site={dialog.site} onClose={close} />}
+      {dialog?.kind === "meter" && <MeterDialog opp={opp} site={dialog.site} meter={dialog.meter} fuels={fuels} onClose={close} />}
       {dialog?.kind === "reading" && <ReadingDialog opp={opp} meter={dialog.meter} onClose={close} />}
       {dialog?.kind === "contract" && <ContractDialog opp={opp} contract={dialog.contract} sites={data.sites} fuels={fuels} onClose={close} />}
       {dialog?.kind === "quote" && <QuoteDialog opp={opp} fuels={fuels} onClose={close} />}
@@ -374,26 +397,44 @@ function DialogFooter({ onClose, saving, onSave, label = "Save" }: { onClose: ()
   );
 }
 
-function SiteDialog({ opp, onClose }: { opp: Workspace; onClose: () => void }) {
+function SiteDialog({ opp, site, onClose }: { opp: Workspace; site?: Site; onClose: () => void }) {
   const { save, saving, issues } = useSave(opp, onClose);
-  const { register, handleSubmit, watch } = useForm({ defaultValues: { label: "", line1: "", line2: "", city: "", county: "", postcode: "", occupancyType: "", landlordName: "", landlordContact: "", customerSector: "", annualConsumptionKwh: "" } });
+  const s = site;
+  const { register, handleSubmit, watch } = useForm({
+    defaultValues: {
+      label: s?.label ?? "",
+      line1: s?.line1 ?? "",
+      line2: s?.line2 ?? "",
+      city: s?.city ?? "",
+      county: s?.county ?? "",
+      postcode: s?.postcode ?? "",
+      occupancyType: s?.occupancyType ?? "",
+      landlordName: s?.landlordName ?? "",
+      landlordContact: s?.landlordContact ?? "",
+      customerSector: s?.customerSector ?? "",
+      annualConsumptionKwh: s?.annualConsumptionKwh?.toString() ?? "",
+      occupiedSince: isoDay(s?.occupiedSince),
+      leaseTerms: s?.leaseTerms ?? "",
+    },
+  });
   const rented = occupancyNeedsLandlord(watch("occupancyType") as never);
-  const submit = handleSubmit((v) =>
-    save(() =>
-      api.post(`/opportunities/${opp.id}/sites`, {
-        label: blankToNull(v.label),
-        serviceType: opp.serviceType,
-        address: { kind: "trading", line1: v.line1, line2: blankToNull(v.line2), city: blankToNull(v.city), county: blankToNull(v.county), postcode: blankToNull(v.postcode), country: "IE" },
-        occupancyType: v.occupancyType || null,
-        landlordName: blankToNull(v.landlordName),
-        landlordContact: blankToNull(v.landlordContact),
-        customerSector: blankToNull(v.customerSector),
-        annualConsumptionKwh: numOrNull(v.annualConsumptionKwh),
-      }),
-    ),
-  );
+  const submit = handleSubmit((v) => {
+    const body = {
+      label: blankToNull(v.label),
+      serviceType: opp.serviceType,
+      address: { kind: "trading", line1: v.line1, line2: blankToNull(v.line2), city: blankToNull(v.city), county: blankToNull(v.county), postcode: blankToNull(v.postcode), country: "IE" },
+      occupancyType: v.occupancyType || null,
+      landlordName: blankToNull(v.landlordName),
+      landlordContact: blankToNull(v.landlordContact),
+      customerSector: blankToNull(v.customerSector),
+      annualConsumptionKwh: numOrNull(v.annualConsumptionKwh),
+      occupiedSince: v.occupiedSince || null,
+      leaseTerms: rented ? blankToNull(v.leaseTerms) : null,
+    };
+    save(() => (s ? api.patch(`/sites/${s.id}`, body) : api.post(`/opportunities/${opp.id}/sites`, body)));
+  });
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()} title="Add supply site" wide footer={<DialogFooter onClose={onClose} saving={saving} onSave={submit} />}>
+    <Dialog open onOpenChange={(o) => !o && onClose()} title={s ? "Edit supply site" : "Add supply site"} wide footer={<DialogFooter onClose={onClose} saving={saving} onSave={submit} />}>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Site name" hint="e.g. Main shop, Warehouse">{(p) => <Input {...p} {...register("label")} />}</Field>
         <Field label="Address line 1" required>{(p) => <Input {...p} {...register("line1")} />}</Field>
@@ -420,8 +461,10 @@ function SiteDialog({ opp, onClose }: { opp: Workspace; onClose: () => void }) {
               {(p) => <Input {...p} {...register("landlordName")} />}
             </Field>
             <Field label="Landlord contact">{(p) => <Input {...p} {...register("landlordContact")} />}</Field>
+            <Field label="Terms of lease" hint="e.g. 5 years from 2023">{(p) => <Input {...p} {...register("leaseTerms")} />}</Field>
           </>
         )}
+        <Field label="At the premises since" hint="Forms ask how long the customer has been there.">{(p) => <Input {...p} type="date" {...register("occupiedSince")} />}</Field>
         <Field label="Annual consumption (kWh)">{(p) => <Input {...p} inputMode="numeric" {...register("annualConsumptionKwh")} />}</Field>
       </div>
       <div className="mt-4">
@@ -431,29 +474,54 @@ function SiteDialog({ opp, onClose }: { opp: Workspace; onClose: () => void }) {
   );
 }
 
-function MeterDialog({ opp, site, fuels, onClose }: { opp: Workspace; site: Site; fuels: Fuel[]; onClose: () => void }) {
+function MeterDialog({ opp, site, meter, fuels, onClose }: { opp: Workspace; site: Site; meter?: MeterPoint; fuels: Fuel[]; onClose: () => void }) {
   const { save, saving, issues } = useSave(opp, onClose);
-  const [exception, setException] = useState(false);
-  const { register, handleSubmit, watch } = useForm({ defaultValues: { fuel: fuels[0], id: "", meterNumber: "", meterType: "", mccCode: "", formatExceptionReason: "" } });
+  const m = meter;
+  const [exception, setException] = useState(!!m?.formatExceptionReason);
+  const str = (n: number | null | undefined) => (n == null ? "" : String(n));
+  const { register, handleSubmit, watch } = useForm({
+    defaultValues: {
+      fuel: m?.fuel ?? fuels[0],
+      id: m?.mprn ?? m?.gprn ?? "",
+      meterNumber: m?.meterNumber ?? "",
+      meterType: m?.meterType ?? "",
+      mccCode: m?.mccCode ?? "",
+      formatExceptionReason: m?.formatExceptionReason ?? "",
+      mic: str(m?.mic),
+      dgCode: m?.dgCode ?? "",
+      voltage: m?.voltage ?? "",
+      profileClass: m?.profileClass ?? "",
+      meterSerial2: m?.meterSerial2 ?? "",
+      supplyPointCapacityKwh: str(m?.supplyPointCapacityKwh),
+      annualQuantityKwh: str(m?.annualQuantityKwh),
+    },
+  });
   const fuel = watch("fuel");
   const label = fuel === "gas" ? "GPRN" : "MPRN";
-  const submit = handleSubmit((v) =>
-    save(() =>
-      api.post(`/sites/${site.id}/meters`, {
-        fuel: v.fuel,
-        mprn: v.fuel === "electricity" ? v.id : null,
-        gprn: v.fuel === "gas" ? v.id : null,
-        meterNumber: blankToNull(v.meterNumber),
-        meterType: blankToNull(v.meterType),
-        mccCode: blankToNull(v.mccCode),
-        formatExceptionReason: exception ? blankToNull(v.formatExceptionReason) : null,
-      }),
-    ),
-  );
+  const submit = handleSubmit((v) => {
+    const elec = v.fuel === "electricity";
+    const body = {
+      fuel: v.fuel,
+      mprn: elec ? v.id : null,
+      gprn: !elec ? v.id : null,
+      meterNumber: blankToNull(v.meterNumber),
+      meterType: blankToNull(v.meterType),
+      mccCode: blankToNull(v.mccCode),
+      formatExceptionReason: exception ? blankToNull(v.formatExceptionReason) : null,
+      mic: elec ? numOrNull(v.mic) : null,
+      dgCode: elec ? blankToNull(v.dgCode) : null,
+      voltage: elec ? blankToNull(v.voltage) : null,
+      profileClass: elec ? blankToNull(v.profileClass) : null,
+      meterSerial2: elec ? blankToNull(v.meterSerial2) : null,
+      supplyPointCapacityKwh: !elec ? numOrNull(v.supplyPointCapacityKwh) : null,
+      annualQuantityKwh: !elec ? numOrNull(v.annualQuantityKwh) : null,
+    };
+    save(() => (m ? api.patch(`/meters/${m.id}`, body) : api.post(`/sites/${site.id}/meters`, body)));
+  });
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()} title={`Add meter to ${site.label || site.line1}`} footer={<DialogFooter onClose={onClose} saving={saving} onSave={submit} />}>
+    <Dialog open onOpenChange={(o) => !o && onClose()} title={m ? `Edit ${label} ${m.mprn ?? m.gprn ?? ""}`.trim() : `Add meter to ${site.label || site.line1}`} wide footer={<DialogFooter onClose={onClose} saving={saving} onSave={submit} />}>
       <div className="space-y-4">
-        {fuels.length > 1 && (
+        {fuels.length > 1 && !m && (
           <Field label="Fuel">
             {(p) => (
               <Select {...p} {...register("fuel")}>
@@ -473,6 +541,20 @@ function MeterDialog({ opp, site, fuels, onClose }: { opp: Workspace; site: Site
           <Field label="Meter type">{(p) => <Input {...p} placeholder={fuel === "gas" ? "Standard" : "24hr, Day/Night…"} {...register("meterType")} />}</Field>
           {fuel === "electricity" && <Field label="MCC code">{(p) => <Input {...p} {...register("mccCode")} />}</Field>}
         </div>
+        {fuel === "electricity" ? (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="MIC (kVA)" hint="Maximum import capacity">{(p) => <Input {...p} inputMode="decimal" {...register("mic")} />}</Field>
+            <Field label="DG code" hint="DUoS group, e.g. DG5">{(p) => <Input {...p} {...register("dgCode")} />}</Field>
+            <Field label="Voltage">{(p) => <Input {...p} placeholder="LV, MV…" {...register("voltage")} />}</Field>
+            <Field label="Profile class">{(p) => <Input {...p} {...register("profileClass")} />}</Field>
+            <Field label="Meter serial no. 2">{(p) => <Input {...p} {...register("meterSerial2")} />}</Field>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Supply point capacity (kWh)" hint="From Gas Networks Ireland">{(p) => <Input {...p} inputMode="decimal" {...register("supplyPointCapacityKwh")} />}</Field>
+            <Field label="Annual quantity (kWh)" hint="Decides small or medium business user">{(p) => <Input {...p} inputMode="decimal" {...register("annualQuantityKwh")} />}</Field>
+          </div>
+        )}
         <IssueList issues={issues} title="Please check:" />
       </div>
     </Dialog>
@@ -481,7 +563,7 @@ function MeterDialog({ opp, site, fuels, onClose }: { opp: Workspace; site: Site
 
 function ReadingDialog({ opp, meter, onClose }: { opp: Workspace; meter: MeterPoint; onClose: () => void }) {
   const { save, saving, issues } = useSave(opp, onClose);
-  const { register, handleSubmit } = useForm({ defaultValues: { readingType: "actual", register: "", value: "", readingDate: todayIso() } });
+  const { register, handleSubmit } = useForm({ defaultValues: { readingType: "actual", register: meter.fuel === "gas" ? "gas" : "", value: "", readingDate: todayIso() } });
   const submit = handleSubmit((v) => save(() => api.post(`/meters/${meter.id}/readings`, { readingType: v.readingType, register: blankToNull(v.register), value: numOrNull(v.value), readingDate: v.readingDate })));
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()} title={`Meter reading · ${meter.mprn ?? meter.gprn ?? meter.fuel}`} footer={<DialogFooter onClose={onClose} saving={saving} onSave={submit} />}>
@@ -499,7 +581,18 @@ function ReadingDialog({ opp, meter, onClose }: { opp: Workspace; meter: MeterPo
             </Select>
           )}
         </Field>
-        <Field label="Register" hint="e.g. Day, Night">{(p) => <Input {...p} {...register("register")} />}</Field>
+        <Field label="Register" hint="Supplier forms ask for each register separately.">
+          {(p) => (
+            <Select {...p} {...register("register")}>
+              <option value="">Not specified</option>
+              {METER_REGISTERS.filter((r) => (meter.fuel === "gas" ? r === "gas" : r !== "gas")).map((r) => (
+                <option key={r} value={r}>
+                  {METER_REGISTER_LABELS[r]}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
       </div>
       <div className="mt-4">
         <IssueList issues={issues} title="Please check:" />
@@ -531,6 +624,10 @@ function ContractDialog({ opp, contract, sites, fuels, onClose }: { opp: Workspa
       otherRate: pence(c?.otherRate),
       gasRate: pence(c?.gasRate),
       standingCharge: pence(c?.standingCharge),
+      priceType: c?.priceType ?? "",
+      nightStorageRate: pence(c?.nightStorageRate),
+      summerDayRate: pence(c?.summerDayRate),
+      winterDayRate: pence(c?.winterDayRate),
       supplierReference: c?.supplierReference ?? "",
     },
   });
@@ -558,6 +655,10 @@ function ContractDialog({ opp, contract, sites, fuels, onClose }: { opp: Workspa
       otherRate: v.fuel === "electricity" ? euro(v.otherRate) : null,
       gasRate: v.fuel === "gas" ? euro(v.gasRate) : null,
       standingCharge: euro(v.standingCharge),
+      priceType: (v.priceType || null) as (typeof PRICE_TYPES)[number] | null,
+      nightStorageRate: v.fuel === "electricity" ? euro(v.nightStorageRate) : null,
+      summerDayRate: v.fuel === "electricity" ? euro(v.summerDayRate) : null,
+      winterDayRate: v.fuel === "electricity" ? euro(v.winterDayRate) : null,
       supplierReference: blankToNull(v.supplierReference),
     };
     save(() => (c ? api.patch(`/contracts/${c.id}`, body) : api.post(`/opportunities/${opp.id}/contracts`, body)));
@@ -610,10 +711,25 @@ function ContractDialog({ opp, contract, sites, fuels, onClose }: { opp: Workspa
         <Field label="Term (months)">{(p) => <Input {...p} inputMode="numeric" {...register("termMonths")} />}</Field>
         <Field label="Proposed activation">{(p) => <Input {...p} type="date" {...register("proposedActivationDate")} />}</Field>
         <Field label="Pricing plan">{(p) => <Input {...p} {...register("pricingPlan")} />}</Field>
+        <Field label="Price type">
+          {(p) => (
+            <Select {...p} {...register("priceType")}>
+              <option value="">Not known</option>
+              {PRICE_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {PRICE_TYPE_LABELS[t]}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
         {fuel === "electricity" ? (
           <>
-            <Field label="Day rate (c/kWh)">{(p) => <Input {...p} inputMode="decimal" {...register("dayRate")} />}</Field>
+            <Field label="Day / 24h rate (c/kWh)">{(p) => <Input {...p} inputMode="decimal" {...register("dayRate")} />}</Field>
             <Field label="Night rate (c/kWh)">{(p) => <Input {...p} inputMode="decimal" {...register("nightRate")} />}</Field>
+            <Field label="Night storage rate (c/kWh)">{(p) => <Input {...p} inputMode="decimal" {...register("nightStorageRate")} />}</Field>
+            <Field label="Summer day rate (c/kWh)">{(p) => <Input {...p} inputMode="decimal" {...register("summerDayRate")} />}</Field>
+            <Field label="Winter day rate (c/kWh)">{(p) => <Input {...p} inputMode="decimal" {...register("winterDayRate")} />}</Field>
             <Field label="Peak rate (c/kWh)">{(p) => <Input {...p} inputMode="decimal" {...register("peakRate")} />}</Field>
             <Field label="Other / wattless (c/kVArh)">{(p) => <Input {...p} inputMode="decimal" {...register("otherRate")} />}</Field>
           </>

@@ -13,6 +13,7 @@
     "db:generate": "prisma generate",
     "openapi": "ts-node --transpile-only scripts/export-openapi.ts",
     "stress": "ts-node --transpile-only scripts/stress.ts",
+    "forms:presets": "ts-node --transpile-only scripts/load-form-presets.ts",
     "test": "jest --runInBand",
     "test:unit": "jest --selectProjects unit",
     "test:integration": "jest --runInBand --selectProjects integration"

@@ -21,6 +21,8 @@ export interface Supplier {
   renewalRoute?: "full_form" | "rate_card_only";
   outgoingConsentRequired?: boolean;
   monoCopyRequired?: boolean;
+  /** Our agency / broker ID with this supplier, printed on its forms. */
+  agencyId?: string | null;
 }
 
 export const useAssignableUsers = () => useQuery({ queryKey: ["users", "assignable"], queryFn: () => api.get<UserLite[]>("/users/assignable"), staleTime: 5 * 60_000 });

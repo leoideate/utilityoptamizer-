@@ -6,7 +6,7 @@ import type { Actor } from "../common/actor";
 import { CurrentUser, RequireCapability } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
 import { StagesService } from "../opportunities/stages.service";
-import { AdminService, retentionSchema, supplierSchema } from "./admin.service";
+import { AdminService, type BrokerProfile, brokerProfileSchema, retentionSchema, supplierSchema } from "./admin.service";
 import { RetentionService } from "./retention.service";
 
 const Id = new ParseUUIDPipe({ version: "4" });
@@ -110,6 +110,20 @@ export class AdminController {
   async saveWorldpay(@CurrentUser() a: Actor, @Body(new ZodPipe(z.object({ submissionEmail: z.string().email().nullable(), autoAssignLeads: z.boolean() }))) body: { submissionEmail: string | null; autoAssignLeads: boolean }) {
     await this.admin.setSetting(a, "worldpay.submissionEmail", body.submissionEmail);
     await this.admin.setSetting(a, "automation.autoAssignLeads", body.autoAssignLeads);
+  }
+
+  /** How the brokerage is named on supplier forms. */
+  @Get("admin/settings/broker")
+  @RequireCapability("admin.integrations")
+  brokerSettings() {
+    return this.admin.brokerProfile();
+  }
+
+  @Put("admin/settings/broker")
+  @RequireCapability("admin.integrations")
+  @HttpCode(204)
+  async saveBroker(@CurrentUser() a: Actor, @Body(new ZodPipe(brokerProfileSchema)) body: BrokerProfile) {
+    await this.admin.setSetting(a, "broker.profile", body);
   }
 
   /** Reminder and escalation intervals for the back-office workflows. */

@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import { deflateSync, crc32 } from "node:zlib";
 import { PDFDocument } from "pdf-lib";
+import { FORM_PRESETS, type FormPreset } from "../../src/forms/presets";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../src/storage/storage";
 import { type TestApp, createTestApp, expectStatus, pdf, userAndClient } from "../support/app";
 import { type Team, createOpportunity, readyEnergy, supplier } from "../support/fixtures";
@@ -297,5 +299,107 @@ describe("change of supplier", () => {
     const seen = expectStatus(await sean.client.get(`/opportunities/${mine}/switch-conflicts`), 200).body;
     expect(seen.conflicts).toEqual([]);
     expect(seen.hiddenCount).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("tick and fill rules, and the new CRM values", () => {
+  it("ticks on matching values, fills only for the right price type, and masks and capitalises text", async () => {
+    const oppId = await createOpportunity(team.sales, "electricity");
+    expectStatus(await team.sales.post(`/opportunities/${oppId}/customer/create`), 201);
+    const { customerId } = await t.prisma.opportunity.findUniqueOrThrow({ where: { id: oppId } });
+    expectStatus(await team.sales.patch(`/customers/${customerId}`, { legalEntity: "sole_trader", marketingEmail: false, marketingPost: true, vatExempt: false, employees: 12 }), 204);
+    const site = expectStatus(
+      await team.sales.post(`/opportunities/${oppId}/sites`, { serviceType: "electricity", occupiedSince: "2019-01-01", leaseTerms: "10 years", address: { line1: "1 Main Street", line2: "Unit 4", city: "Naas", county: "Kildare" } }),
+      201,
+    ).body.id as string;
+    const meter = expectStatus(await team.sales.post(`/sites/${site}/meters`, { fuel: "electricity", mprn: "10012345678", mic: 50, dgCode: "dg6", profileClass: "02" }), 201).body.id as string;
+    expectStatus(await team.sales.post(`/meters/${meter}/readings`, { readingType: "actual", register: "day", value: 12345, readingDate: "2026-10-01" }), 201);
+    expectStatus(await team.sales.post(`/meters/${meter}/readings`, { readingType: "actual", register: "Night", value: 6789, readingDate: "2026-10-01" }), 201);
+    expectStatus(await team.sales.post(`/opportunities/${oppId}/contracts`, { fuel: "electricity", siteId: site, termMonths: 24, priceType: "fixed", dayRate: 0.305, nightRate: 0.152 }), 201);
+
+    const tpl = await createTemplate("Rules");
+    const at = (y: number) => ({ page: 0, x: 320, y, w: 150, h: 14 });
+    const box = (y: number) => ({ page: 0, x: 320, y, w: 10, h: 10 });
+    const fields = [
+      { id: "sole", label: "Sole trader", kind: "check", ...box(700), source: "customer.legalEntity", match: "sole_trader" },
+      { id: "ltd", label: "Limited", kind: "check", ...box(685), source: "customer.legalEntity", match: "limited_company" },
+      { id: "noEmail", label: "No email offers", kind: "check", ...box(670), source: "marketing.email", match: "false" },
+      { id: "noPost", label: "No post offers", kind: "check", ...box(655), source: "marketing.post", match: "false" },
+      { id: "vatNo", label: "VAT exempt: no", kind: "check", ...box(640), source: "customer.vatExempt", match: "no" },
+      { id: "t24", label: "24 months", kind: "check", ...box(625), source: "contract.termMonths", match: "24" },
+      { id: "t12", label: "12 months", kind: "check", ...box(610), source: "contract.termMonths", match: "12" },
+      { id: "fixedDay", label: "Fixed day rate", kind: "text", ...at(590), source: "contract.rateDayCent", onlyIf: { source: "contract.priceType", equals: "fixed" } },
+      { id: "variableDay", label: "Variable day rate", kind: "text", ...at(570), source: "contract.rateDayCent", onlyIf: { source: "contract.priceType", equals: "variable" } },
+      { id: "day", label: "Day reading", kind: "text", ...at(550), source: "reading.day" },
+      { id: "night", label: "Night reading", kind: "text", ...at(530), source: "reading.night" },
+      { id: "years", label: "Years at premises", kind: "text", ...at(510), source: "site.yearsAtPremises" },
+      { id: "street", label: "Street", kind: "text", ...at(490), source: "site.street", upper: true, mask: true },
+      { id: "mic", label: "MIC", kind: "text", ...at(470), source: "meter.mic" },
+      { id: "dg", label: "DG code", kind: "text", ...at(450), source: "meter.dgCode" },
+      { id: "tariff", label: "Night saver", kind: "check", ...box(430), source: "contract.tariff", match: "night_saver" },
+      { id: "staff", label: "Employees", kind: "text", ...at(410), source: "customer.employees" },
+      { id: "cover", label: "Old entry", kind: "text", ...at(390), source: null, mask: true },
+    ];
+    expectStatus(await team.manager.patch(`/form-templates/${tpl.id}`, { fields }), 204);
+    // A tick box following a value that isn't yes/no needs the value to tick on.
+    expectStatus(await team.manager.patch(`/form-templates/${tpl.id}`, { fields: [{ id: "x", label: "Entity", kind: "check", ...box(700), source: "customer.legalEntity" }] }), 400);
+
+    const pre = expectStatus(await team.sales.get(`/opportunities/${oppId}/forms/prefill?templateId=${tpl.id}`), 200).body;
+    const value = (id: string) => pre.fields.find((f: { id: string }) => f.id === id).value;
+    expect([value("sole"), value("ltd"), value("noEmail"), value("noPost"), value("vatNo"), value("t24"), value("t12"), value("tariff")]).toEqual([true, false, true, false, true, true, false, true]);
+    expect(value("fixedDay")).toBe("30.5");
+    expect(value("variableDay")).toBeNull();
+    expect([value("day"), value("night")]).toEqual(["12345", "6789"]);
+    expect(Number(value("years"))).toBeGreaterThanOrEqual(7);
+    expect(value("street")).toBe("1 Main Street, Unit 4");
+    expect([value("mic"), value("dg"), value("staff")]).toEqual(["50", "DG6", "12"]);
+
+    // Masked and block-capital values pass the quality check, which reads back what was drawn.
+    const form = expectStatus(await team.sales.post(`/opportunities/${oppId}/forms`, { templateId: tpl.id, values: {} }), 201).body;
+    expect(form).toMatchObject({ qcPassed: true, qcIssues: [] });
+  });
+});
+
+describe("supplier forms that come set up", () => {
+  it("recognises a known PDF by its hash and places its fields, and leaves other PDFs alone", async () => {
+    const s = await supplier(t, "Bord Gáis Energy");
+    const blank = await supplierPdf();
+    const preset: FormPreset = {
+      key: "test-preset",
+      name: "Test supplier form",
+      supplier: "bord gáis energy",
+      documentType: "application_form",
+      sha256: createHash("sha256").update(blank).digest("hex"),
+      fields: [
+        { id: "p1", label: "Customer", kind: "text", page: 0, x: 50, y: 760, w: 250, h: 18, source: "customer.legalName", upper: true },
+        { id: "p2", label: "Sole trader", kind: "check", page: 0, x: 50, y: 720, w: 12, h: 12, source: "customer.legalEntity", match: "sole_trader" },
+        { id: "p3", label: "Sign here", kind: "signature", page: 0, x: 50, y: 120, w: 200, h: 40, signer: "customer" },
+      ],
+    };
+    FORM_PRESETS.push(preset);
+    try {
+      const upload = (file: Buffer) =>
+        team.manager.agent
+          .post("/api/form-templates")
+          .set("Origin", "http://localhost:3000")
+          .set("X-CSRF-Token", team.manager.csrf)
+          .field("name", "Uploaded")
+          .field("documentType", "application_form")
+          .field("supplierId", "")
+          .attach("file", file, { filename: "form.pdf", contentType: "application/pdf" });
+      const known = expectStatus(await upload(blank), 201).body;
+      expect(known).toMatchObject({ fieldsFound: 3, preset: "Test supplier form" });
+      const tpl = expectStatus(await team.manager.get(`/form-templates/${known.id}`), 200).body;
+      expect(tpl.supplierId).toBe(s.id);
+      expect(tpl.fields).toEqual(preset.fields);
+
+      const other = await PDFDocument.create();
+      other.addPage([600, 800]);
+      const unknown = expectStatus(await upload(Buffer.from(await other.save())), 201).body;
+      expect(unknown).toMatchObject({ fieldsFound: 0, preset: null });
+      expect(expectStatus(await team.manager.get(`/form-templates/${unknown.id}`), 200).body.supplierId).toBeNull();
+    } finally {
+      FORM_PRESETS.splice(FORM_PRESETS.indexOf(preset), 1);
+    }
   });
 });

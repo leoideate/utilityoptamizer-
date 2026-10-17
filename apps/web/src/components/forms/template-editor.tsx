@@ -15,6 +15,7 @@ import {
   FORM_SOURCE_KEYS,
   type FormField,
   type FormFieldKind,
+  type FormSource,
 } from "@uo/shared";
 import { useSuppliers } from "@/components/domain";
 import { Badge, Button, Card, CardHeader, Checkbox, Field, Input, IssueList, Select, Skeleton } from "@/components/ui/primitives";
@@ -315,7 +316,8 @@ function FieldPanel({ field, onChange, onRemove, pageCount }: { field: FormField
     const byGroup = new Map<string, typeof FORM_SOURCE_KEYS>();
     for (const k of FORM_SOURCE_KEYS) {
       const s = FORM_SOURCES[k] as { group: string; check?: boolean };
-      if (field.kind === "check" ? !s.check : s.check) continue;
+      // Tick boxes can follow any value (with "Tick when the value is"); text never shows a yes/no flag.
+      if (field.kind !== "check" && s.check) continue;
       byGroup.set(s.group, [...(byGroup.get(s.group) ?? []), k]);
     }
     return [...byGroup];
@@ -375,6 +377,38 @@ function FieldPanel({ field, onChange, onRemove, pageCount }: { field: FormField
             )}
           </Field>
         )}
+        {field.kind === "check" && field.source && (
+          <Field
+            label="Tick when the value is"
+            hint={(FORM_SOURCES[field.source] as { check?: boolean }).check ? "Blank = tick when yes. Type false to tick when no (e.g. a 'do not contact' box)." : "Required, e.g. 24 for a 24-month box, limited_company, medium."}
+          >
+            {(p) => <Input {...p} value={field.match ?? ""} onChange={(e) => onChange({ match: e.target.value.trim() ? e.target.value : undefined })} />}
+          </Field>
+        )}
+        {!signerKind && (
+          <fieldset className="space-y-2 rounded-lg border border-border p-3">
+            <legend className="px-1 text-xs font-medium text-muted">Only fill when (optional)</legend>
+            <Select
+              aria-label="Only fill when this value"
+              value={field.onlyIf?.source ?? ""}
+              onChange={(e) => onChange({ onlyIf: e.target.value ? { source: e.target.value as FormSource, equals: field.onlyIf?.equals ?? "" } : undefined })}
+            >
+              <option value="">Always</option>
+              {FORM_SOURCE_KEYS.map((k) => (
+                <option key={k} value={k}>
+                  {FORM_SOURCES[k].label}
+                </option>
+              ))}
+            </Select>
+            {field.onlyIf && (
+              <Input aria-label="equals" placeholder="equals, e.g. fixed" value={field.onlyIf.equals} onChange={(e) => onChange({ onlyIf: { source: field.onlyIf!.source, equals: e.target.value } })} />
+            )}
+          </fieldset>
+        )}
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          <Checkbox label="Cover what's underneath" checked={!!field.mask} onChange={(e) => onChange({ mask: e.target.checked || undefined })} />
+          {field.kind === "text" && <Checkbox label="Block capitals" checked={!!field.upper} onChange={(e) => onChange({ upper: e.target.checked || undefined })} />}
+        </div>
         {field.kind === "text" && (
           <div className="grid grid-cols-2 gap-3 [&>*:first-child]:col-span-2">
             <Field label="Character boxes" hint="For rows of single-character boxes (e.g. MPRN). Blank = one box.">

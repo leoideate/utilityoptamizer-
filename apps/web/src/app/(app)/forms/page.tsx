@@ -5,6 +5,7 @@ import { FileText, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
 import { DOCUMENT_TYPES, FORM_DOCUMENT_TYPES } from "@uo/shared";
 import { useSuppliers } from "@/components/domain";
 import { Dialog } from "@/components/ui/overlays";
@@ -92,9 +93,13 @@ function AddTemplateDialog({ onClose }: { onClose: () => void }) {
       fd.append("supplierId", supplierId);
       fd.append("documentType", documentType);
       fd.append("file", file!);
-      return api.postForm<{ id: string; fieldsFound: number }>("/form-templates", fd);
+      return api.postForm<{ id: string; fieldsFound: number; preset: string | null }>("/form-templates", fd);
     },
-    onSuccess: (r) => (qc.invalidateQueries({ queryKey: ["form-templates"] }), router.push(`/forms/${r.id}`)),
+    onSuccess: (r) => {
+      if (r.preset) toast.success(`Recognised ${r.preset}: ${r.fieldsFound} fields are placed and linked to the CRM.`);
+      void qc.invalidateQueries({ queryKey: ["form-templates"] });
+      router.push(`/forms/${r.id}`);
+    },
     onError: (e) => setIssues((e as ApiError).issues.length ? (e as ApiError).issues : [(e as ApiError).message]),
   });
   return (
@@ -102,7 +107,7 @@ function AddTemplateDialog({ onClose }: { onClose: () => void }) {
       open
       onOpenChange={(o) => !o && onClose()}
       title="Add a supplier form"
-      description="Fillable PDFs keep their fields; on flat PDFs you place the fields yourself."
+      description="Forms we've set up (Flogas, Bord Gáis, Energia) are recognised and arrive ready to fill. Other fillable PDFs keep their fields; on flat PDFs you place the fields yourself."
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
