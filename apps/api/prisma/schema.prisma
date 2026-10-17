@@ -322,6 +322,8 @@ model User {
   mfaEnabled    Boolean    @default(false) @map("mfa_enabled")
   /// Last TOTP time step accepted, so a code can't be used twice.
   mfaLastStep   Int?       @map("mfa_last_step")
+  /// false = single sign-on only: password sign-in and password changes are refused.
+  passwordLoginEnabled Boolean @default(true) @map("password_login_enabled")
   failedLogins  Int        @default(0) @map("failed_logins")
   lockedUntil   DateTime?  @map("locked_until")
   lastLoginAt   DateTime?  @map("last_login_at")

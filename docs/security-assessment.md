@@ -88,7 +88,7 @@ The production web build (`npm run build -w @uo/web`, served by `npm run start`)
 | Developer testing isn't independent | Independent penetration test before go-live and yearly / after major changes | Management |
 | `script-src 'unsafe-inline'` (needed by Next.js inline hydration) weakens CSP against XSS | React escapes all output and no `dangerouslySetInnerHTML` is used; adopt nonce-based CSP when moving to Next.js middleware nonces | Development |
 | Client IP is only trustworthy behind a proxy that sets `X-Forwarded-For` | Deploy behind a load balancer; never expose the web container directly with `TRUST_PROXY` set. Per-account lockout limits guessing regardless of IP. | Operations |
-| SSO users still have a CRM password | Option to disable password sign-in per user or per domain | Development (known limitation) |
+| SSO users keep a CRM password unless an administrator turns it off | Turn off **Allow password sign-in** for every user who signs in with SSO (per user; refused for your own account or when SSO can't serve them). Covered by `sso.test.ts` "single sign-on only accounts". | Administrators |
 | No automated alerting on suspicious activity | Ship JSON logs to a SIEM; alert on bursts of "Access denied", `auth.mfa_failed`, `auth.password_change_failed`, lockouts and `sensitive.read` | Operations |
 | Development-only dependency advisories (`braces` in Jest/ESLint) | Not in production images; update when fixed versions exist | Development |
 | Infrastructure (TLS config, bucket policy, IAM, backups, patching) is outside this codebase | Follow [deployment](deployment.md); include in the independent test | Operations |

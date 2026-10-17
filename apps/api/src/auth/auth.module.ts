@@ -8,6 +8,6 @@ import { SsoService } from "./sso.service";
 @Module({
   controllers: [AuthController, SsoController],
   providers: [AuthService, SsoService],
-  exports: [AuthService],
+  exports: [AuthService, SsoService],
 })
 export class AuthModule {}

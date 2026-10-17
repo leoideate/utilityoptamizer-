@@ -71,6 +71,8 @@ export const updateUserSchema = z.object({
   roles: z.array(z.enum(ROLES)).min(1).optional(),
   active: z.boolean().optional(),
   teamId: id.nullable().optional(),
+  /** false = the user can only sign in with single sign-on. */
+  passwordLogin: z.boolean().optional(),
 });
 
 // --- Customers -------------------------------------------------------------

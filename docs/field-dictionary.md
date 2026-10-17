@@ -15,6 +15,7 @@ Generated from `apps/api/prisma/schema.prisma` (`node scripts/gen-field-dictiona
 | mfa_secret_enc | String |  | TOTP secret (encrypted). MFA is enforced at login when mfaEnabled is true |
 | mfa_enabled | Boolean | ✓ | Default false |
 | mfa_last_step | Int |  | Last TOTP time step accepted, so a code can't be used twice |
+| password_login_enabled | Boolean | ✓ | false = single sign-on only: password sign-in and password changes are refused. Default true |
 | failed_logins | Int | ✓ | Default 0 |
 | locked_until | DateTime |  |  |
 | last_login_at | DateTime |  |  |
@@ -891,8 +892,6 @@ Append-only (trigger). Never contains restricted values.
 
 ## Mailbox
 
-A user's connected mailbox. Tokens are encrypted; the address always equals the user's CRM email.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -901,8 +900,6 @@ A user's connected mailbox. Tokens are encrypted; the address always equals the 
 | address | String | ✓ |  |
 
 ## email_messages
-
-One email from a connected mailbox (inbox or sent). Kept after a mailbox is disconnected; never deleted.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|

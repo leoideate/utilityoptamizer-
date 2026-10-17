@@ -29,6 +29,8 @@ How it works and what's checked: authorization code flow with PKCE (S256), a ran
 
 Two-factor: a user who has CRM two-factor turned on is asked for their authenticator code after SSO, unless Microsoft reports that MFA was performed during sign-in (`amr` contains `mfa`). If your Entra conditional access already enforces MFA, staff won't be asked twice. Google doesn't report this, so Google users with CRM two-factor always enter their code.
 
+SSO-only accounts: once someone signs in with SSO, untick **Allow password sign-in** on their user (**Users & roles** → Edit). Their CRM password then stops working (sign-in attempts get the usual "incorrect" message and are audit-logged as `auth.password_login_refused`), they can't change it, and any open sessions end so they sign back in with SSO. Leaving a company account in Entra ID or Google then removes their CRM access too. The CRM won't turn it off for your own account, when no SSO provider is configured, or when the user's email domain isn't in `SSO_ALLOWED_DOMAINS`, so nobody is left without a way in. Tick the box again to restore password sign-in (reset their password if they don't know it).
+
 ## Email (each person's Outlook or Gmail)
 
 People connect their own work mailbox under **My account → My mailbox**. The CRM then syncs their inbox and sent mail every two minutes (the first sync fetches the last `MAIL_BACKFILL_DAYS`, default 30), shows it under **Email**, and sends from their own address so replies stay in their Outlook or Gmail thread. Only a mailbox whose address equals the person's CRM email can be connected.

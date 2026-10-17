@@ -157,3 +157,55 @@ describe("single sign-on", () => {
     expect(ms.location).toBe("/pipeline");
   });
 });
+
+describe("single sign-on only accounts", () => {
+  const passwordLogin = (email: string, password = support.PASSWORD) => request(t.app.getHttpServer()).post("/api/auth/login").set("Origin", support.ORIGIN).send({ email, password });
+
+  it("refuses password sign-in with the usual message, ends password sessions, and still allows SSO", async () => {
+    const admin = (await support.userAndClient(t, ["administrator"])).client;
+    const { user, client } = await support.userAndClient(t, ["salesperson"]);
+
+    support.expectStatus(await admin.patch(`/admin/users/${user.id}`, { passwordLogin: false }), 204);
+    expect((await client.get("/auth/me")).status).toBe(401);
+
+    for (const password of [support.PASSWORD, "wrong-password-123"]) {
+      const res = await passwordLogin(user.email, password);
+      expect(res.status).toBe(403);
+      expect(res.body.message).toBe("Email or password is incorrect.");
+    }
+    const row = await t.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(row).toMatchObject({ passwordLoginEnabled: false, failedLogins: 0, lockedUntil: null });
+    expect(await t.prisma.auditLog.count({ where: { action: "auth.password_login_refused", entityId: user.id } })).toBe(2);
+    const listed = support.expectStatus(await admin.get("/admin/users"), 200).body.find((u: { id: string }) => u.id === user.id);
+    expect(listed.passwordLoginEnabled).toBe(false);
+
+    const { agent } = await signIn(google, "google", { email: user.email, email_verified: true });
+    const me = support.expectStatus(await agent.get("/api/auth/me"), 200);
+    const change = await agent.post("/api/auth/password").set("Origin", support.ORIGIN).set("X-CSRF-Token", me.body.csrfToken).send({ currentPassword: support.PASSWORD, newPassword: "Another-Long-Pass-2" });
+    expect(change.status).toBe(422);
+    expect(change.body.issues[0]).toMatch(/single sign-on only/);
+
+    support.expectStatus(await admin.patch(`/admin/users/${user.id}`, { passwordLogin: true }), 204);
+    expect((await passwordLogin(user.email)).status).toBe(200);
+  });
+
+  it("won't leave anyone without a way in", async () => {
+    const { user: adminUser, client: admin } = await support.userAndClient(t, ["administrator"]);
+    const own = await admin.patch(`/admin/users/${adminUser.id}`, { passwordLogin: false });
+    expect(own.status).toBe(422);
+    expect(own.body.issues).toEqual(["You can't turn off password sign-in for your own account."]);
+
+    // SSO_ALLOWED_DOMAINS doesn't include gmail.com, so this user couldn't sign in with SSO.
+    const outside = await t.prisma.user.create({ data: { name: "Outside Domain", email: `outside${Date.now()}@gmail.com`, passwordHash: "x" } });
+    const res = await admin.patch(`/admin/users/${outside.id}`, { passwordLogin: false });
+    expect(res.status).toBe(422);
+    expect(res.body.issues[0]).toMatch(/isn't allowed for gmail\.com addresses/);
+    expect((await t.prisma.user.findUniqueOrThrow({ where: { id: outside.id } })).passwordLoginEnabled).toBe(true);
+  });
+
+  it("is for administrators only", async () => {
+    const { client: manager } = await support.userAndClient(t, ["manager"]);
+    const { user } = await support.userAndClient(t, ["salesperson"]);
+    expect((await manager.patch(`/admin/users/${user.id}`, { passwordLogin: false })).status).toBe(403);
+  });
+});

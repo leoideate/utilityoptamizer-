@@ -28,7 +28,7 @@ These are deliberate gaps or follow-up work. Nothing here pretends to work when 
 - **Content-Security-Policy** allows inline scripts (`'unsafe-inline'`), which Next.js needs for hydration without per-request nonces. No third-party script origins are allowed.
 - **Customer data subject requests** (GDPR access/erasure) are handled by an administrator from the customer record and the retention job; there's no self-service export.
 
-- **Single sign-on** signs in existing users only, and doesn't sync users or roles from Entra ID or Google (no SCIM). Microsoft SSO is single-tenant by design. SSO users keep a CRM password, which an administrator can't disable per user yet.
+- **Single sign-on** signs in existing users only, and doesn't sync users or roles from Entra ID or Google (no SCIM). Microsoft SSO is single-tenant by design. An administrator can make a user SSO-only (password sign-in off) one user at a time; there's no per-domain switch.
 - **RingCentral call length** is measured by the CRM from "connected" to "ended" (RingOut doesn't report duration), so it's shown as approximate. Salespeople can enter the exact length with their notes.
 - **Chat** messages are kept indefinitely (no chat retention setting yet) and have no threads, reactions, per-person read receipts or search. Live updates use Server-Sent Events; proxies must not buffer `/api/realtime/stream`.
 - **OCR** needs a provider behind the generic HTTP adapter (Azure, Google, AWS…). With the default `manual` setting, users type the details beside the photo. The local text parser is tuned for Irish and UK cards and may mis-assign unusual layouts; the review screen is there to catch that.
