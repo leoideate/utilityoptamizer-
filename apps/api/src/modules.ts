@@ -34,6 +34,7 @@ import {
 } from "./integrations/adapters";
 import { IntegrationsController } from "./integrations/integrations.controller";
 import { IntegrationsService } from "./integrations/integrations.service";
+import { MailboxesModule } from "./mailboxes/mailboxes.module";
 import { MerchantController } from "./merchant/merchant.controller";
 import { MerchantService } from "./merchant/merchant.service";
 import { NotificationsService } from "./notifications/notifications.service";
@@ -114,6 +115,7 @@ export class WorkflowsModule {}
 export class OcrModule {}
 
 @Module({
+  imports: [MailboxesModule],
   controllers: [IntegrationsController],
   providers: [
     IntegrationsService,
@@ -159,4 +161,5 @@ export const FEATURE_MODULES = [
   HealthModule,
   CallsModule,
   ChatModule,
+  MailboxesModule,
 ];

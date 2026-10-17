@@ -16,7 +16,7 @@ import type { AuthedRequest } from "../auth/guards";
  * clients re-fetch anything they need through the normal, permission-checked API.
  */
 export interface RealtimeEvent {
-  type: "chat.message" | "chat.message.updated" | "chat.read" | "call.updated" | "notification";
+  type: "chat.message" | "chat.message.updated" | "chat.read" | "call.updated" | "email.received" | "notification";
   data: Record<string, unknown>;
 }
 

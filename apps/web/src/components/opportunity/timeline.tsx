@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowUpRight, CheckCircle2, FileText, GitBranch, Mail, MessageCircle, PenLine, Phone, Send, ShieldCheck, StickyNote, UserRound, Zap } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { Dialog } from "@/components/ui/overlays";
 import { Badge, Button, Card, CardHeader, Field, Input, IssueList, Select, Skeleton, Textarea } from "@/components/ui/primitives";
@@ -9,6 +10,12 @@ import { type ApiError, api, idempotencyKey } from "@/lib/api";
 import { dateTime } from "@/lib/format";
 import type { Workspace } from "@/lib/types";
 import { useRefreshOpportunity } from "./common";
+
+interface IntegrationStatus {
+  email: boolean;
+  whatsapp: boolean;
+  mailbox: { address: string; provider: "microsoft" | "google" } | null;
+}
 
 interface Entry {
   id: string;
@@ -18,6 +25,7 @@ interface Entry {
   occurredAt: string;
   actorName: string;
   correctsId: string | null;
+  data?: { emailMessageId?: string } | null;
 }
 
 const ICONS: Record<string, typeof Phone> = {
@@ -50,7 +58,7 @@ export function TimelineTab({ opp }: { opp: Workspace }) {
   const [filter, setFilter] = useState("");
   const [composer, setComposer] = useState<null | "log" | "email" | "whatsapp">(null);
   const [correcting, setCorrecting] = useState<Entry | null>(null);
-  const status = useQuery({ queryKey: ["integrations", "status"], queryFn: () => api.get<{ email: boolean; whatsapp: boolean }>("/integrations/status"), staleTime: 10 * 60_000 });
+  const status = useQuery({ queryKey: ["integrations", "status"], queryFn: () => api.get<IntegrationStatus>("/integrations/status"), staleTime: 10 * 60_000 });
   const shown = data?.filter((e) =>
     !filter ? true : filter === "comms" ? ["call", "email", "whatsapp", "note"].includes(e.kind) : filter === "document" ? ["document", "signature"].includes(e.kind) : e.kind === filter,
   );
@@ -120,6 +128,11 @@ export function TimelineTab({ opp }: { opp: Workspace }) {
                     {corrected.has(e.id) && <Badge>Corrected below</Badge>}
                   </p>
                   <p className="mt-0.5 whitespace-pre-line text-sm">{e.body}</p>
+                  {e.data?.emailMessageId && (
+                    <Link className="mt-1 inline-block text-xs text-primary hover:underline" href={`/inbox?id=${e.data.emailMessageId}`}>
+                      Open email
+                    </Link>
+                  )}
                   {opp.permissions.write && ["call", "note", "email", "whatsapp"].includes(e.kind) && (
                     <button className="mt-1 text-xs text-primary hover:underline" onClick={() => setCorrecting(e)}>
                       Add correction
@@ -133,7 +146,7 @@ export function TimelineTab({ opp }: { opp: Workspace }) {
       )}
       {composer === "log" && <LogDialog opp={opp} onClose={() => (setComposer(null), refetch())} />}
       {correcting && <LogDialog opp={opp} corrects={correcting} onClose={() => (setCorrecting(null), refetch())} />}
-      {composer === "email" && <EmailDialog opp={opp} onClose={() => (setComposer(null), refetch())} />}
+      {composer === "email" && <EmailDialog opp={opp} from={status.data?.mailbox?.address ?? null} onClose={() => (setComposer(null), refetch())} />}
       {composer === "whatsapp" && <WhatsAppDialog opp={opp} onClose={() => (setComposer(null), refetch())} />}
     </Card>
   );
@@ -220,7 +233,7 @@ function LogDialog({ opp, corrects, onClose }: { opp: Workspace; corrects?: Entr
   );
 }
 
-function EmailDialog({ opp, onClose }: { opp: Workspace; onClose: () => void }) {
+function EmailDialog({ opp, from, onClose }: { opp: Workspace; from: string | null; onClose: () => void }) {
   const { send, sending, issues } = useSend(opp, onClose);
   const [key] = useState(idempotencyKey);
   const [to, setTo] = useState(opp.customer?.contacts.find((c) => c.email)?.email ?? opp.email ?? "");
@@ -247,6 +260,7 @@ function EmailDialog({ opp, onClose }: { opp: Workspace; onClose: () => void }) 
         <Field label="To">{(p) => <Input {...p} type="email" value={to} onChange={(e) => setTo(e.target.value)} />}</Field>
         <Field label="Subject">{(p) => <Input {...p} value={subject} onChange={(e) => setSubject(e.target.value)} />}</Field>
         <Field label="Message">{(p) => <Textarea {...p} rows={8} value={body} onChange={(e) => setBody(e.target.value)} />}</Field>
+        <p className="text-xs text-muted">{from ? `Sent from your mailbox, ${from}. It appears in your Sent folder.` : "Sent from the CRM's shared address. Connect your mailbox on your account page to send as yourself."}</p>
         <IssueList issues={issues} />
       </div>
     </Dialog>

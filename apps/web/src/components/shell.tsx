@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, Building2, CalendarCheck, ClipboardList, FileSignature, MessagesSquare, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Menu as MenuIcon, ScanLine, Search, Settings } from "lucide-react";
+import { Bell, Building2, CalendarCheck, ClipboardList, FileSignature, MessagesSquare, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Mail, Menu as MenuIcon, ScanLine, Search, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -9,6 +9,7 @@ import { ROLE_LABELS } from "@uo/shared";
 import { api } from "@/lib/api";
 import { cn, ref, relative } from "@/lib/format";
 import { useChannels } from "@/lib/chat";
+import { useUnreadEmail } from "@/lib/email";
 import { useUser } from "@/lib/session";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "./ui/overlays";
 import { DESK_LABELS, type Desk } from "@uo/shared";
@@ -25,6 +26,7 @@ const NAV: Record<Desk, { href: string; label: string; icon: typeof LayoutDashbo
     { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
     { href: "/customers", label: "Customers", icon: Building2 },
     { href: "/activities", label: "My tasks", icon: CalendarCheck },
+    { href: "/inbox", label: "Email", icon: Mail },
     { href: "/chat", label: "Chat", icon: MessagesSquare },
   ],
   back_office: [
@@ -33,6 +35,7 @@ const NAV: Record<Desk, { href: string; label: string; icon: typeof LayoutDashbo
     { href: "/opportunities", label: "Opportunities", icon: ListChecks },
     { href: "/customers", label: "Customers", icon: Building2 },
     { href: "/activities", label: "My tasks", icon: CalendarCheck },
+    { href: "/inbox", label: "Email", icon: Mail },
     { href: "/chat", label: "Chat", icon: MessagesSquare },
   ],
 };
@@ -44,6 +47,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const isAdmin = user.capabilities.some((c) => c.startsWith("admin."));
   const { desk, desks, setDesk } = useDesk();
   const unread = useChannels().data?.totalUnread ?? 0;
+  const unreadEmail = useUnreadEmail().data ?? 0;
   useEffect(() => setOpen(false), [pathname]);
 
   const nav = (
@@ -78,11 +82,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Icon className="size-5" aria-hidden />
             {label}
-            {href === "/chat" && unread > 0 && (
-              <span className="ml-auto rounded-full bg-primary px-1.5 text-xs font-semibold leading-5 text-primary-fg" aria-label={`${unread} unread`}>
-                {unread > 99 ? "99+" : unread}
-              </span>
-            )}
+            {(() => {
+              const count = href === "/chat" ? unread : href === "/inbox" ? unreadEmail : 0;
+              return count > 0 ? (
+                <span className="ml-auto rounded-full bg-primary px-1.5 text-xs font-semibold leading-5 text-primary-fg" aria-label={`${count} unread`}>
+                  {count > 99 ? "99+" : count}
+                </span>
+              ) : null;
+            })()}
           </Link>
         );
       })}

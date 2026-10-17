@@ -10,7 +10,8 @@ These are deliberate gaps or follow-up work. Nothing here pretends to work when 
 | Bill data extraction | Not built | Bills are stored, versioned and reviewed; meter details and rates are typed in. |
 | Supplier / Worldpay APIs | Not built | Submission is recorded by Operations; **Send submission pack** emails the approved documents (signed links) to the supplier's or Worldpay's submissions address. `SubmissionChannel` is the extension point for vendor APIs. |
 | Accounting integration | CSV only | `GET /api/reports/commissions.csv` (formula-safe) for import into the accounting system. |
-| Inbound email and WhatsApp | Manual logging | Staff log inbound messages on the timeline (which drives the unanswered-message reminders). Outbound email (SMTP) and WhatsApp (Meta Cloud API) are sent from the CRM. |
+| Inbound WhatsApp | Manual logging | Staff log inbound WhatsApp messages on the timeline (which drives the unanswered-message reminders). Email is two-way through each person's connected Outlook or Gmail mailbox; WhatsApp (Meta Cloud API) is outbound only. |
+| Email attachments and HTML | Plain text only | Synced emails are shown as plain text, and attachments are listed but opened in Outlook or Gmail. Shared mailboxes (e.g. sales@) can't be connected yet; mail is polled every two minutes rather than pushed. |
 | Inbound calls and call recording | Not built | Outbound click-to-call only (RingCentral RingOut, or manual). Inbound calls and RingCentral call-log sync aren't imported; recording is off (it needs consent notices). |
 | Staff audio/video calls | Not built | Internal chat only. |
 | Notifications by email or push | In-app only | Bell notifications, plus reminders for tasks with a reminder time. |

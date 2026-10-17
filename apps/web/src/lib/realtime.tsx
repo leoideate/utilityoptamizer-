@@ -59,6 +59,13 @@ export function RealtimeProvider({ userId, children }: { userId: string; childre
         qc.invalidateQueries({ queryKey: ["opportunity", d.opportunityId] });
       }
     });
+    es.addEventListener("email.received", (e) => {
+      const d = JSON.parse((e as MessageEvent).data) as { id: string; from: string; subject: string; opportunityId: string | null };
+      qc.invalidateQueries({ queryKey: ["inbox"] });
+      qc.invalidateQueries({ queryKey: ["mailbox", "unread"] });
+      if (d.opportunityId) qc.invalidateQueries({ queryKey: ["opportunity", d.opportunityId, "timeline"] });
+      toast(`New email from ${d.from}`, { description: d.subject, action: { label: "Open", onClick: () => window.location.assign(`/inbox?id=${d.id}`) } });
+    });
     es.addEventListener("notification", () => qc.invalidateQueries({ queryKey: ["notifications"] }));
     return () => es.close();
   }, [qc, userId]);
