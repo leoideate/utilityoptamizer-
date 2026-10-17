@@ -2503,6 +2503,29 @@
         ]
       }
     },
+    "/api/emails/{id}/reply": {
+      "post": {
+        "operationId": "IntegrationsController_reply",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
     "/api/admin/integration-jobs": {
       "get": {
         "operationId": "IntegrationsController_jobs",
@@ -2546,6 +2569,163 @@
         },
         "tags": [
           "integrations"
+        ]
+      }
+    },
+    "/api/mailboxes": {
+      "get": {
+        "operationId": "MailboxesController_mine",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email"
+        ]
+      }
+    },
+    "/api/mailboxes/{provider}/connect": {
+      "get": {
+        "operationId": "MailboxesController_connect",
+        "parameters": [
+          {
+            "name": "provider",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email"
+        ]
+      }
+    },
+    "/api/mailboxes/{provider}/callback": {
+      "get": {
+        "operationId": "MailboxesController_callback",
+        "parameters": [
+          {
+            "name": "provider",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email"
+        ]
+      }
+    },
+    "/api/mailboxes/{id}": {
+      "delete": {
+        "operationId": "MailboxesController_disconnect",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email"
+        ]
+      }
+    },
+    "/api/mailboxes/{id}/sync": {
+      "post": {
+        "operationId": "MailboxesController_sync",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email"
+        ]
+      }
+    },
+    "/api/mailbox/messages": {
+      "get": {
+        "operationId": "MailboxesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email"
+        ]
+      }
+    },
+    "/api/mailbox/unread-count": {
+      "get": {
+        "operationId": "MailboxesController_unread",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email"
+        ]
+      }
+    },
+    "/api/emails/{id}": {
+      "get": {
+        "operationId": "MailboxesController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email"
         ]
       }
     },

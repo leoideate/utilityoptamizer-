@@ -7,6 +7,7 @@ import { type Actor, SYSTEM, actorRef } from "../common/actor";
 import { Forbidden, RuleViolation } from "../common/errors";
 import { PrismaService } from "../common/prisma.service";
 import { JOB_QUEUE, type JobQueue, QUEUES } from "../jobs/queue";
+import { MailboxesService } from "../mailboxes/mailboxes.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OpportunityAccess } from "../opportunities/access.service";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/storage";
@@ -35,11 +36,15 @@ export class IntegrationsService {
     @Inject(SUBMISSION_CHANNEL) private readonly submissions: SubmissionChannel,
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
     @Inject(ENV) private readonly env: Env,
+    private readonly mailboxes: MailboxesService,
   ) {}
 
-  status() {
+  /** What can be used. Email works through the person's own connected mailbox, or the shared SMTP sender. */
+  async status(actor: Actor) {
+    const mailbox = await this.mailboxes.sendingMailbox(actor.id);
     return {
-      email: this.email.configured,
+      email: this.email.configured || !!mailbox,
+      mailbox: mailbox ? { address: mailbox.address, provider: mailbox.provider } : null,
       whatsapp: this.whatsapp.configured,
       storage: this.env.STORAGE_DRIVER,
       ocr: this.env.OCR_PROVIDER,
@@ -61,12 +66,47 @@ export class IntegrationsService {
 
   // --- User actions ----------------------------------------------------------
 
+  /** Sends from the person's own mailbox when they've connected one (it lands in their Sent folder), otherwise via SMTP. */
   async sendEmail(actor: Actor, opportunityId: string, input: { to: string; subject: string; body: string; idempotencyKey: string }) {
     const opp = await this.access.writable(actor, opportunityId);
-    if (!this.email.configured) throw new RuleViolation(["Email sending isn't set up yet. Ask an administrator."]);
-    const job = await this.enqueue(actor, "email.send", { to: input.to, subject: input.subject, text: input.body, replyTo: undefined }, `email:${input.idempotencyKey}`, opportunityId);
+    const mailbox = await this.mailboxes.sendingMailbox(actor.id);
+    if (!mailbox && !this.email.configured) throw new RuleViolation(["Connect your mailbox on the Account page to send email from the CRM."]);
+    const payload = mailbox
+      ? { mailboxId: mailbox.id, to: input.to.toLowerCase(), subject: input.subject, text: input.body, customerId: opp.customerId }
+      : { to: input.to, subject: input.subject, text: input.body, replyTo: undefined };
+    const job = await this.enqueue(actor, "email.send", payload, `email:${input.idempotencyKey}`, opportunityId);
     await this.audit.timeline(actor, { opportunityId, customerId: opp.customerId, kind: "email", direction: "outbound", body: `To ${input.to}: ${input.subject}\n\n${input.body}`, data: { integrationJobId: job.id } });
     await this.prisma.opportunity.update({ where: { id: opportunityId }, data: { lastContactAt: new Date(), firstContactAt: opp.firstContactAt ?? new Date() } });
+    return { jobId: job.id };
+  }
+
+  /** Replies from the caller's own mailbox, in the same thread. Logged on the deal or customer the email is linked to. */
+  async replyEmail(actor: Actor, emailId: string, input: { body: string; idempotencyKey: string }) {
+    const orig = await this.mailboxes.forReply(actor, emailId);
+    const to = orig.direction === "inbound" ? [orig.fromAddress] : orig.toAddresses;
+    if (!to.length) throw new RuleViolation(["This email has no address to reply to."]);
+    const subject = /^\s*re\s*:/i.test(orig.subject) ? orig.subject : `Re: ${orig.subject}`;
+    const job = await this.enqueue(
+      actor,
+      "email.send",
+      { mailboxId: orig.mailboxId, to: to.join(", "), subject, text: input.body, replyToEmailId: orig.id, customerId: orig.customerId },
+      `email:${input.idempotencyKey}`,
+      orig.opportunityId ?? undefined,
+    );
+    if (orig.opportunityId || orig.customerId) {
+      await this.audit.timeline(actor, {
+        opportunityId: orig.opportunityId ?? undefined,
+        customerId: orig.customerId ?? undefined,
+        kind: "email",
+        direction: "outbound",
+        body: `To ${to.join(", ")}: ${subject}\n\n${input.body}`,
+        data: { integrationJobId: job.id },
+      });
+    }
+    if (orig.opportunityId) {
+      const opp = await this.prisma.opportunity.findUnique({ where: { id: orig.opportunityId }, select: { firstContactAt: true } });
+      await this.prisma.opportunity.update({ where: { id: orig.opportunityId }, data: { lastContactAt: new Date(), firstContactAt: opp?.firstContactAt ?? new Date() } });
+    }
     return { jobId: job.id };
   }
 
@@ -129,6 +169,7 @@ export class IntegrationsService {
   private async run(kind: IntegrationKind, p: Record<string, string>): Promise<unknown> {
     switch (kind) {
       case "email.send":
+        if (p.mailboxId) return this.mailboxes.send(p.mailboxId, { to: p.to.split(",").map((t) => t.trim()), subject: p.subject, text: p.text, replyToEmailId: p.replyToEmailId });
         return this.email.send({ to: p.to, subject: p.subject, text: p.text });
       case "whatsapp.send":
         return this.whatsapp.send(p.to, p.text);

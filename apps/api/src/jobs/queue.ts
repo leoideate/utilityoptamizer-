@@ -7,6 +7,8 @@ export const QUEUES = {
   integrations: "integrations",
   /** Document processing (virus scanning). */
   documents: "documents",
+  /** Mailbox sync and read-state updates. */
+  mail: "mail",
 } as const;
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
 

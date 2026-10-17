@@ -8,6 +8,7 @@ import { CallsService } from "../calls/calls.service";
 import { ChatService } from "../chat/chat.service";
 import { DocumentsService } from "../documents/documents.service";
 import { IntegrationsService } from "../integrations/integrations.service";
+import { MailboxesService } from "../mailboxes/mailboxes.service";
 import { redisConnection } from "./jobs.module";
 import { DEFAULT_ATTEMPTS, QUEUES } from "./queue";
 
@@ -22,6 +23,8 @@ export async function registerSchedules(env: Env) {
   await q.upsertJobScheduler("lead-assignment", { pattern: "*/15 7-20 * * *", tz: TZ }, { name: "leads", data: {} });
   await q.upsertJobScheduler("hourly", { pattern: "5 * * * *", tz: TZ }, { name: "hourly", data: {} });
   await q.upsertJobScheduler("retention", { pattern: "30 2 * * 0", tz: TZ }, { name: "retention", data: {} });
+  // Connected mailboxes are polled every two minutes (one deduplicated job per mailbox).
+  await q.upsertJobScheduler("mailbox-sync", { pattern: "*/2 * * * *", tz: TZ }, { name: "mail-sync", data: {} });
   await q.close();
 }
 
@@ -36,6 +39,7 @@ export async function startWorkers(app: INestApplicationContext): Promise<() => 
   const retention = app.get(RetentionService);
   const calls = app.get(CallsService);
   const chat = app.get(ChatService);
+  const mailboxes = app.get(MailboxesService);
 
   await registerSchedules(env);
 
@@ -52,6 +56,8 @@ export async function startWorkers(app: INestApplicationContext): Promise<() => 
             return automations.hourly();
           case "retention":
             return retention.run();
+          case "mail-sync":
+            return mailboxes.enqueueSyncAll();
           default:
             throw new Error(`Unknown automation job ${job.name}`);
         }
@@ -69,6 +75,12 @@ export async function startWorkers(app: INestApplicationContext): Promise<() => 
         job.name === "call.poll"
           ? calls.poll(job.data.callId!, job.data.attempt ?? 0)
           : integrations.execute(job.data.integrationJobId!, job.attemptsMade + 1, job.opts.attempts ?? DEFAULT_ATTEMPTS),
+      { connection, concurrency: 4 },
+    ),
+    new Worker(
+      QUEUES.mail,
+      async (job: Job<{ mailboxId?: string; emailMessageId?: string }>) =>
+        job.name === "mailbox.markRead" ? mailboxes.markReadAtProvider(job.data.emailMessageId!) : mailboxes.sync(job.data.mailboxId!),
       { connection, concurrency: 4 },
     ),
   ];

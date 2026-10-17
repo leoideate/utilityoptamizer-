@@ -106,6 +106,7 @@ test("main screens adapt from 320px to 1920px", async ({ browser }) => {
     ["tasks", "/activities"],
     ["cases", "/cases"],
     ["chat", "/chat"],
+    ["email", "/inbox"],
     ["scan", "/scan"],
     ["admin", "/admin"],
     ["supplier-forms", "/forms"],

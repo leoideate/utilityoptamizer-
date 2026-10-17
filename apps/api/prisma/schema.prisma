@@ -334,6 +334,7 @@ model User {
   ownedOpps     Opportunity[]  @relation("OppOwner")
   activities    Activity[]     @relation("ActivityOwner")
   notifications Notification[]
+  mailboxes     Mailbox[]
 
   @@map("users")
 }
@@ -1504,4 +1505,77 @@ model CallLog {
   @@index([opportunityId, startedAt])
   @@index([userId, startedAt])
   @@map("call_logs")
+}
+
+// --- Email: each user's own Microsoft 365 or Google mailbox ------------------------------------
+
+enum MailProviderId {
+  microsoft
+  google
+}
+
+enum MailboxStatus {
+  active
+  /// The provider refused the refresh token (password change, revoked consent): the owner reconnects.
+  reauth_required
+  disconnected
+}
+
+/// A user's connected mailbox. Tokens are encrypted; the address always equals the user's CRM email.
+model Mailbox {
+  id           String         @id @default(uuid()) @db.Uuid
+  userId       String         @map("user_id") @db.Uuid
+  user         User           @relation(fields: [userId], references: [id])
+  provider     MailProviderId
+  address      String
+  /// {accessToken, refreshToken, expiresAt} via CryptoService.encryptJson. Never logged or returned.
+  tokensEnc    String?        @map("tokens_enc")
+  status       MailboxStatus  @default(active)
+  /// Provider sync cursor: Graph delta links per folder, or the Gmail historyId.
+  syncState    Json?          @map("sync_state")
+  lastSyncedAt DateTime?      @map("last_synced_at")
+  lastError    String?        @map("last_error")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  messages EmailMessage[]
+
+  @@unique([userId, provider])
+  @@map("mailboxes")
+}
+
+/// One email from a connected mailbox (inbox or sent). Kept after a mailbox is disconnected; never deleted.
+model EmailMessage {
+  id                String    @id @default(uuid()) @db.Uuid
+  mailboxId         String    @map("mailbox_id") @db.Uuid
+  mailbox           Mailbox   @relation(fields: [mailboxId], references: [id])
+  providerMessageId String    @map("provider_message_id")
+  threadId          String?   @map("thread_id")
+  /// RFC 5322 Message-ID, used for reply threading.
+  internetMessageId String?   @map("internet_message_id")
+  direction         String
+  fromAddress       String    @map("from_address")
+  fromName          String?   @map("from_name")
+  toAddresses       String[]  @map("to_addresses")
+  ccAddresses       String[]  @map("cc_addresses")
+  subject           String
+  snippet           String
+  /// Plain text (HTML is converted on the server and never rendered), encrypted at rest.
+  bodyEnc           String?   @map("body_enc")
+  sentAt            DateTime  @map("sent_at")
+  unread            Boolean   @default(false)
+  hasAttachments    Boolean   @default(false) @map("has_attachments")
+  customerId        String?   @map("customer_id") @db.Uuid
+  opportunityId     String?   @map("opportunity_id") @db.Uuid
+  /// Set once the email has been written to the customer/opportunity timeline (exactly once).
+  timelineLoggedAt  DateTime? @map("timeline_logged_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@unique([mailboxId, providerMessageId])
+  @@index([mailboxId, direction, sentAt])
+  @@index([opportunityId, sentAt])
+  @@index([customerId, sentAt])
+  @@index([threadId])
+  @@map("email_messages")
 }
