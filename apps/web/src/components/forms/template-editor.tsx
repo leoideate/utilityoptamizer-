@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, MousePointerClick, Plus, Save, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, MousePointerClick, Plus, Save, Trash2, Wand2 } from "lucide-react";
 import type { PageViewport } from "pdfjs-dist";
 import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useState } from "react";
 import {
@@ -20,6 +20,7 @@ import { useSuppliers } from "@/components/domain";
 import { Badge, Button, Card, CardHeader, Checkbox, Field, Input, IssueList, Select, Skeleton } from "@/components/ui/primitives";
 import { type ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/format";
+import { isGenericLabel, labelsFromPdf } from "./auto-label";
 import { PdfPage, toPdf, toScreen, usePdf } from "./pdf-page";
 
 export interface TemplateFull {
@@ -78,6 +79,23 @@ export function TemplateEditor({ id }: { id: string }) {
   const current = fields.find((f) => f.id === selected) ?? null;
   const pageCount = tpl.data?.pages.length ?? 1;
   const unmapped = fields.filter((f) => (f.kind === "text" || f.kind === "check") && !f.source).length;
+  const generic = fields.filter((f) => isGenericLabel(f.label)).length;
+  const [naming, setNaming] = useState<string | null>(null);
+  const nameFromPdf = async (all = false) => {
+    if (!pdf.data) return;
+    const labels = await labelsFromPdf(pdf.data, fields, { all });
+    setFields((fs) => fs.map((f) => (labels.has(f.id) ? { ...f, label: labels.get(f.id)! } : f)));
+    if (labels.size) setDirty(true);
+    const named = fields.filter((f) => (all || isGenericLabel(f.label)) && labels.has(f.id) && !isGenericLabel(labels.get(f.id)!)).length;
+    const of = all ? fields.length : generic;
+    setNaming(
+      named
+        ? `Named ${named} of ${of} field${of === 1 ? "" : "s"} from the wording beside them. Check them, then save.`
+        : all && !labels.size
+          ? "The names already match the wording on the PDF."
+          : "No wording was found beside these fields; name them by hand.",
+    );
+  };
 
   if (tpl.isLoading) return <Skeleton className="h-96" />;
   if (!tpl.data) return <p className="text-sm text-muted">Template not found.</p>;
@@ -128,6 +146,16 @@ export function TemplateEditor({ id }: { id: string }) {
             </Button>
           </div>
         </div>
+        {(generic > 0 || naming) && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-warning-soft p-3 text-sm" role="status">
+            <span>{naming ?? `${generic} field${generic === 1 ? " has a name" : "s have names"} like “Text37” from the PDF. Use the wording printed beside each box instead, so people know what to fill in.`}</span>
+            {generic > 0 && (
+              <Button size="sm" variant="secondary" disabled={!pdf.data} onClick={() => nameFromPdf()}>
+                <Wand2 /> Name fields from the PDF
+              </Button>
+            )}
+          </div>
+        )}
         {adding && (
           <p className="flex items-center gap-2 rounded-lg bg-info-soft p-2 text-sm text-info">
             <MousePointerClick className="size-4" aria-hidden /> Click on the page where the {FORM_FIELD_KIND_LABELS[adding].toLowerCase()} should start.
@@ -193,6 +221,9 @@ export function TemplateEditor({ id }: { id: string }) {
               )}
             </Field>
             <Checkbox label="In use (shown when filling forms)" checked={meta.active} onChange={(e) => (setMeta({ ...meta, active: e.target.checked }), setDirty(true))} />
+            <Button size="sm" variant="ghost" disabled={!pdf.data} onClick={() => nameFromPdf(true)} title="Replaces every field name with the wording printed beside its box. Nothing changes until you save.">
+              <Wand2 /> Rename all fields from the PDF
+            </Button>
             {unmapped > 0 && <p className="text-xs text-muted">{unmapped} field{unmapped === 1 ? " is" : "s are"} not linked to CRM data; they&apos;re typed when the form is filled.</p>}
           </div>
         </Card>
