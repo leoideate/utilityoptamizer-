@@ -185,6 +185,30 @@ export class RingCentralTelephony implements TelephonyProvider {
     return { body: Buffer.from(await res.arrayBuffer()), contentType: res.headers.get("content-type")?.split(";")[0] ?? "audio/mpeg" };
   }
 
+  /** Webhook subscription to account telephony sessions (needs "Webhook Subscriptions" and an admin JWT user). */
+  async subscription(id: string) {
+    const { status, body } = await this.call<{ id: string; status: string; expirationTime: string }>("GET", `/restapi/v1.0/subscription/${encodeURIComponent(id)}`);
+    if (status === 404) return null;
+    if (status >= 300 || !body) throw new Error(`RingCentral subscription check failed (HTTP ${status})`);
+    return { id: body.id, status: body.status, expiresAt: new Date(body.expirationTime) };
+  }
+
+  async subscribe(address: string, verificationToken: string) {
+    const { status, body } = await this.call<{ id: string; expirationTime: string; message?: string }>("POST", "/restapi/v1.0/subscription", {
+      eventFilters: ["/restapi/v1.0/account/~/telephony/sessions"],
+      deliveryMode: { transportType: "WebHook", address, verificationToken },
+      expiresIn: 604_800,
+    });
+    if (status >= 300 || !body?.id) throw new Error(`RingCentral subscription failed (HTTP ${status}${body?.message ? `: ${body.message}` : ""})`);
+    return { id: body.id, expiresAt: new Date(body.expirationTime) };
+  }
+
+  async renewSubscription(id: string) {
+    const { status, body } = await this.call<{ id: string; expirationTime: string }>("POST", `/restapi/v1.0/subscription/${encodeURIComponent(id)}/renew`);
+    if (status >= 300 || !body?.id) throw new Error(`RingCentral subscription renewal failed (HTTP ${status})`);
+    return { id: body.id, expiresAt: new Date(body.expirationTime) };
+  }
+
   /** Every call on the account in the window, from the company call log (needs "Read Call Log"). */
   async callLog(from: Date, to: Date) {
     const out: CallLogRecord[] = [];
@@ -285,3 +309,14 @@ export function toCallLogRecord(r: RcCallLogRecord): CallLogRecord {
     recording: r.recording ? { id: String(r.recording.id), contentUri: r.recording.contentUri } : null,
   };
 }
+
+// --- Live call events -----------------------------------------------------------------------
+
+/** A phone system that can push live call events to the CRM (RingCentral webhook subscriptions). */
+export interface TelephonyEventSource {
+  subscription(id: string): Promise<{ id: string; status: string; expiresAt: Date } | null>;
+  subscribe(address: string, verificationToken: string): Promise<{ id: string; expiresAt: Date }>;
+  renewSubscription(id: string): Promise<{ id: string; expiresAt: Date }>;
+}
+
+export const isEventSource = (p: TelephonyProvider): p is TelephonyProvider & TelephonyEventSource => typeof (p as Partial<TelephonyEventSource>).subscribe === "function";

@@ -115,6 +115,13 @@ const envSchema = z
      * permission). Only turn on once callers hear a recording notice: recording needs consent.
      */
     RINGCENTRAL_RECORDINGS: bool,
+    /**
+     * Incoming-call pop-ups: RingCentral pushes call events to {WEB_ORIGIN}/api/webhooks/ringcentral
+     * (must be public HTTPS) and includes this token, which the CRM checks. 16–64 random characters.
+     */
+    RINGCENTRAL_WEBHOOK_TOKEN: z.string().min(16).max(64).optional(),
+    /** Only if RingCentral must reach the API at a different public address than WEB_ORIGIN. */
+    RINGCENTRAL_WEBHOOK_URL: z.string().url().optional(),
 
     /** HMAC secret for POST /api/public/leads (website and API lead intake). Endpoint is disabled when unset. */
     LEAD_WEBHOOK_SECRET: z.string().min(16).optional(),

@@ -5,6 +5,7 @@ import { ENV, type Env } from "../config/env";
 import { RetentionService } from "../admin/retention.service";
 import { AutomationsService } from "../automations/automations.service";
 import { CallsService } from "../calls/calls.service";
+import { RingCentralEventsService } from "../calls/ringcentral-events";
 import { ChatService } from "../chat/chat.service";
 import { DocumentsService } from "../documents/documents.service";
 import { IntegrationsService } from "../integrations/integrations.service";
@@ -27,6 +28,11 @@ export async function registerSchedules(env: Env) {
   await q.upsertJobScheduler("mailbox-sync", { pattern: "*/2 * * * *", tz: TZ }, { name: "mail-sync", data: {} });
   // Calls from the RingCentral call log (inbound, missed, desk phones and the app) every five minutes.
   if (env.TELEPHONY_PROVIDER === "ringcentral") await q.upsertJobScheduler("call-log-sync", { pattern: "*/5 * * * *", tz: TZ }, { name: "call-log", data: {} });
+  // Incoming-call pop-ups: keep the RingCentral webhook subscription alive (and set it up now, on start).
+  if (env.TELEPHONY_PROVIDER === "ringcentral" && env.RINGCENTRAL_WEBHOOK_TOKEN) {
+    await q.upsertJobScheduler("ringcentral-subscription", { pattern: "17 */6 * * *", tz: TZ }, { name: "rc-subscription", data: {} });
+    await q.add("rc-subscription", {}, { jobId: `rc-subscription-start-${Date.now()}`, removeOnComplete: true });
+  }
   await q.close();
 }
 
@@ -42,6 +48,7 @@ export async function startWorkers(app: INestApplicationContext): Promise<() => 
   const calls = app.get(CallsService);
   const chat = app.get(ChatService);
   const mailboxes = app.get(MailboxesService);
+  const rcEvents = app.get(RingCentralEventsService);
 
   await registerSchedules(env);
 
@@ -62,6 +69,8 @@ export async function startWorkers(app: INestApplicationContext): Promise<() => 
             return mailboxes.enqueueSyncAll();
           case "call-log":
             return calls.syncCallLog();
+          case "rc-subscription":
+            return rcEvents.ensureSubscription();
           default:
             throw new Error(`Unknown automation job ${job.name}`);
         }
