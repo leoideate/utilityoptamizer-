@@ -1,3 +1,4 @@
+import request from "supertest";
 import { MockRingCentral } from "../support/mock-ringcentral";
 
 jest.setTimeout(60_000);
@@ -24,6 +25,8 @@ beforeAll(async () => {
     RINGCENTRAL_JWT: rc.jwt,
     RINGCENTRAL_CALLER_ID: "+35315550000",
     RINGCENTRAL_RECORDINGS: "true",
+    RINGCENTRAL_WEBHOOK_TOKEN: "rc-webhook-token-0123456789",
+    RINGCENTRAL_WEBHOOK_URL: "https://crm.example.ie/api/webhooks/ringcentral",
   });
   support = require("../support/app") as AppSupport;
   fx = require("../support/fixtures") as Fixtures;
@@ -258,5 +261,71 @@ describe("call recordings", () => {
     const provider = new RingCentralTelephony({ serverUrl: rc.url, clientId: rc.clientId, clientSecret: rc.clientSecret, jwt: rc.jwt, playPrompt: false });
     await expect(provider.recording("https://evilringcentral.com/x")).rejects.toThrow(/Refusing/);
     await expect(provider.recording("http://media.ringcentral.com/x")).rejects.toThrow(/Refusing/);
+  });
+});
+
+describe("incoming-call pop-ups", () => {
+  const TOKEN = "rc-webhook-token-0123456789";
+  type Events = import("../../src/calls/ringcentral-events").RingCentralEventsService;
+  let events: Events;
+  let bus: import("../../src/realtime/realtime").LocalRealtimeBus;
+  const post = (body: object, headers: Record<string, string> = { "Verification-Token": TOKEN }) => {
+    let r = request(t.app.getHttpServer()).post("/api/webhooks/ringcentral");
+    for (const [k, v] of Object.entries(headers)) r = r.set(k, v);
+    return r.send(body);
+  };
+  const ringing = (uuid: string, sessionId: string, code = "Proceeding", from = "+353879551234") => ({
+    uuid,
+    event: "/restapi/v1.0/account/1/telephony/sessions",
+    body: { telephonySessionId: sessionId, sequence: 1, parties: [{ extensionId: "101", direction: "Inbound", status: { code }, from: { phoneNumber: from } }] },
+  });
+
+  beforeAll(async () => {
+    const mod = require("../../src/calls/ringcentral-events") as typeof import("../../src/calls/ringcentral-events");
+    const { REALTIME_BUS } = require("../../src/realtime/realtime") as typeof import("../../src/realtime/realtime");
+    events = t.app.get(mod.RingCentralEventsService);
+    bus = t.app.get(REALTIME_BUS);
+    await t.prisma.user.update({ where: { id: sales.user.id }, data: { ringcentralExtensionId: "101" } });
+  });
+
+  it("creates the webhook subscription once, keeps it, and renews it before it lapses", async () => {
+    expect(await events.ensureSubscription()).toMatchObject({ action: "created" });
+    const [id, sub] = [...rc.subscriptions.entries()][0];
+    expect(sub).toMatchObject({ address: "https://crm.example.ie/api/webhooks/ringcentral", verificationToken: TOKEN, eventFilters: ["/restapi/v1.0/account/~/telephony/sessions"] });
+    expect(await events.ensureSubscription()).toEqual({ id, action: "kept" });
+    sub.expirationTime = new Date(Date.now() + 86_400_000);
+    expect(await events.ensureSubscription()).toEqual({ id, action: "renewed" });
+    expect(sub.renewals).toBe(1);
+    expect(rc.subscriptions.size).toBe(1);
+  });
+
+  it("answers RingCentral's validation handshake and refuses events without the right token", async () => {
+    const hello = await post({}, { "Validation-Token": "abc-123" });
+    expect(hello.status).toBe(200);
+    expect(hello.headers["validation-token"]).toBe("abc-123");
+    expect((await post(ringing("u-0", "s-0"), {})).status).toBe(403);
+    expect((await post(ringing("u-0", "s-0"), { "Verification-Token": "wrong-token-wrong-token" })).status).toBe(403);
+    expect(bus.published.some((e) => e.event.type === "call.incoming")).toBe(false);
+  });
+
+  it("tells the person whose extension is ringing, once per event, and again when it's answered", async () => {
+    support.expectStatus(await post(ringing("u-1", "s-1")), 200);
+    support.expectStatus(await post(ringing("u-1", "s-1")), 200); // redelivered
+    const sent = bus.published.filter((e) => e.event.type === "call.incoming");
+    expect(sent).toEqual([{ userIds: [sales.user.id], event: { type: "call.incoming", data: { sessionId: "s-1", state: "ringing", from: "+353879551234" } } }]);
+    support.expectStatus(await post(ringing("u-2", "s-1", "Answered")), 200);
+    expect(bus.published.filter((e) => e.event.type === "call.incoming").at(-1)!.event.data).toMatchObject({ sessionId: "s-1", state: "answered" });
+    // Outbound legs and unknown extensions don't notify anyone.
+    support.expectStatus(await post({ uuid: "u-3", body: { telephonySessionId: "s-3", parties: [{ extensionId: "999", direction: "Inbound", status: { code: "Proceeding" } }, { extensionId: "101", direction: "Outbound", status: { code: "Proceeding" } }] } }), 200);
+    expect(bus.published.filter((e) => e.event.type === "call.incoming")).toHaveLength(2);
+  });
+
+  it("looks the caller up within what the person may see", async () => {
+    const oppId = await fx.createOpportunity(sales.client, "gas", { phone: "087 977 4455", companyName: "Popup Pub Ltd" });
+    support.expectStatus(await sales.client.post(`/opportunities/${oppId}/customer/create`), 201);
+    const mine = support.expectStatus(await sales.client.get("/telephony/caller?number=%2B353879774455"), 200).body;
+    expect(mine).toMatchObject({ number: "+353879774455", customers: [{ name: "Popup Pub Ltd" }], deals: [{ id: oppId, stage: expect.any(String) }] });
+    const theirs = support.expectStatus(await other.client.get("/telephony/caller?number=087%20977%204455"), 200).body;
+    expect(theirs).toEqual({ number: "+353879774455", customers: [], deals: [] });
   });
 });

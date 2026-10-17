@@ -8,6 +8,7 @@ import type { Actor } from "../common/actor";
 import { CurrentUser } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
 import { CallsService } from "./calls.service";
+import { RingCentralEventsController, RingCentralEventsService } from "./ringcentral-events";
 import { ManualTelephony, RingCentralTelephony, TELEPHONY_PROVIDER } from "./telephony";
 
 const Id = new ParseUUIDPipe({ version: "4" });
@@ -67,9 +68,10 @@ export class CallsController {
 }
 
 @Module({
-  controllers: [CallsController],
+  controllers: [CallsController, RingCentralEventsController],
   providers: [
     CallsService,
+    RingCentralEventsService,
     {
       provide: TELEPHONY_PROVIDER,
       inject: [ENV],
@@ -86,6 +88,6 @@ export class CallsController {
           : new ManualTelephony(),
     },
   ],
-  exports: [CallsService],
+  exports: [CallsService, RingCentralEventsService],
 })
 export class CallsModule {}
