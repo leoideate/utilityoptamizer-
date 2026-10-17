@@ -29,6 +29,8 @@ How it works and what's checked: authorization code flow with PKCE (S256), a ran
 
 Two-factor: a user who has CRM two-factor turned on is asked for their authenticator code after SSO, unless Microsoft reports that MFA was performed during sign-in (`amr` contains `mfa`). If your Entra conditional access already enforces MFA, staff won't be asked twice. Google doesn't report this, so Google users with CRM two-factor always enter their code.
 
+SSO-only accounts: once someone signs in with SSO, untick **Allow password sign-in** on their user (**Users & roles** → Edit). Their CRM password then stops working (sign-in attempts get the usual "incorrect" message and are audit-logged as `auth.password_login_refused`), they can't change it, and any open sessions end so they sign back in with SSO. Leaving a company account in Entra ID or Google then removes their CRM access too. The CRM won't turn it off for your own account, when no SSO provider is configured, or when the user's email domain isn't in `SSO_ALLOWED_DOMAINS`, so nobody is left without a way in. Tick the box again to restore password sign-in (reset their password if they don't know it).
+
 ## Calling customers with RingCentral
 
 The **Call** button on an opportunity uses RingCentral **RingOut**. RingCentral rings the salesperson's own phone first (desk phone, the RingCentral app or a mobile), and when they answer it dials the customer, showing your company number. No softphone or browser plug-in is needed.

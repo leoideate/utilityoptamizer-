@@ -67,6 +67,7 @@ interface AdminUser {
   email: string;
   active: boolean;
   mfaEnabled: boolean;
+  passwordLoginEnabled: boolean;
   lastLoginAt: string | null;
   lockedUntil: string | null;
   roles: { role: Role }[];
@@ -113,7 +114,10 @@ function UsersAdmin() {
                     ))}
                   </div>
                 </td>
-                <td className="px-3 py-2">{u.mfaEnabled ? <Badge tone="success">On</Badge> : <Badge>Off</Badge>}</td>
+                <td className="px-3 py-2">
+                  {u.mfaEnabled ? <Badge tone="success">On</Badge> : <Badge>Off</Badge>}
+                  {!u.passwordLoginEnabled && <Badge className="ml-2">SSO only</Badge>}
+                </td>
                 <td className="px-3 py-2">
                   {u.lastLoginAt ? relative(u.lastLoginAt) : "Never"}
                   {u.lockedUntil && new Date(u.lockedUntil) > new Date() && <Badge tone="danger" className="ml-2">Locked</Badge>}
@@ -134,12 +138,21 @@ function UsersAdmin() {
 }
 
 function UserDialog({ user, onClose }: { user?: AdminUser; onClose: () => void }) {
-  const [v, setV] = useState({ name: user?.name ?? "", email: user?.email ?? "", password: "", roles: user?.roles.map((r) => r.role) ?? (["salesperson"] as Role[]), active: user?.active ?? true });
+  const [v, setV] = useState({
+    name: user?.name ?? "",
+    email: user?.email ?? "",
+    password: "",
+    roles: user?.roles.map((r) => r.role) ?? (["salesperson"] as Role[]),
+    active: user?.active ?? true,
+    passwordLogin: user?.passwordLoginEnabled ?? true,
+  });
   const { run, running, issues } = useAction(onClose);
   const save = () =>
     run(async () => {
       if (!user) return api.post("/admin/users", { name: v.name, email: v.email, password: v.password, roles: v.roles });
-      await api.patch(`/admin/users/${user.id}`, { name: v.name, roles: v.roles, active: v.active });
+      // Only send passwordLogin when it changes: turning it off signs the user out.
+      const passwordLogin = v.passwordLogin !== user.passwordLoginEnabled ? { passwordLogin: v.passwordLogin } : {};
+      await api.patch(`/admin/users/${user.id}`, { name: v.name, roles: v.roles, active: v.active, ...passwordLogin });
       if (v.password) await api.post(`/admin/users/${user.id}/password`, { password: v.password });
     });
   return (
@@ -175,6 +188,12 @@ function UserDialog({ user, onClose }: { user?: AdminUser; onClose: () => void }
           </div>
         </fieldset>
         {user && <Checkbox label="Active (can sign in)" checked={v.active} onChange={(e) => setV({ ...v, active: e.target.checked })} />}
+        {user && (
+          <div>
+            <Checkbox label="Allow password sign-in" checked={v.passwordLogin} onChange={(e) => setV({ ...v, passwordLogin: e.target.checked })} />
+            <p className="mt-1 text-xs text-muted">Turn off to make this user sign in with single sign-on only. They're signed out and must use Microsoft or Google next time.</p>
+          </div>
+        )}
         <IssueList issues={issues} title="Please check:" />
       </div>
     </Dialog>

@@ -52,6 +52,13 @@ export class AuthService {
       throw new Forbidden(BAD_LOGIN);
     }
 
+    if (!user.passwordLoginEnabled) {
+      // Same work and message as a wrong password, and no lockout count: the password isn't checked at all.
+      await verifyPassword(input.password, await DUMMY_HASH_PROMISE);
+      await this.audit.log(actor, { action: "auth.password_login_refused", entityType: "user", entityId: user.id, summary: "Password sign-in attempted; this account uses single sign-on only" });
+      throw new Forbidden(BAD_LOGIN);
+    }
+
     const ok = await verifyPassword(input.password, user.passwordHash);
     if (!ok) {
       const failed = user.failedLogins + 1;
@@ -91,6 +98,7 @@ export class AuthService {
   /** Self-service password change: the current password is required, and other sessions end. */
   async changePassword(actor: Actor, sessionId: string, current: string, next: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: actor.id } });
+    if (!user.passwordLoginEnabled) throw new RuleViolation(["Your account signs in with single sign-on only, so it has no CRM password to change."]);
     if (!(await verifyPassword(current, user.passwordHash))) {
       await this.audit.log(actor, { action: "auth.password_change_failed", entityType: "user", entityId: actor.id, summary: "Wrong current password when changing password" });
       throw new Forbidden("Your current password is incorrect.");

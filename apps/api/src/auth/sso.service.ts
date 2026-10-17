@@ -154,6 +154,15 @@ export class SsoService {
       .filter(Boolean);
   }
 
+  /** Why this email couldn't sign in with SSO right now, or null if it could (a provider is set up and the domain is allowed). */
+  unavailableFor(email: string): string | null {
+    if (this.providers().length === 0) return "Single sign-on isn't set up.";
+    const domains = this.allowedDomains();
+    const domain = email.split("@")[1]?.toLowerCase() ?? "";
+    if (domains.length && !domains.includes(domain)) return `Single sign-on isn't allowed for ${domain} addresses.`;
+    return null;
+  }
+
   redirectUri(id: SsoProviderId) {
     return `${this.env.WEB_ORIGIN}/api/auth/sso/${id}/callback`;
   }

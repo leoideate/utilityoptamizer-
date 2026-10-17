@@ -5,6 +5,7 @@ import { z } from "zod";
 import { AuditService } from "../audit/audit.service";
 import { AuthService } from "../auth/auth.service";
 import { hashPassword } from "../auth/passwords";
+import { SsoService } from "../auth/sso.service";
 import type { Actor } from "../common/actor";
 import { Forbidden, NotFound, RuleViolation } from "../common/errors";
 import { PrismaService } from "../common/prisma.service";
@@ -40,6 +41,7 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly auth: AuthService,
+    private readonly sso: SsoService,
   ) {}
 
   private need(actor: Actor, cap: Parameters<typeof can>[1]) {
@@ -52,7 +54,7 @@ export class AdminService {
     if (!can(actor, "admin.users") && !can(actor, "opportunity.assign")) throw new Forbidden();
     return this.prisma.user.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true, email: true, active: true, mfaEnabled: true, lastLoginAt: true, teamId: true, roles: { select: { role: true } }, lockedUntil: true },
+      select: { id: true, name: true, email: true, active: true, mfaEnabled: true, passwordLoginEnabled: true, lastLoginAt: true, teamId: true, roles: { select: { role: true } }, lockedUntil: true },
     });
   }
 
@@ -71,12 +73,20 @@ export class AdminService {
     return { id: user.id };
   }
 
-  async updateUser(actor: Actor, id: string, input: { name?: string; roles?: Role[]; active?: boolean; teamId?: string | null }) {
+  async updateUser(actor: Actor, id: string, input: { name?: string; roles?: Role[]; active?: boolean; teamId?: string | null; passwordLogin?: boolean }) {
     this.need(actor, "admin.users");
     if (id === actor.id && input.active === false) throw new RuleViolation(["You can't deactivate your own account."]);
     if (id === actor.id && input.roles && !input.roles.includes("administrator")) throw new RuleViolation(["You can't remove your own Administrator role."]);
+    if (input.passwordLogin === false) {
+      // Never leave someone with no way in: SSO must work for them first, and admins keep their own fallback.
+      if (id === actor.id) throw new RuleViolation(["You can't turn off password sign-in for your own account."]);
+      const target = await this.prisma.user.findUnique({ where: { id }, select: { email: true } });
+      if (!target) throw new NotFound("User not found.");
+      const reason = this.sso.unavailableFor(target.email);
+      if (reason) throw new RuleViolation([`${reason} Turn password sign-in off once this user can sign in with single sign-on.`]);
+    }
     await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({ where: { id }, data: { name: input.name, active: input.active, teamId: input.teamId } });
+      await tx.user.update({ where: { id }, data: { name: input.name, active: input.active, teamId: input.teamId, passwordLoginEnabled: input.passwordLogin } });
       if (input.roles) {
         await tx.userRole.deleteMany({ where: { userId: id } });
         await tx.userRole.createMany({ data: input.roles.map((role) => ({ userId: id, role })) });
@@ -84,7 +94,8 @@ export class AdminService {
       // Deactivating a user never touches their opportunities: ownership stays for history.
       await this.audit.log(actor, { action: "user.update", entityType: "user", entityId: id, summary: `Updated user: ${Object.keys(input).join(", ")}`, data: input }, tx);
     });
-    if (input.roles || input.active === false) await this.auth.revokeAll(id);
+    // Ending sessions on SSO-only means any password session stops now; the user signs back in with SSO.
+    if (input.roles || input.active === false || input.passwordLogin === false) await this.auth.revokeAll(id);
   }
 
   async resetPassword(actor: Actor, id: string, password: string) {

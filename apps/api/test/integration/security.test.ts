@@ -161,3 +161,15 @@ describe("audit trail (scenario 20)", () => {
     expect(text).not.toMatch(/Integration-Test-Pass|1980-05-17|IE29AIBK/);
   });
 });
+
+describe("single sign-on only accounts without SSO set up", () => {
+  it("refuses to turn off password sign-in, so nobody is locked out", async () => {
+    const admin = (await userAndClient(t, ["administrator"])).client;
+    const user = await createUser(t, ["salesperson"]);
+    const res = await admin.patch(`/admin/users/${user.id}`, { passwordLogin: false });
+    expect(res.status).toBe(422);
+    expect(res.body.issues[0]).toMatch(/^Single sign-on isn't set up\./);
+    expect((await t.prisma.user.findUniqueOrThrow({ where: { id: user.id } })).passwordLoginEnabled).toBe(true);
+    await login(t, user.email);
+  });
+});
