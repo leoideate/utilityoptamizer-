@@ -37,7 +37,7 @@ Security tests: `test/integration/pentest.test.ts` attacks every route from the 
 
 API integration tests boot the real `AppModule` against `TEST_DATABASE_URL` (the `uo_crm_test` database is created by `infra/postgres/init`). They truncate all tables per file, use local-disk storage and a `RecordingJobQueue` instead of Redis, and run with `--runInBand`. Set `TEST_LOG_ERRORS=1` to see server errors behind a 500. Local SeaweedFS needs `S3_SERVER_SIDE_ENCRYPTION=none` (it returns SSE objects still encrypted). Config comes from `apps/api/.env` (Node's built-in `.env` loading, no dotenv); blank values count as unset.
 
-Schema changes: edit `apps/api/prisma/schema.prisma` and add a migration folder under `prisma/migrations/` (`npx prisma migrate dev` needs a running DB; `prisma migrate diff --from-... --script` works offline). Constraints Prisma can't express live in `20261014000100_integrity/migration.sql`. Then regenerate the docs with `node scripts/gen-field-dictionary.js` (and `node scripts/gen-security-matrix.js` after permission changes).
+Schema changes: edit `apps/api/prisma/schema.prisma` and add a migration folder under `prisma/migrations/` (`npx prisma migrate dev` needs a running DB; offline, diff the committed schema against the edited one with `prisma migrate diff --from-schema-datamodel <HEAD copy> --to-schema-datamodel prisma/schema.prisma --script`; `--from-migrations` needs a shadow database). Constraints Prisma can't express live in `20261014000100_integrity/migration.sql`. Then regenerate the docs with `node scripts/gen-field-dictionary.js` (and `node scripts/gen-security-matrix.js` after permission changes).
 
 ## Architecture rules that span files
 

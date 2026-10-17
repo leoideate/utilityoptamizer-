@@ -14,7 +14,10 @@ Schema change: $ARGUMENTS
    - Restricted values (DOB, nationality, address, IBAN, compliance notes) get a column ending in `Enc` and go through `CryptoService`. If rules need to know a value exists, add a plain presence flag (like `hasDob`) so they don't decrypt.
 2. **Add a migration folder** under `apps/api/prisma/migrations/`, named `YYYYMMDDHHMMSS_short_name` and later than the newest one there.
    - With the DB running (`docker compose up -d`, Postgres on 127.0.0.1:5433): `cd apps/api && npx prisma migrate dev --name short_name`.
-   - Offline: `npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --script` and save the result as `migration.sql` in the new folder.
+   - Offline, diff the committed schema against your edited one (`--from-migrations` needs a shadow database, so it doesn't work offline):
+     `git show HEAD:apps/api/prisma/schema.prisma > /tmp/schema.before.prisma`, then
+     `npx prisma migrate diff --from-schema-datamodel /tmp/schema.before.prisma --to-schema-datamodel prisma/schema.prisma --script`, and save the result as `migration.sql` in the new folder.
+     This only works if the committed schema matches the existing migrations.
 3. **Constraints Prisma can't express** (CHECKs, partial unique indexes, triggers) go in their own SQL in the new migration; follow the patterns in `20261014000100_integrity/migration.sql`.
    - History stays append-only: new evidence or history tables need the same no-UPDATE/no-DELETE triggers as `audit_logs`, `timeline_entries`, `form_signatures`, `bill_checks` and the workflow evidence tables.
    - Idempotent automations rely on unique keys (`automationKey` partial index, `renewal_source_key`, `integration_jobs.idempotency_key`, webhook `(provider, event_id)`); keep or extend those.
