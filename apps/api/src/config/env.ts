@@ -110,6 +110,11 @@ const envSchema = z
     RINGCENTRAL_CALLER_ID: z.string().optional(),
     /** Ask the salesperson to press 1 before the customer is dialled (avoids calls connecting to voicemail). */
     RINGCENTRAL_PLAY_PROMPT: bool,
+    /**
+     * Import call recordings from the RingCentral call log (needs the "Read Call Recording" app
+     * permission). Only turn on once callers hear a recording notice: recording needs consent.
+     */
+    RINGCENTRAL_RECORDINGS: bool,
 
     /** HMAC secret for POST /api/public/leads (website and API lead intake). Endpoint is disabled when unset. */
     LEAD_WEBHOOK_SECRET: z.string().min(16).optional(),

@@ -22,6 +22,12 @@ export class MockRingCentral {
   /** The account call log, newest last. */
   readonly callLog: Record<string, unknown>[] = [];
   callLogRequests: URLSearchParams[] = [];
+  recordingDownloads = 0;
+
+  /** A recording reference for logCall, served by this mock. */
+  recording(id: string) {
+    return { id, contentUri: `${this.url}/restapi/v1.0/account/~/recording/${id}/content` };
+  }
   private nextRecord = 5000;
 
   /** Adds a finished call to the account call log; returns its record id. */
@@ -65,6 +71,12 @@ export class MockRingCentral {
           return json(200, { access_token: "rc-access", expires_in: 3600 });
         }
         if (req.headers.authorization !== "Bearer rc-access") return json(401, { message: "Unauthorized" });
+        const rec = url.match(/^\/restapi\/v1\.0\/account\/~\/recording\/([^/]+)\/content$/);
+        if (rec && req.method === "GET") {
+          this.recordingDownloads++;
+          res.writeHead(200, { "Content-Type": "audio/mpeg" });
+          return res.end(Buffer.from(`ID3 fake mp3 for ${rec[1]}`));
+        }
         if (url.startsWith("/restapi/v1.0/account/~/extension?") && req.method === "GET") {
           return json(200, { records: this.extensions.map((e) => ({ id: e.id, contact: { email: e.email } })), navigation: {} });
         }

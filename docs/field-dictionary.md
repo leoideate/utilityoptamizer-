@@ -884,6 +884,12 @@ Append-only (trigger). Never contains restricted values.
 | provider_call_id | String |  | Unique |
 | rc_record_id | String |  | RingCentral call-log record id: calls imported from the call log (and click-to-calls matched to theirs) are stored once. Unique |
 | rc_session_id | String |  |  |
+| rc_recording_id | String |  | Recording (RINGCENTRAL_RECORDINGS=true): downloaded into our storage, virus-scanned, deleted after the retention period |
+| recording_key | String |  |  |
+| recording_mime | String |  |  |
+| recording_size | Int |  |  |
+| recording_scan | Enum: pending, clean, infected, error, skipped |  |  |
+| recording_deleted_at | DateTime |  |  |
 | status | Enum: initiated, ringing_agent, ringing_customer, in_progress, completed, no_answer, busy, failed, canceled | ✓ | Default initiated |
 | started_at | DateTime | ✓ | Default now() |
 | answered_at | DateTime |  |  |

@@ -130,7 +130,14 @@ export class OpportunitiesController {
     await this.access.readable(a, id);
     const entries = await this.prisma.timelineEntry.findMany({ where: { opportunityId: id }, orderBy: { occurredAt: "desc" }, take: 500 });
     const users = await this.prisma.user.findMany({ where: { id: { in: entries.map((e) => e.actorId).filter((x): x is string => !!x) } }, select: { id: true, name: true } });
-    return entries.map((e) => ({ ...e, actorName: users.find((u) => u.id === e.actorId)?.name ?? (e.actorId ? "Unknown user" : "System") }));
+    // Calls with a playable recording (the timeline entry itself never changes).
+    const callIds = entries.map((e) => (e.data as { callId?: string } | null)?.callId).filter((x): x is string => !!x);
+    const recorded = new Set(callIds.length ? (await this.prisma.callLog.findMany({ where: { id: { in: callIds }, recordingKey: { not: null } }, select: { id: true } })).map((c) => c.id) : []);
+    return entries.map((e) => ({
+      ...e,
+      actorName: users.find((u) => u.id === e.actorId)?.name ?? (e.actorId ? "Unknown user" : "System"),
+      ...(recorded.has((e.data as { callId?: string } | null)?.callId ?? "") ? { recording: true } : {}),
+    }));
   }
 
   /** Log a call, note, email or WhatsApp message. Entries can't be edited; corrections are new entries. */

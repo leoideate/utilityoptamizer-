@@ -1502,6 +1502,13 @@ model CallLog {
   /// RingCentral call-log record id: calls imported from the call log (and click-to-calls matched to theirs) are stored once.
   rcRecordId     String?    @unique @map("rc_record_id")
   rcSessionId    String?    @map("rc_session_id")
+  /// Recording (RINGCENTRAL_RECORDINGS=true): downloaded into our storage, virus-scanned, deleted after the retention period.
+  rcRecordingId  String?    @map("rc_recording_id")
+  recordingKey   String?    @map("recording_key")
+  recordingMime  String?    @map("recording_mime")
+  recordingSize  Int?       @map("recording_size")
+  recordingScan  ScanStatus? @map("recording_scan")
+  recordingDeletedAt DateTime? @map("recording_deleted_at")
   status         CallStatus @default(initiated)
   startedAt      DateTime   @default(now()) @map("started_at")
   answeredAt     DateTime?  @map("answered_at")

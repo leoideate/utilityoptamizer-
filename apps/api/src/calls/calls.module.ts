@@ -54,6 +54,12 @@ export class CallsController {
     return this.calls.cancel(a, id);
   }
 
+  /** A short-lived link to play the call's recording (audited as sensitive access). */
+  @Get("calls/:id/recording")
+  recording(@CurrentUser() a: Actor, @Param("id", Id) id: string) {
+    return this.calls.recordingUrl(a, id);
+  }
+
   @Post("calls/:id/outcome")
   outcome(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(callOutcomeSchema)) body: z.infer<typeof callOutcomeSchema>) {
     return this.calls.recordOutcome(a, id, body);

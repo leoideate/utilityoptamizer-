@@ -4,6 +4,7 @@ import { can, toE164, today } from "@uo/shared";
 import type { callOutcomeSchema, startCallSchema } from "@uo/shared";
 import type { z } from "zod";
 import { ActivitiesService } from "../activities/activities.service";
+import { ENV, type Env } from "../config/env";
 import { AuditService } from "../audit/audit.service";
 import { type Actor, SYSTEM } from "../common/actor";
 import { OPEN_DEAL, pickDeal } from "../common/linking";
@@ -14,6 +15,8 @@ import { phoneKey } from "../common/values";
 import { JOB_QUEUE, type JobQueue, QUEUES } from "../jobs/queue";
 import { OpportunityAccess } from "../opportunities/access.service";
 import { RealtimeService } from "../realtime/realtime";
+import { OBJECT_STORAGE, type ObjectStorage } from "../storage/storage";
+import { VIRUS_SCANNER, type VirusScanner } from "../storage/virus-scan";
 import { type CallLogRecord, FINAL_STATUSES, TELEPHONY_PROVIDER, type TelephonyProvider, isCallLogSource } from "./telephony";
 
 export const POLL_INTERVAL_MS = 4_000;
@@ -67,6 +70,9 @@ export class CallsService {
     private readonly realtime: RealtimeService,
     @Inject(TELEPHONY_PROVIDER) private readonly provider: TelephonyProvider,
     @Inject(JOB_QUEUE) private readonly queue: JobQueue,
+    @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
+    @Inject(VIRUS_SCANNER) private readonly scanner: VirusScanner,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   info(actorPhone: string | null) {
@@ -373,7 +379,8 @@ export class CallsService {
         .filter((c) => phoneKey(c.toNumber) === key)
         .sort((a, b) => Math.abs(a.startedAt.getTime() - r.startedAt.getTime()) - Math.abs(b.startedAt.getTime() - r.startedAt.getTime()))[0];
       if (same) {
-        await this.prisma.callLog.update({ where: { id: same.id }, data: { rcRecordId: r.id, rcSessionId: r.sessionId, ...(r.durationSec ? { durationSec: r.durationSec } : {}) } });
+        await this.prisma.callLog.update({ where: { id: same.id }, data: { rcRecordId: r.id, rcSessionId: r.sessionId, ...(r.durationSec ? { durationSec: r.durationSec } : {}), ...this.recordingFields(r) } });
+        await this.queueRecording(same.id, r);
         return "matched";
       }
     }
@@ -397,6 +404,7 @@ export class CallsService {
           endedAt,
           durationSec: r.durationSec || null,
           outcome: r.outcome,
+          ...this.recordingFields(r),
         },
       });
     } catch (e) {
@@ -404,6 +412,54 @@ export class CallsService {
       throw e;
     }
     await this.finalise(call);
+    await this.queueRecording(call.id, r);
     return "imported";
+  }
+
+  // --- Recordings -------------------------------------------------------------------------------
+
+  private recordingFields(r: CallLogRecord) {
+    return this.env.RINGCENTRAL_RECORDINGS && r.recording ? { rcRecordingId: r.recording.id, recordingScan: "pending" as const } : {};
+  }
+
+  private async queueRecording(callId: string, r: CallLogRecord) {
+    if (!this.env.RINGCENTRAL_RECORDINGS || !r.recording) return;
+    await this.queue.add(QUEUES.integrations, "call.recording", { callId, contentUri: r.recording.contentUri }, { jobId: `call.recording:${callId}` });
+  }
+
+  /** Job: copies a recording into our storage and virus-scans it (retried by the queue on failure). */
+  async fetchRecording(callId: string, contentUri: string) {
+    const call = await this.prisma.callLog.findUnique({ where: { id: callId } });
+    if (!call || call.recordingKey || call.recordingDeletedAt || !isCallLogSource(this.provider)) return;
+    const { body, contentType } = await this.provider.recording(contentUri);
+    const ext = contentType === "audio/wav" || contentType === "audio/x-wav" ? "wav" : "mp3";
+    const key = `recordings/${callId}.${ext}`;
+    await this.storage.put(key, body, contentType);
+    const scan = await this.scanner.scan(body);
+    if (scan === "infected") {
+      await this.storage.delete(key);
+      await this.prisma.callLog.update({ where: { id: callId }, data: { recordingScan: "infected" } });
+      this.log.warn({ callId }, "Call recording failed the virus scan and was discarded");
+      return;
+    }
+    if (scan === "error") throw new Error(`Virus scan failed for the recording of call ${callId}`);
+    await this.prisma.callLog.update({ where: { id: callId }, data: { recordingKey: key, recordingMime: contentType, recordingSize: body.length, recordingScan: scan } });
+  }
+
+  /**
+   * A short-lived link to play a call recording: for the person on the call, or anyone who can see
+   * its deal or customer. Every play is recorded as access to sensitive data.
+   */
+  async recordingUrl(actor: Actor, id: string) {
+    const call = await this.prisma.callLog.findUnique({ where: { id } });
+    if (!call) throw new NotFound("Call");
+    let allowed = call.userId === actor.id;
+    if (!allowed && call.opportunityId) allowed = await this.access.readable(actor, call.opportunityId).then(() => true, () => false);
+    if (!allowed && call.customerId) allowed = (await this.prisma.customer.count({ where: { AND: [{ id: call.customerId }, this.access.customerWhere(actor)] } })) > 0;
+    if (!allowed) throw new NotFound("Call");
+    if (!call.recordingKey) throw new RuleViolation([call.recordingDeletedAt ? "This recording was deleted under the retention policy." : call.rcRecordingId ? "The recording is still being fetched. Try again in a minute." : "This call wasn't recorded."]);
+    await this.audit.sensitiveAccess(actor, "call", id, "Call recording");
+    const filename = `call-${call.startedAt.toISOString().slice(0, 10)}.${call.recordingKey.split(".").pop()}`;
+    return { url: await this.storage.signedUrl(call.recordingKey, filename, this.env.DOWNLOAD_URL_TTL_SECONDS), mimeType: call.recordingMime, expiresInSeconds: this.env.DOWNLOAD_URL_TTL_SECONDS };
   }
 }

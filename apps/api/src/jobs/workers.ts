@@ -75,10 +75,12 @@ export async function startWorkers(app: INestApplicationContext): Promise<() => 
     ),
     new Worker(
       QUEUES.integrations,
-      async (job: Job<{ integrationJobId?: string; callId?: string; attempt?: number }>) =>
+      async (job: Job<{ integrationJobId?: string; callId?: string; attempt?: number; contentUri?: string }>) =>
         job.name === "call.poll"
           ? calls.poll(job.data.callId!, job.data.attempt ?? 0)
-          : integrations.execute(job.data.integrationJobId!, job.attemptsMade + 1, job.opts.attempts ?? DEFAULT_ATTEMPTS),
+          : job.name === "call.recording"
+            ? calls.fetchRecording(job.data.callId!, job.data.contentUri!)
+            : integrations.execute(job.data.integrationJobId!, job.attemptsMade + 1, job.opts.attempts ?? DEFAULT_ATTEMPTS),
       { connection, concurrency: 4 },
     ),
     new Worker(

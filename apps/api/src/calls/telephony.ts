@@ -169,6 +169,22 @@ export class RingCentralTelephony implements TelephonyProvider {
     return out;
   }
 
+  /** A call recording (needs "Read Call Recording"). Only RingCentral's own hosts are fetched. */
+  async recording(contentUri: string) {
+    const url = new URL(contentUri);
+    const platform = new URL(this.cfg.serverUrl);
+    const trusted = url.host === platform.host || (url.protocol === "https:" && (url.hostname === "ringcentral.com" || url.hostname.endsWith(".ringcentral.com")));
+    if (!trusted) throw new Error(`Refusing to fetch a recording from ${url.host}`);
+    const get = async () => fetch(url, { headers: { Authorization: `Bearer ${await this.accessToken()}` }, signal: AbortSignal.timeout(60_000) });
+    let res = await get();
+    if (res.status === 401) {
+      this.token = null;
+      res = await get();
+    }
+    if (!res.ok) throw new Error(`RingCentral recording download failed (HTTP ${res.status})`);
+    return { body: Buffer.from(await res.arrayBuffer()), contentType: res.headers.get("content-type")?.split(";")[0] ?? "audio/mpeg" };
+  }
+
   /** Every call on the account in the window, from the company call log (needs "Read Call Log"). */
   async callLog(from: Date, to: Date) {
     const out: CallLogRecord[] = [];
@@ -210,6 +226,8 @@ export interface CallLogRecord {
 export interface CallLogSource {
   extensions(): Promise<{ id: string; email: string | null }[]>;
   callLog(from: Date, to: Date): Promise<CallLogRecord[]>;
+  /** Downloads a recording from its content URI (from the call-log record). */
+  recording(contentUri: string): Promise<{ body: Buffer; contentType: string }>;
 }
 
 export const isCallLogSource = (p: TelephonyProvider): p is TelephonyProvider & CallLogSource => typeof (p as Partial<CallLogSource>).callLog === "function";

@@ -23,6 +23,7 @@ beforeAll(async () => {
     RINGCENTRAL_CLIENT_SECRET: rc.clientSecret,
     RINGCENTRAL_JWT: rc.jwt,
     RINGCENTRAL_CALLER_ID: "+35315550000",
+    RINGCENTRAL_RECORDINGS: "true",
   });
   support = require("../support/app") as AppSupport;
   fx = require("../support/fixtures") as Fixtures;
@@ -210,5 +211,52 @@ describe("RingCentral call-log sync", () => {
     const stranger = await t.prisma.callLog.findUniqueOrThrow({ where: { rcRecordId: unknown } });
     expect(stranger).toMatchObject({ opportunityId: null, customerId: null, toNumber: "+447700900123" });
     expect(await t.prisma.timelineEntry.count({ where: { data: { path: ["callId"], equals: stranger.id } } })).toBe(0);
+  });
+});
+
+describe("call recordings", () => {
+  it("fetches a recording into storage, plays it only for people who can see the call, and deletes it after the retention period", async () => {
+    rc.extensions = [{ id: "101", email: sales.user.email }];
+    const oppId = await fx.createOpportunity(sales.client, "electricity", { phone: "087 955 1234", companyName: "Recorded Ltd" });
+    support.expectStatus(await sales.client.post(`/opportunities/${oppId}/customer/create`), 201);
+    const recordId = rc.logCall({ direction: "Inbound", from: "+353879551234", to: "+35315550000", extensionId: "101", duration: 61, recording: rc.recording("rec-1") });
+    await calls.syncCallLog();
+
+    const call = await t.prisma.callLog.findUniqueOrThrow({ where: { rcRecordId: recordId } });
+    expect(call).toMatchObject({ rcRecordingId: "rec-1", recordingScan: "pending", recordingKey: null });
+    const job = t.queue.jobs.find((j) => j.name === "call.recording" && j.data.callId === call.id)!;
+    expect(job).toBeDefined();
+    // Not fetched yet: the person is told so.
+    expect((await sales.client.get(`/calls/${call.id}/recording`)).body.issues).toEqual(["The recording is still being fetched. Try again in a minute."]);
+
+    await calls.fetchRecording(call.id, job.data.contentUri as string);
+    await calls.fetchRecording(call.id, job.data.contentUri as string); // a retried job does nothing more
+    expect(rc.recordingDownloads).toBe(1);
+    const stored = await t.prisma.callLog.findUniqueOrThrow({ where: { id: call.id } });
+    expect(stored).toMatchObject({ recordingKey: `recordings/${call.id}.mp3`, recordingMime: "audio/mpeg", recordingScan: "skipped" });
+
+    const timeline = support.expectStatus(await sales.client.get(`/opportunities/${oppId}/timeline`), 200).body as { data: { callId?: string }; recording?: boolean }[];
+    expect(timeline.find((e) => e.data?.callId === call.id)?.recording).toBe(true);
+
+    const play = support.expectStatus(await sales.client.get(`/calls/${call.id}/recording`), 200).body;
+    expect(play).toMatchObject({ url: expect.stringContaining("/api/files/local"), mimeType: "audio/mpeg" });
+    expect(await t.prisma.auditLog.count({ where: { action: "sensitive.read", entityType: "call", entityId: call.id } })).toBe(1);
+    await t.prisma.opportunity.update({ where: { id: oppId }, data: { ownerId: sales.user.id } });
+    expect((await other.client.get(`/calls/${call.id}/recording`)).status).toBe(404);
+
+    // Older than the retention period: the file goes, the call stays.
+    const { RetentionService } = require("../../src/admin/retention.service") as typeof import("../../src/admin/retention.service");
+    await t.prisma.callLog.update({ where: { id: call.id }, data: { startedAt: new Date(Date.now() - 400 * 86_400_000) } });
+    const summary = await t.app.get(RetentionService).run();
+    expect(summary.recordings).toBe(1);
+    expect(await t.prisma.callLog.findUniqueOrThrow({ where: { id: call.id } })).toMatchObject({ recordingKey: null, recordingDeletedAt: expect.any(Date) });
+    expect((await sales.client.get(`/calls/${call.id}/recording`)).body.issues).toEqual(["This recording was deleted under the retention policy."]);
+  });
+
+  it("refuses to fetch recordings from hosts other than RingCentral", async () => {
+    const { RingCentralTelephony } = require("../../src/calls/telephony") as typeof import("../../src/calls/telephony");
+    const provider = new RingCentralTelephony({ serverUrl: rc.url, clientId: rc.clientId, clientSecret: rc.clientSecret, jwt: rc.jwt, playPrompt: false });
+    await expect(provider.recording("https://evilringcentral.com/x")).rejects.toThrow(/Refusing/);
+    await expect(provider.recording("http://media.ringcentral.com/x")).rejects.toThrow(/Refusing/);
   });
 });
