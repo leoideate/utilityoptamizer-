@@ -1,5 +1,7 @@
 # Deployment, backup and recovery
 
+Deploying on Render? Follow [deploy-render.md](deploy-render.md), which uses the Blueprint in `render.yaml`.
+
 ## What runs
 
 | Process | Image / command | Scale |

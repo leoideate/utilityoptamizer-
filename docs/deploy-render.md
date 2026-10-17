@@ -1,0 +1,141 @@
+# Deploying on Render
+
+This guide puts the CRM on [Render](https://render.com) with the Blueprint in [`render.yaml`](../render.yaml). Render builds the two Docker images in this repository, runs the database migrations before each release and gives the web app HTTPS. Allow about an hour the first time.
+
+For what the processes do and how backups and restores work in general, see [deployment.md](deployment.md).
+
+## What gets created
+
+Everything runs in Render's EU region (Frankfurt).
+
+| Render resource | Name | What it is |
+|---|---|---|
+| Web service (public) | `uo-crm-web` | The web app (`apps/web/Dockerfile`). The only thing reachable from the internet. |
+| Private service | `uo-crm-api` | The API (`apps/api/Dockerfile`). Reached only through the web app's `/api` proxy. Runs `prisma migrate deploy` before each release. |
+| Background worker | `uo-crm-worker` | Same image as the API, running `node dist/worker.js` (reminders, renewals, email, call sync, virus scans). |
+| PostgreSQL 16 | `uo-crm-db` | The database. No outside access. |
+| Key Value (Redis-compatible) | `uo-crm-redis` | The job queue and live updates. Set to never evict data. |
+| Environment group | `uo-crm-shared` | Settings and secrets shared by the API and the worker. |
+
+Render doesn't offer file storage, so documents, signatures and form templates go in an **S3 bucket** you create (step 1).
+
+Render's free instance types can't run this: free databases expire, free web services go to sleep, and private services, background workers and pre-deploy commands need paid instance types. The Blueprint uses the `starter` instance type and the `basic-1gb` database; change the `plan:` lines if you need more. Check prices on Render's pricing page before you start.
+
+## Before you start
+
+You need:
+
+- A Render account with a payment method, and access to this repository on GitHub.
+- An AWS account (or another S3-compatible service) for file storage.
+- An email sending service with SMTP for outgoing CRM email (e.g. submission packs), e.g. Amazon SES in `eu-west-1`.
+- The domain you'll use, e.g. `crm.utilityoptimizer.com`, and access to its DNS.
+- A password manager or vault for the secrets.
+
+Sign Render's Data Processing Addendum and record Render and your storage provider as sub-processors: the CRM holds personal and bank data.
+
+## 1. Create the file storage bucket (AWS S3)
+
+1. In the AWS console, switch to **Europe (Ireland) eu-west-1** and create a bucket, e.g. `uo-documents-prod`.
+   - Leave **Block all public access** on.
+   - Turn on **Bucket versioning**, so deleted or overwritten files can be recovered.
+   - Default encryption: SSE-S3 is fine.
+2. In IAM, create a user (e.g. `uo-crm-render`) with no console access and this policy, using your bucket name:
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       { "Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": "arn:aws:s3:::uo-documents-prod" },
+       { "Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], "Resource": "arn:aws:s3:::uo-documents-prod/*" }
+     ]
+   }
+   ```
+
+   `ListBucket` is needed by the health check.
+3. Create an access key for that user and keep the key id and secret for step 3.
+
+**Using Cloudflare R2 instead:** also set `S3_ENDPOINT=https://<account id>.r2.cloudflarestorage.com`, `S3_REGION=auto` and `S3_SERVER_SIDE_ENCRYPTION=none` in the environment group (R2 encrypts every object itself). Use the bucket's R2 origin as `STORAGE_ORIGIN`.
+
+## 2. Pick the web address
+
+Decide the address now, e.g. `https://crm.utilityoptimizer.com`. You can start on Render's own address (`https://uo-crm-web.onrender.com`; Render may add a suffix if the name is taken) and switch to your domain in step 6.
+
+## 3. Create the services from the Blueprint
+
+1. Push the branch you want to deploy to GitHub (normally `main`).
+2. In Render: **New → Blueprint**, connect the GitHub repository and choose the branch. Render reads `render.yaml` and lists the resources above.
+3. Render asks for the values marked `sync: false`. Enter:
+
+   | Variable | Where it goes | Example |
+   |---|---|---|
+   | `WEB_ORIGIN` | environment group | `https://crm.utilityoptimizer.com` (no trailing slash) |
+   | `S3_REGION` | environment group | `eu-west-1` |
+   | `S3_BUCKET` | environment group | `uo-documents-prod` |
+   | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | environment group | from step 1 |
+   | `SMTP_URL` | environment group | `smtps://USER:PASS@email-smtp.eu-west-1.amazonaws.com:465` |
+   | `MAIL_FROM` | environment group | `Utility Optimizer CRM <crm@utilityoptimizer.com>` |
+   | `STORAGE_ORIGIN` | `uo-crm-web` | `https://uo-documents-prod.s3.eu-west-1.amazonaws.com` |
+
+4. Click **Apply**. The first build takes 10–15 minutes. The order doesn't matter: the web app is built with the API's private address (`API_HOSTPORT`), and the API runs the migrations before it starts.
+
+`FIELD_ENCRYPTION_KEY` and `APP_SECRET` are generated by Render.
+
+## 4. Save the generated secrets (do this now)
+
+Open **Environment Groups → uo-crm-shared** and copy `FIELD_ENCRYPTION_KEY` and `APP_SECRET` into your password manager.
+
+`FIELD_ENCRYPTION_KEY` encrypts bank details, dates of birth and other restricted fields. **If it's lost, that data can't be recovered**, and a restored database backup is useless without it. Never change it in place: to rotate it, follow *Encryption key rotation* in the [administrator guide](administrator-guide.md). Don't delete and re-create the Blueprint either, because Render would generate a new key.
+
+## 5. Create the first administrator
+
+1. Open **uo-crm-api → Shell**.
+2. Run, with your own email and a long passphrase:
+
+   ```bash
+   SEED_ADMIN_EMAIL=you@utilityoptimizer.com SEED_ADMIN_PASSWORD='a-long-unique-passphrase' npm run db:seed:prod
+   ```
+
+   This creates the pipeline stages, the Irish suppliers and Worldpay, and your administrator account. It never creates demo data in production, and it's safe to run again.
+3. Sign in at your address, open **Account** and turn on two-factor authentication.
+
+## 6. Use your own domain
+
+1. **uo-crm-web → Settings → Custom Domains → Add**, e.g. `crm.utilityoptimizer.com`.
+2. Add the DNS record Render shows (a `CNAME` to `uo-crm-web.onrender.com`). Render issues the HTTPS certificate automatically.
+3. If `WEB_ORIGIN` still holds the `onrender.com` address, change it to the new one under *Environment Groups → uo-crm-shared*. The API and the worker redeploy automatically. Sign-in checks the browser's origin against `WEB_ORIGIN`, so they must match.
+
+## 7. Check it works
+
+- `https://<your address>/api/health` shows `"status":"ok"` with the database, Redis and storage all `ok`.
+- Sign in, create a test opportunity, upload a document and open it: this proves storage and the document preview (`STORAGE_ORIGIN`) work.
+- Email is first used when the CRM sends something, e.g. a submission pack. If sending fails, the job appears under **Administration → Integrations → Outbound jobs** with the error.
+- In Render, **uo-crm-worker → Logs** shows the scheduled jobs starting.
+
+## 8. Connect the integrations
+
+Set these in the environment group, using your web address for every callback URL. The [administrator guide](administrator-guide.md) has the details for each:
+
+- Microsoft or Google single sign-on: `SSO_*`, redirect URI `https://<your address>/api/auth/sso/microsoft/callback` (or `/google/callback`).
+- Outlook and Gmail mailboxes: redirect URI `https://<your address>/api/mailboxes/microsoft/callback` (or `/google/callback`).
+- RingCentral: `TELEPHONY_PROVIDER=ringcentral` and the `RINGCENTRAL_*` values, with `RINGCENTRAL_WEBHOOK_URL` on your web address.
+- Virus scanning: the Blueprint doesn't include ClamAV, so uploads are marked "not virus-scanned". To add it, create a private service from the `clamav/clamav` Docker image and set `VIRUS_SCAN_DRIVER=clamav`, `CLAMAV_HOST` (its internal host name) and `CLAMAV_PORT=3310`.
+
+## Releasing updates
+
+Render deploys automatically when the chosen branch changes. For the API, Render builds the new image, runs `prisma migrate deploy`, and only switches traffic once that succeeds. If a migration fails, the old version keeps running and the deploy shows as failed. Migrations are forward-only, so to roll back code use **Manual Deploy → Rollback** on the services, not on the database.
+
+The web app's `/api` target and `STORAGE_ORIGIN` are fixed when it's built. After changing either, redeploy `uo-crm-web` with **Clear build cache & deploy**.
+
+## Backups and restore
+
+- **Database:** Render's paid PostgreSQL plans include point-in-time recovery; the retention depends on your workspace plan, so check it under **uo-crm-db → Recovery**. Also take a nightly logical dump to separate storage, e.g. with a Render Cron Job running `pg_dump --format=custom "$DATABASE_URL"` and uploading the file to a separate bucket.
+- **Files:** bucket versioning (step 1). For more protection, replicate the bucket to a second region or account.
+- **Secrets:** your password manager (step 4).
+
+Test a restore at least once a quarter. Use **uo-crm-db → Recovery** to create a new database from a point in time, then point a test copy of the services at it. Never restore over the live database.
+
+## Notes
+
+- Requests reach the API through Render's proxy and the web app on Render's private network, so `TRUST_PROXY=loopback,linklocal,uniquelocal` lets rate limits and the audit log see each user's real address. Never make the API public.
+- The API doesn't have its own Render health check because it's private; the web app's check is `/login`. Point your uptime monitor at `https://<your address>/api/health`, which checks the API, database, Redis and storage.
+- To scale up, raise the `plan:` of `uo-crm-api` and `uo-crm-web` or add instances. Keep one worker; a second is safe but not needed.

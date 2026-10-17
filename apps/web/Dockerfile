@@ -8,8 +8,10 @@ COPY apps/api/package.json apps/api/
 RUN npm ci --workspace @uo/shared --workspace @uo/web --include-workspace-root
 COPY packages/shared packages/shared
 COPY apps/web apps/web
-# The /api rewrite target is fixed at build time.
-ARG API_ORIGIN=http://api:4000
+# The /api rewrite target is fixed at build time. Give either the full origin, or just the API's
+# private host:port (Render's Blueprint passes API_HOSTPORT) and http:// is added.
+ARG API_HOSTPORT=api:4000
+ARG API_ORIGIN=http://${API_HOSTPORT}
 ENV API_ORIGIN=$API_ORIGIN
 # Origin(s) of signed document links (your S3 bucket), allowed by the Content-Security-Policy.
 ARG STORAGE_ORIGIN=https://*.amazonaws.com

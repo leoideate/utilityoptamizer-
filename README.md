@@ -63,6 +63,7 @@ Open http://localhost:3000 and sign in as `manager@demo.utilityoptimizer.ie` (or
 - [User guide](docs/user-guide.md)
 - [Administrator guide](docs/administrator-guide.md)
 - [Deployment, backup and recovery](docs/deployment.md)
+- [Deploying on Render](docs/deploy-render.md)
 - [Test report](docs/test-report.md)
 - [Known limitations](docs/known-limitations.md)
 

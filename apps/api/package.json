@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "ts-node --transpile-only prisma/seed.ts",
+    "db:seed:prod": "node dist-seed/prisma/seed.js",
     "db:generate": "prisma generate",
     "openapi": "ts-node --transpile-only scripts/export-openapi.ts",
     "stress": "ts-node --transpile-only scripts/stress.ts",

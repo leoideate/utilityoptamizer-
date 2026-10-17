@@ -10,7 +10,8 @@ COPY apps/web/package.json apps/web/
 RUN npm ci --workspace @uo/shared --workspace @uo/api --include-workspace-root
 COPY packages/shared packages/shared
 COPY apps/api apps/api
-RUN npm run build -w @uo/shared && npm run build -w @uo/api && npm prune --omit=dev --workspace @uo/shared --workspace @uo/api
+# The seed is compiled too, so the first administrator can be created in production: npm run db:seed:prod
+RUN npm run build -w @uo/shared && npm run build -w @uo/api && (cd apps/api && npx tsc -p tsconfig.seed.json) && npm prune --omit=dev --workspace @uo/shared --workspace @uo/api
 
 FROM node:22-bookworm-slim
 ENV NODE_ENV=production
@@ -21,6 +22,7 @@ COPY --from=build /app/packages/shared/package.json packages/shared/
 COPY --from=build /app/packages/shared/dist packages/shared/dist
 COPY --from=build /app/apps/api/package.json apps/api/
 COPY --from=build /app/apps/api/dist apps/api/dist
+COPY --from=build /app/apps/api/dist-seed apps/api/dist-seed
 COPY --from=build /app/apps/api/prisma apps/api/prisma
 WORKDIR /app/apps/api
 USER node

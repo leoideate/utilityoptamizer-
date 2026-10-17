@@ -6,6 +6,12 @@
 SEED_ADMIN_EMAIL=you@utilityoptimizer.com SEED_ADMIN_PASSWORD='a-long-unique-passphrase' NODE_ENV=production npm run db:seed
 ```
 
+Inside a production container (for example the Render shell of the API service) the TypeScript tooling isn't installed, so use the compiled seed instead:
+
+```bash
+SEED_ADMIN_EMAIL=you@utilityoptimizer.com SEED_ADMIN_PASSWORD='a-long-unique-passphrase' npm run db:seed:prod
+```
+
 The seed also creates the 18 pipeline stages, the main Irish energy suppliers, Worldpay and two signature templates. It's idempotent. In production (`NODE_ENV=production`) no demo data is created.
 
 ## Single sign-on (Microsoft / Google)
