@@ -20,6 +20,7 @@ Generated from `apps/api/prisma/schema.prisma` (`node scripts/gen-field-dictiona
 | locked_until | DateTime |  |  |
 | last_login_at | DateTime |  |  |
 | callback_phone | String |  | The user's own phone (E.164). Click-to-call rings this number first, then connects the customer |
+| ringcentral_extension_id | String |  | The RingCentral extension this user answers and makes calls on (matched by email), for call-log sync. Unique |
 | created_at | DateTime | ✓ | Default now() |
 | updated_at | DateTime | ✓ |  |
 
@@ -160,6 +161,7 @@ One sale (new or renewal). Permanent: can't be deleted or archived (database tri
 | company_name | String |  |  |
 | email | String |  |  |
 | phone | String |  |  |
+| phone_key | String |  | phoneKey(phone): matches calls from a lead's number before a customer exists |
 | owner_id | UUID |  |  |
 | team_id | UUID |  |  |
 | stage_id | UUID | ✓ |  |
@@ -875,12 +877,20 @@ Append-only (trigger). Never contains restricted values.
 | opportunity_id | UUID |  |  |
 | customer_id | UUID |  |  |
 | contact_id | UUID |  |  |
-| user_id | UUID | ✓ |  |
-| direction | String | ✓ | Default "outbound" |
-| to_number | String | ✓ | Customer number (E.164) |
-| agent_number | String |  | The staff phone that was rung first (E.164); null for manual calls |
+| user_id | UUID |  | The staff member on the call; null for calls to a company number nobody in the CRM answered |
+| direction | String | ✓ | inbound | outboun. Default "outbound" |
+| to_number | String | ✓ | The customer's number (E.164), whichever way the call went |
+| agent_number | String |  | Our side of the call (E.164): the phone rung first for click-to-call, or the number called for inbound calls |
 | provider | String | ✓ |  |
 | provider_call_id | String |  | Unique |
+| rc_record_id | String |  | RingCentral call-log record id: calls imported from the call log (and click-to-calls matched to theirs) are stored once. Unique |
+| rc_session_id | String |  |  |
+| rc_recording_id | String |  | Recording (RINGCENTRAL_RECORDINGS=true): downloaded into our storage, virus-scanned, deleted after the retention period |
+| recording_key | String |  |  |
+| recording_mime | String |  |  |
+| recording_size | Int |  |  |
+| recording_scan | Enum: pending, clean, infected, error, skipped |  |  |
+| recording_deleted_at | DateTime |  |  |
 | status | Enum: initiated, ringing_agent, ringing_customer, in_progress, completed, no_answer, busy, failed, canceled | ✓ | Default initiated |
 | started_at | DateTime | ✓ | Default now() |
 | answered_at | DateTime |  |  |

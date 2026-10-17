@@ -157,6 +157,7 @@ export class RenewalsService {
         companyName: orig.companyName,
         email: orig.email,
         phone: orig.phone,
+        phoneKey: orig.phoneKey,
         ownerId,
         teamId: orig.teamId,
         stageId,

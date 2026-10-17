@@ -8,6 +8,7 @@ import type { Actor } from "../common/actor";
 import { CurrentUser } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
 import { CallsService } from "./calls.service";
+import { RingCentralEventsController, RingCentralEventsService } from "./ringcentral-events";
 import { ManualTelephony, RingCentralTelephony, TELEPHONY_PROVIDER } from "./telephony";
 
 const Id = new ParseUUIDPipe({ version: "4" });
@@ -54,6 +55,12 @@ export class CallsController {
     return this.calls.cancel(a, id);
   }
 
+  /** A short-lived link to play the call's recording (audited as sensitive access). */
+  @Get("calls/:id/recording")
+  recording(@CurrentUser() a: Actor, @Param("id", Id) id: string) {
+    return this.calls.recordingUrl(a, id);
+  }
+
   @Post("calls/:id/outcome")
   outcome(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(callOutcomeSchema)) body: z.infer<typeof callOutcomeSchema>) {
     return this.calls.recordOutcome(a, id, body);
@@ -61,9 +68,10 @@ export class CallsController {
 }
 
 @Module({
-  controllers: [CallsController],
+  controllers: [CallsController, RingCentralEventsController],
   providers: [
     CallsService,
+    RingCentralEventsService,
     {
       provide: TELEPHONY_PROVIDER,
       inject: [ENV],
@@ -80,6 +88,6 @@ export class CallsController {
           : new ManualTelephony(),
     },
   ],
-  exports: [CallsService],
+  exports: [CallsService, RingCentralEventsService],
 })
 export class CallsModule {}

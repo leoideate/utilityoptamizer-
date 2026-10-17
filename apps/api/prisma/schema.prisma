@@ -329,6 +329,8 @@ model User {
   lastLoginAt   DateTime?  @map("last_login_at")
   /// The user's own phone (E.164). Click-to-call rings this number first, then connects the customer.
   callbackPhone String?    @map("callback_phone")
+  /// The RingCentral extension this user answers and makes calls on (matched by email), for call-log sync.
+  ringcentralExtensionId String? @unique @map("ringcentral_extension_id")
   createdAt     DateTime   @default(now()) @map("created_at")
   updatedAt     DateTime   @updatedAt @map("updated_at")
 
@@ -531,6 +533,8 @@ model Opportunity {
   companyName           String?           @map("company_name")
   email                 String?
   phone                 String?
+  /// phoneKey(phone): matches calls from a lead's number before a customer exists.
+  phoneKey              String?           @map("phone_key")
   ownerId               String?           @map("owner_id") @db.Uuid
   owner                 User?             @relation("OppOwner", fields: [ownerId], references: [id])
   teamId                String?           @map("team_id") @db.Uuid
@@ -605,6 +609,7 @@ model Opportunity {
   @@index([outcome])
   @@index([serviceType])
   @@index([renewalDate])
+  @@index([phoneKey])
   @@map("opportunities")
 }
 
@@ -1486,14 +1491,26 @@ model CallLog {
   opportunityId  String?    @map("opportunity_id") @db.Uuid
   customerId     String?    @map("customer_id") @db.Uuid
   contactId      String?    @map("contact_id") @db.Uuid
-  userId         String     @map("user_id") @db.Uuid
+  /// The staff member on the call; null for calls to a company number nobody in the CRM answered.
+  userId         String?    @map("user_id") @db.Uuid
+  /// inbound | outbound
   direction      String     @default("outbound")
-  /// Customer number (E.164).
+  /// The customer's number (E.164), whichever way the call went.
   toNumber       String     @map("to_number")
-  /// The staff phone that was rung first (E.164); null for manual calls.
+  /// Our side of the call (E.164): the phone rung first for click-to-call, or the number called for inbound calls.
   agentNumber    String?    @map("agent_number")
   provider       String
   providerCallId String?    @unique @map("provider_call_id")
+  /// RingCentral call-log record id: calls imported from the call log (and click-to-calls matched to theirs) are stored once.
+  rcRecordId     String?    @unique @map("rc_record_id")
+  rcSessionId    String?    @map("rc_session_id")
+  /// Recording (RINGCENTRAL_RECORDINGS=true): downloaded into our storage, virus-scanned, deleted after the retention period.
+  rcRecordingId  String?    @map("rc_recording_id")
+  recordingKey   String?    @map("recording_key")
+  recordingMime  String?    @map("recording_mime")
+  recordingSize  Int?       @map("recording_size")
+  recordingScan  ScanStatus? @map("recording_scan")
+  recordingDeletedAt DateTime? @map("recording_deleted_at")
   status         CallStatus @default(initiated)
   startedAt      DateTime   @default(now()) @map("started_at")
   answeredAt     DateTime?  @map("answered_at")
@@ -1505,6 +1522,7 @@ model CallLog {
   loggedAt       DateTime?  @map("logged_at")
 
   @@index([opportunityId, startedAt])
+  @@index([rcSessionId])
   @@index([userId, startedAt])
   @@map("call_logs")
 }

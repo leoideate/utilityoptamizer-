@@ -144,3 +144,40 @@ describe("access denials are logged (F9)", () => {
     }
   });
 });
+
+describe("mailbox connect flow (email integration)", () => {
+  /** Signs in and returns the raw session cookie, so a test can choose exactly which cookies it sends. */
+  async function sessionCookie(email: string) {
+    const res = await request(t.app.getHttpServer()).post("/api/auth/login").set("Origin", ORIGIN).send({ email, password: PASSWORD });
+    return (res.headers["set-cookie"] as unknown as string[]).find((c) => c.startsWith("uo_session="))!.split(";")[0];
+  }
+  /* eslint-disable-next-line @typescript-eslint/no-require-imports */
+  const { CryptoService } = require("../../src/common/crypto.service") as typeof import("../../src/common/crypto.service");
+  const flowCookie = (prefix: string, userId: string) => {
+    const body = Buffer.from(JSON.stringify({ userId, provider: "microsoft", state: "state-1", verifier: "v".repeat(48), exp: Math.floor(Date.now() / 1000) + 600 })).toString("base64url");
+    return `uo_mailbox=${body}.${t.app.get(CryptoService).sign(`${prefix}|${body}`)}`;
+  };
+  const callback = (session: string, flow: string) =>
+    request(t.app.getHttpServer()).get("/api/mailboxes/microsoft/callback?code=c&state=state-1").set("Cookie", `${session}; ${flow}`);
+
+  it("won't accept an SSO flow cookie, or someone else's flow, in place of the person's own", async () => {
+    const a = await userAndClient(t, ["salesperson"]);
+    const b = await userAndClient(t, ["salesperson"]);
+    const session = await sessionCookie(a.user.email);
+
+    const swapped = await callback(session, flowCookie("sso", a.user.id));
+    expect(swapped.headers.location).toBe("/account?mailbox=mailbox_expired");
+    const someoneElses = await callback(session, flowCookie("mailbox", b.user.id));
+    expect(someoneElses.headers.location).toBe("/account?mailbox=mailbox_expired");
+    // The person's own, correctly signed flow gets past these checks (and then fails only because no provider is set up here).
+    const own = await callback(session, flowCookie("mailbox", a.user.id));
+    expect(own.headers.location).toBe("/account?mailbox=mailbox_failed");
+    expect(await t.prisma.mailbox.count({ where: { userId: { in: [a.user.id, b.user.id] } } })).toBe(0);
+  });
+
+  it("needs a signed-in session to connect or finish connecting", async () => {
+    const anon = request(t.app.getHttpServer());
+    expectStatus(await anon.get("/api/mailboxes/microsoft/connect"), 401);
+    expectStatus(await anon.get("/api/mailboxes/microsoft/callback?code=c&state=s"), 401);
+  });
+});

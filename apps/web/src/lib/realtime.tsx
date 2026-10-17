@@ -3,6 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, createContext, useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { api } from "./api";
 
 interface ChatEvent {
   channelId: string;
@@ -58,6 +59,23 @@ export function RealtimeProvider({ userId, children }: { userId: string; childre
         qc.invalidateQueries({ queryKey: ["calls", d.opportunityId] });
         qc.invalidateQueries({ queryKey: ["opportunity", d.opportunityId] });
       }
+    });
+    es.addEventListener("call.incoming", async (e) => {
+      const d = JSON.parse((e as MessageEvent).data) as { sessionId: string; state: "ringing" | "answered" | "ended"; from: string | null };
+      const id = `call-${d.sessionId}`;
+      if (d.state !== "ringing") return void toast.dismiss(id);
+      // The event only carries the number; who it is comes from the permission-checked API.
+      type Caller = { customers: { id: string; name: string; contact: string | null }[]; deals: { id: string; name: string; stage: string }[] };
+      const who = d.from ? await api.get<Caller>(`/telephony/caller?number=${encodeURIComponent(d.from)}`).catch(() => null) : null;
+      const customer = who?.customers[0];
+      const deal = who?.deals[0];
+      const name = customer ? `${customer.contact ? `${customer.contact}, ` : ""}${customer.name}` : (d.from ?? "Unknown number");
+      toast(`Incoming call: ${name}`, {
+        id,
+        duration: 120_000,
+        description: deal ? `${deal.name} · ${deal.stage}${who && who.deals.length > 1 ? ` (+${who.deals.length - 1} more)` : ""}` : customer ? "No open deals" : "Not a known customer",
+        action: deal || customer ? { label: deal ? "Open deal" : "Open customer", onClick: () => window.location.assign(deal ? `/opportunities/${deal.id}` : `/customers/${customer!.id}`) } : undefined,
+      });
     });
     es.addEventListener("email.received", (e) => {
       const d = JSON.parse((e as MessageEvent).data) as { id: string; from: string; subject: string; opportunityId: string | null };

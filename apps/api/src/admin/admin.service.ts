@@ -20,9 +20,11 @@ export const retentionSchema = z.object({
   auditLogYears: z.number().int().min(1).max(20),
   /** Days unconfirmed business-card scans are kept. */
   ocrScanDays: z.number().int().min(1).max(365),
+  /** Months call recordings are kept before they're deleted (the call itself stays on the timeline). */
+  recordingMonths: z.number().int().min(1).max(120),
 });
 export type RetentionPolicy = z.infer<typeof retentionSchema>;
-export const DEFAULT_RETENTION: RetentionPolicy = { lostSensitiveDataMonths: 24, endedSensitiveDataMonths: 84, auditLogYears: 7, ocrScanDays: 30 };
+export const DEFAULT_RETENTION: RetentionPolicy = { lostSensitiveDataMonths: 24, endedSensitiveDataMonths: 84, auditLogYears: 7, ocrScanDays: 30, recordingMonths: 12 };
 
 export const supplierSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -146,8 +148,9 @@ export class AdminService {
     await this.audit.log(actor, { action: "setting.update", entityType: "setting", entityId: key, summary: `Changed setting ${key}` });
   }
 
-  retention() {
-    return this.getSetting<RetentionPolicy>("retention.policy", DEFAULT_RETENTION);
+  async retention(): Promise<RetentionPolicy> {
+    // Policies saved before a setting existed get its default.
+    return { ...DEFAULT_RETENTION, ...(await this.getSetting<Partial<RetentionPolicy>>("retention.policy", {})) };
   }
 
   // --- Audit log ------------------------------------------------------------------

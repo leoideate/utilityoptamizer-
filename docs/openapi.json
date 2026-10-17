@@ -3326,6 +3326,29 @@
         ]
       }
     },
+    "/api/calls/{id}/recording": {
+      "get": {
+        "operationId": "CallsController_recording",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "calls"
+        ]
+      }
+    },
     "/api/calls/{id}/outcome": {
       "post": {
         "operationId": "CallsController_outcome",
@@ -3341,6 +3364,51 @@
         ],
         "responses": {
           "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "calls"
+        ]
+      }
+    },
+    "/api/webhooks/ringcentral": {
+      "post": {
+        "operationId": "RingCentralEventsController_webhook",
+        "parameters": [
+          {
+            "name": "validation-token",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "verification-token",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "calls"
+        ]
+      }
+    },
+    "/api/telephony/caller": {
+      "get": {
+        "operationId": "RingCentralEventsController_caller",
+        "parameters": [],
+        "responses": {
+          "200": {
             "description": ""
           }
         },

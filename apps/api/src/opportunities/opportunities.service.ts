@@ -75,6 +75,7 @@ export class OpportunitiesService {
           companyName: input.companyName ?? null,
           email: input.email ?? null,
           phone: input.phone ?? null,
+          phoneKey: phoneKey(input.phone),
           leadSource: input.leadSource,
           leadSourceDetail: input.leadSourceDetail ?? null,
           campaign: input.campaign ?? null,
@@ -136,10 +137,11 @@ export class OpportunitiesService {
     assertRules(issues);
 
     const data = defined({ ...patch, followUpDate: dateOnly(patch.followUpDate), expectedCloseDate: dateOnly(patch.expectedCloseDate), visitDate: dateOnly(patch.visitDate) });
+    const keyed = patch.phone !== undefined ? { ...data, phoneKey: phoneKey(patch.phone) } : data;
     const changed = Object.keys(data).filter((k) => String((opp as Record<string, unknown>)[k] ?? "") !== String((data as Record<string, unknown>)[k] ?? ""));
     if (!changed.length) return;
     await this.prisma.$transaction(async (tx) => {
-      await tx.opportunity.update({ where: { id }, data });
+      await tx.opportunity.update({ where: { id }, data: keyed });
       await this.audit.log(actor, { action: "opportunity.update", entityType: "opportunity", entityId: id, summary: `Updated ${changed.join(", ")}`, data: { fields: changed } }, tx);
       if (patch.selectedSupplierId && patch.selectedSupplierId !== opp.selectedSupplierId) {
         // Contracts not yet signed follow the opportunity's chosen supplier.

@@ -473,6 +473,7 @@ function RetentionAdmin() {
     endedSensitiveDataMonths: "…and this many months after a live contract ends (with no renewal)",
     auditLogYears: "Keep audit-log entries for (years)",
     ocrScanDays: "Delete unconfirmed business-card scans after (days)",
+    recordingMonths: "Delete call recordings after (months)",
   };
   if (!v) return <Skeleton className="h-48" />;
   return (

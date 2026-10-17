@@ -25,7 +25,8 @@ interface Entry {
   occurredAt: string;
   actorName: string;
   correctsId: string | null;
-  data?: { emailMessageId?: string } | null;
+  data?: { emailMessageId?: string; callId?: string } | null;
+  recording?: boolean;
 }
 
 const ICONS: Record<string, typeof Phone> = {
@@ -128,6 +129,7 @@ export function TimelineTab({ opp }: { opp: Workspace }) {
                     {corrected.has(e.id) && <Badge>Corrected below</Badge>}
                   </p>
                   <p className="mt-0.5 whitespace-pre-line text-sm">{e.body}</p>
+                  {e.recording && e.data?.callId && <RecordingPlayer callId={e.data.callId} />}
                   {e.data?.emailMessageId && (
                     <Link className="mt-1 inline-block text-xs text-primary hover:underline" href={`/inbox?id=${e.data.emailMessageId}`}>
                       Open email
@@ -230,6 +232,25 @@ function LogDialog({ opp, corrects, onClose }: { opp: Workspace; corrects?: Entr
         <IssueList issues={issues} />
       </div>
     </Dialog>
+  );
+}
+
+/** Fetches a short-lived link only when someone asks to listen (each play is audited). */
+function RecordingPlayer({ callId }: { callId: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const load = useMutation({
+    meta: { silent: true },
+    mutationFn: () => api.get<{ url: string }>(`/calls/${callId}/recording`),
+    onSuccess: (r) => setUrl(r.url),
+  });
+  if (url) return <audio className="mt-2 w-full max-w-md" controls autoPlay src={url} aria-label="Call recording" />;
+  return (
+    <div className="mt-1">
+      <button className="text-xs text-primary hover:underline" onClick={() => load.mutate()} disabled={load.isPending}>
+        {load.isPending ? "Loading recording…" : "Play recording"}
+      </button>
+      {load.isError && <p className="text-xs text-danger">{(load.error as ApiError).issues[0] ?? (load.error as ApiError).message}</p>}
+    </div>
   );
 }
 

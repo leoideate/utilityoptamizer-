@@ -11,6 +11,7 @@ import { AdminService } from "./admin.service";
  * Applies the configured retention policy (Admin → Retention):
  * - sensitive documents and principal personal data on lost deals / long-ended contracts are erased;
  * - unconfirmed business-card scans are deleted;
+ * - call recordings are deleted after their retention period (the call stays on the timeline);
  * - audit-log rows older than the retention period are purged (the only permitted deletion,
  *   done with the uo.allow_purge flag the append-only trigger checks).
  * Opportunities, customers and the timeline are never deleted.
@@ -63,13 +64,21 @@ export class RetentionService {
     for (const s of oldScans) await this.storage.delete(s.storageKey);
     await this.prisma.businessCardScan.deleteMany({ where: { id: { in: oldScans.map((s) => s.id) } } });
 
+    // Call recordings: the file goes, the call (and its timeline entry) stays.
+    const recordingsBefore = new Date(`${addMonths(asOf, -p.recordingMonths)}T00:00:00Z`);
+    const oldRecordings = await this.prisma.callLog.findMany({ where: { recordingKey: { not: null }, startedAt: { lt: recordingsBefore } }, select: { id: true, recordingKey: true } });
+    for (const r of oldRecordings) {
+      await this.storage.delete(r.recordingKey!);
+      await this.prisma.callLog.update({ where: { id: r.id }, data: { recordingKey: null, recordingDeletedAt: new Date() } });
+    }
+
     const auditBefore = new Date(`${addMonths(asOf, -12 * p.auditLogYears)}T00:00:00Z`);
     const purged = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('uo.allow_purge', 'on', true)`;
       return tx.auditLog.deleteMany({ where: { createdAt: { lt: auditBefore } } });
     });
 
-    const summary = { opportunities: ids.length, sensitiveFiles: files, principals, scans: oldScans.length, auditRows: purged.count };
+    const summary = { opportunities: ids.length, sensitiveFiles: files, principals, scans: oldScans.length, recordings: oldRecordings.length, auditRows: purged.count };
     await this.audit.log(SYSTEM, { action: "retention.run", entityType: "system", summary: "Retention policy applied", data: summary });
     this.log.log({ summary }, "Retention run complete");
     return summary;
