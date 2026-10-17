@@ -1,0 +1,76 @@
+# Lint, typecheck and tests on every pull request and push to the main branch.
+# Integration tests need only Postgres: they use local-disk storage, RecordingJobQueue and LocalRealtimeBus
+# instead of S3 and Redis (see apps/api/test/support/app.ts).
+name: CI
+
+on:
+  pull_request:
+    branches: [feature/utility-optimizer-crm]
+  push:
+    branches: [feature/utility-optimizer-crm]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, typecheck, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate -w @uo/api
+      - run: npm run build -w @uo/shared
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:unit
+
+  integration:
+    name: API integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      # Same image and credentials as docker-compose.yml. Service containers can't mount
+      # infra/postgres/init, so the test database is created directly via POSTGRES_DB.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: uo
+          POSTGRES_PASSWORD: uo_local_dev
+          POSTGRES_DB: uo_crm_test
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U uo -d uo_crm_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://uo:uo_local_dev@127.0.0.1:5433/uo_crm_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate -w @uo/api
+      - run: npm run build -w @uo/shared
+      - name: Apply migrations to the test database
+        run: npm run db:migrate -w @uo/api
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+      # Includes pentest.test.ts (every route from the OpenAPI document) and hardening.test.ts.
+      - run: npm run test:integration -w @uo/api
+
+  # Not yet: Playwright + axe e2e (npm run test:e2e). It needs a migrated and seeded database
+  # (npm run db:migrate && npm run db:seed), the API built and started on :4000, the web app
+  # built with API_ORIGIN and started on :3000, and `npx playwright install --with-deps`.
