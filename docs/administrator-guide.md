@@ -46,12 +46,14 @@ If someone changes their password or revokes access, their mailbox shows **Needs
 
 The **Call** button on an opportunity uses RingCentral **RingOut**. RingCentral rings the salesperson's own phone first (desk phone, the RingCentral app or a mobile), and when they answer it dials the customer, showing your company number. No softphone or browser plug-in is needed.
 
-1. In the RingCentral Developer Console, create a **REST API app** with authentication **JWT auth flow** and the app permission **RingOut**.
+1. In the RingCentral Developer Console, create a **REST API app** with authentication **JWT auth flow** and the app permissions **RingOut**, **Read Call Log** and **Read Accounts** (the last two for the call log below).
 2. As the RingCentral user the CRM should place calls as (typically an admin or a dedicated "CRM" user), create a **JWT credential** and authorise it for the app.
 3. Set `TELEPHONY_PROVIDER=ringcentral`, `RINGCENTRAL_CLIENT_ID`, `RINGCENTRAL_CLIENT_SECRET` and `RINGCENTRAL_JWT`. Optionally set `RINGCENTRAL_CALLER_ID` (a number on that RingCentral user that customers should see) and `RINGCENTRAL_PLAY_PROMPT=true` (the salesperson presses 1 before the customer is dialled, so calls never connect to their voicemail). For the RingCentral sandbox, set `RINGCENTRAL_SERVER_URL=https://platform.devtest.ringcentral.com`.
-4. Restart the API and worker. Each salesperson enters their own phone number under **Account → Security, 2FA & phone**.
+4. Restart the API and worker. Each salesperson enters their own phone number under **My account → My phone for calls**.
 
 Only numbers saved on the opportunity, its customer or its contacts can be dialled, so the CRM can't be used as an open dialler. The worker follows each call every few seconds. When it ends, the call is written to the opportunity timeline once (outcome and approximate duration), and an answered call counts as contact with the customer. Recording is not enabled.
+
+**Call log.** Every five minutes the worker also imports the company's RingCentral call log, so calls nobody started from the CRM show up too: inbound calls, missed calls, and calls made from desk phones or the RingCentral app. The JWT user needs to be a RingCentral **administrator** (the company call log is account-wide). RingCentral users are matched to CRM users by email address, so each person's RingCentral login email must be the same as their CRM email. Each call is matched by the customer's number to customers, their contacts and leads, using the same rules as email (one open deal, or the deal owned by the person on the call, or the customer only), and logged on the timeline once. A missed call from a customer creates a high-priority "Call back" task for the deal's owner. Click-to-calls are matched to their call-log record (which gives their exact length) rather than logged twice. Calls from numbers that match no customer are kept but don't appear on any timeline.
 
 Without RingCentral (`TELEPHONY_PROVIDER=manual`, the default), **Call** opens the device's dialler (`tel:` link) and then asks the user for the outcome, length and notes.
 

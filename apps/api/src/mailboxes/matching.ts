@@ -1,11 +1,10 @@
+import { OPEN_DEAL, pickDeal } from "../common/linking";
 import type { Db } from "../common/prisma.service";
 
 export interface EmailLink {
   customerId: string | null;
   opportunityId: string | null;
 }
-
-const OPEN = { outcome: "open", active: true } as const;
 
 /**
  * Which customer and deal an email belongs to:
@@ -37,16 +36,12 @@ export async function matchEmail(db: Db, input: { mailboxId: string; ownerId: st
   });
   const customerIds = customers.map((c) => c.id);
   const deals = await db.opportunity.findMany({
-    where: { ...OPEN, OR: [...(customerIds.length ? [{ customerId: { in: customerIds } }] : []), { customerId: null, email: { in: addresses, mode: "insensitive" as const } }] },
+    where: { ...OPEN_DEAL, OR: [...(customerIds.length ? [{ customerId: { in: customerIds } }] : []), { customerId: null, email: { in: addresses, mode: "insensitive" as const } }] },
     select: { id: true, customerId: true, ownerId: true },
     take: 50,
   });
 
-  let deal = deals.length === 1 ? deals[0] : undefined;
-  if (!deal && deals.length > 1) {
-    const owned = deals.filter((d) => d.ownerId === input.ownerId);
-    if (owned.length === 1) deal = owned[0];
-  }
+  const deal = pickDeal(deals, input.ownerId);
   if (deal) return { opportunityId: deal.id, customerId: deal.customerId };
   return { opportunityId: null, customerId: customerIds.length === 1 ? customerIds[0] : null };
 }

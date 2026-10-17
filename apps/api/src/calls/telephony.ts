@@ -154,4 +154,116 @@ export class RingCentralTelephony implements TelephonyProvider {
     // Only possible while the salesperson's phone is still ringing.
     await this.call("DELETE", `/restapi/v1.0/account/~/extension/~/ring-out/${encodeURIComponent(id)}`);
   }
+
+  /** Company users and their emails, to match extensions to CRM users (needs "Read Accounts"). */
+  async extensions() {
+    const out: { id: string; email: string | null }[] = [];
+    let path: string | null = "/restapi/v1.0/account/~/extension?type=User&status=Enabled&perPage=1000";
+    while (path) {
+      const res: { status: number; body: ExtensionPage | null } = await this.call<ExtensionPage>("GET", path);
+      const { status, body } = res;
+      if (status >= 300) throw new Error(`RingCentral extension list failed (HTTP ${status})`);
+      for (const r of body?.records ?? []) out.push({ id: String(r.id), email: r.contact?.email?.toLowerCase() ?? null });
+      path = body?.navigation?.nextPage?.uri ? new URL(body.navigation.nextPage.uri).pathname + new URL(body.navigation.nextPage.uri).search : null;
+    }
+    return out;
+  }
+
+  /** Every call on the account in the window, from the company call log (needs "Read Call Log"). */
+  async callLog(from: Date, to: Date) {
+    const out: CallLogRecord[] = [];
+    let page = 1;
+    for (;;) {
+      const q = new URLSearchParams({ view: "Simple", type: "Voice", dateFrom: from.toISOString(), dateTo: to.toISOString(), perPage: "250", page: String(page), showBlocked: "false" });
+      const { status, body } = await this.call<{ records?: RcCallLogRecord[]; navigation?: { nextPage?: unknown } }>("GET", `/restapi/v1.0/account/~/call-log?${q}`);
+      if (status >= 300) throw new Error(`RingCentral call log failed (HTTP ${status})`);
+      for (const r of body?.records ?? []) out.push(toCallLogRecord(r));
+      if (!body?.navigation?.nextPage || page >= 40) break;
+      page++;
+    }
+    return out;
+  }
+}
+
+// --- Call log ---------------------------------------------------------------------------------
+
+/** One finished call from the phone system's call log (any phone: desk, app, mobile app). */
+export interface CallLogRecord {
+  id: string;
+  sessionId: string | null;
+  direction: "inbound" | "outbound";
+  /** The customer's side of the call. */
+  counterpart: string | null;
+  /** Our side: the company number called (inbound) or the number we called from (outbound). */
+  ourNumber: string | null;
+  /** The phone-system extension that made or took the call, if any. */
+  extensionId: string | null;
+  startedAt: Date;
+  durationSec: number;
+  status: CallStatus;
+  /** Plain-language result, e.g. "Missed" or "Voicemail". */
+  outcome: string | null;
+  recording: { id: string; contentUri: string } | null;
+}
+
+/** A phone system whose call log the CRM imports (RingCentral). */
+export interface CallLogSource {
+  extensions(): Promise<{ id: string; email: string | null }[]>;
+  callLog(from: Date, to: Date): Promise<CallLogRecord[]>;
+}
+
+export const isCallLogSource = (p: TelephonyProvider): p is TelephonyProvider & CallLogSource => typeof (p as Partial<CallLogSource>).callLog === "function";
+
+interface ExtensionPage {
+  records?: { id: string | number; contact?: { email?: string } }[];
+  navigation?: { nextPage?: { uri: string } };
+}
+
+interface RcParty {
+  phoneNumber?: string;
+  extensionId?: string;
+}
+interface RcCallLogRecord {
+  id: string;
+  sessionId?: string;
+  startTime: string;
+  duration?: number;
+  direction?: "Inbound" | "Outbound";
+  result?: string;
+  from?: RcParty;
+  to?: RcParty;
+  extension?: { id?: string | number };
+  recording?: { id: string | number; contentUri: string };
+}
+
+const CONNECTED = new Set(["Accepted", "Call connected", "Answered Not Accepted", "Reply"]);
+
+/** Maps a RingCentral call-log result to our status and wording. */
+export function mapCallLogResult(result: string | undefined, durationSec: number): { status: CallStatus; outcome: string | null } {
+  const r = result ?? "";
+  if (CONNECTED.has(r) || (durationSec > 0 && !["Missed", "Voicemail", "Busy", "Rejected", "No Answer"].includes(r))) return { status: "completed", outcome: null };
+  if (r === "Busy") return { status: "busy", outcome: "Busy" };
+  if (r === "Voicemail") return { status: "no_answer", outcome: "Left a voicemail" };
+  if (["Missed", "No Answer", "Hang Up", "Rejected", "Abandoned"].includes(r)) return { status: "no_answer", outcome: r === "Missed" ? "Missed" : "Not answered" };
+  return { status: "failed", outcome: r || null };
+}
+
+export function toCallLogRecord(r: RcCallLogRecord): CallLogRecord {
+  const inbound = r.direction === "Inbound";
+  const durationSec = r.duration ?? 0;
+  const ours = inbound ? r.to : r.from;
+  const { status, outcome } = mapCallLogResult(r.result, durationSec);
+  return {
+    id: String(r.id),
+    sessionId: r.sessionId ? String(r.sessionId) : null,
+    direction: inbound ? "inbound" : "outbound",
+    counterpart: (inbound ? r.from : r.to)?.phoneNumber ?? null,
+    ourNumber: ours?.phoneNumber ?? null,
+    extensionId: ours?.extensionId ? String(ours.extensionId) : r.extension?.id != null ? String(r.extension.id) : null,
+    startedAt: new Date(r.startTime),
+    durationSec,
+    status,
+    outcome,
+    recording: r.recording ? { id: String(r.recording.id), contentUri: r.recording.contentUri } : null,
+  };
 }

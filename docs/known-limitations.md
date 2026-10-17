@@ -12,7 +12,7 @@ These are deliberate gaps or follow-up work. Nothing here pretends to work when 
 | Accounting integration | CSV only | `GET /api/reports/commissions.csv` (formula-safe) for import into the accounting system. |
 | Inbound WhatsApp | Manual logging | Staff log inbound WhatsApp messages on the timeline (which drives the unanswered-message reminders). Email is two-way through each person's connected Outlook or Gmail mailbox; WhatsApp (Meta Cloud API) is outbound only. |
 | Email attachments and HTML | Plain text only | Synced emails are shown as plain text, and attachments are listed but opened in Outlook or Gmail. Shared mailboxes (e.g. sales@) can't be connected yet; mail is polled every two minutes rather than pushed. |
-| Inbound calls and call recording | Not built | Outbound click-to-call only (RingCentral RingOut, or manual). Inbound calls and RingCentral call-log sync aren't imported; recording is off (it needs consent notices). |
+| Call recording and live call pop-ups | Not built | RingCentral calls are imported from the call log every five minutes (inbound, missed, desk phone and app), and click-to-call works through RingOut. Recordings aren't imported (they need consent notices), and there's no pop-up while a call is ringing yet. |
 | Staff audio/video calls | Not built | Internal chat only. |
 | Notifications by email or push | In-app only | Bell notifications, plus reminders for tasks with a reminder time. |
 | API keys for machine clients | Not built | Session-based API for users; HMAC-signed endpoints for website leads and e-signature events. |

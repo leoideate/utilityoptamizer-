@@ -25,6 +25,8 @@ export async function registerSchedules(env: Env) {
   await q.upsertJobScheduler("retention", { pattern: "30 2 * * 0", tz: TZ }, { name: "retention", data: {} });
   // Connected mailboxes are polled every two minutes (one deduplicated job per mailbox).
   await q.upsertJobScheduler("mailbox-sync", { pattern: "*/2 * * * *", tz: TZ }, { name: "mail-sync", data: {} });
+  // Calls from the RingCentral call log (inbound, missed, desk phones and the app) every five minutes.
+  if (env.TELEPHONY_PROVIDER === "ringcentral") await q.upsertJobScheduler("call-log-sync", { pattern: "*/5 * * * *", tz: TZ }, { name: "call-log", data: {} });
   await q.close();
 }
 
@@ -58,6 +60,8 @@ export async function startWorkers(app: INestApplicationContext): Promise<() => 
             return retention.run();
           case "mail-sync":
             return mailboxes.enqueueSyncAll();
+          case "call-log":
+            return calls.syncCallLog();
           default:
             throw new Error(`Unknown automation job ${job.name}`);
         }

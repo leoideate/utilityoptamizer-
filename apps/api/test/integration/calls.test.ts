@@ -139,3 +139,76 @@ describe("click-to-call with RingCentral", () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe("RingCentral call-log sync", () => {
+  let n = 0;
+  /** A deal whose customer has a phone number no other test uses. */
+  async function dealWithPhone() {
+    const phone = `087 900 ${String(1000 + ++n)}`;
+    const oppId = await fx.createOpportunity(sales.client, "electricity", { phone, companyName: `Caller ${n} Ltd` });
+    support.expectStatus(await sales.client.post(`/opportunities/${oppId}/customer/create`), 201);
+    return { oppId, e164: `+35387900${1000 + n}` };
+  }
+  const callTimeline = (opportunityId: string) => t.prisma.timelineEntry.findMany({ where: { opportunityId, kind: "call" }, orderBy: { createdAt: "asc" } });
+
+  beforeAll(() => {
+    rc.extensions = [{ id: "101", email: sales.user.email }];
+  });
+
+  it("maps extensions by email, imports an inbound call onto the deal, and logs it once", async () => {
+    const d = await dealWithPhone();
+    rc.logCall({ direction: "Inbound", from: d.e164, to: "+35315550000", extensionId: "101", duration: 125, startTime: new Date(Date.now() - 60_000) });
+    expect(await calls.syncCallLog()).toMatchObject({ imported: 1, matched: 0 });
+    expect((await t.prisma.user.findUniqueOrThrow({ where: { id: sales.user.id } })).ringcentralExtensionId).toBe("101");
+
+    const call = await t.prisma.callLog.findFirstOrThrow({ where: { opportunityId: d.oppId } });
+    expect(call).toMatchObject({ direction: "inbound", userId: sales.user.id, toNumber: d.e164, agentNumber: "+35315550000", status: "completed", durationSec: 125, provider: "ringcentral" });
+    const entries = await callTimeline(d.oppId);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ direction: "inbound", actorId: sales.user.id, body: `Inbound call from ${d.e164} · Connected · 2 min 5 s.` });
+    expect((await t.prisma.opportunity.findUniqueOrThrow({ where: { id: d.oppId } })).lastContactAt).not.toBeNull();
+
+    // The next run re-reads an overlapping window: nothing is imported twice.
+    expect(await calls.syncCallLog()).toMatchObject({ imported: 0 });
+    expect(await callTimeline(d.oppId)).toHaveLength(1);
+    expect(rc.callLogRequests.at(-1)!.get("view")).toBe("Simple");
+  });
+
+  it("logs a missed call and gives the deal owner a call-back task", async () => {
+    const d = await dealWithPhone();
+    const id = rc.logCall({ direction: "Inbound", from: d.e164, to: "+35315550000", extensionId: "999", result: "Missed" });
+    await calls.syncCallLog();
+    const call = await t.prisma.callLog.findUniqueOrThrow({ where: { rcRecordId: id } });
+    expect(call).toMatchObject({ userId: null, status: "no_answer", opportunityId: d.oppId });
+    expect((await callTimeline(d.oppId))[0].body).toBe(`Missed call from ${d.e164}.`);
+    const task = await t.prisma.activity.findFirstOrThrow({ where: { opportunityId: d.oppId, automationKey: `missed_call:${call.id}` } });
+    expect(task).toMatchObject({ type: "call", status: "open", priority: "high", ownerId: sales.user.id, summary: `Call back ${d.e164}` });
+  });
+
+  it("attaches a click-to-call to its call-log record instead of logging it twice", async () => {
+    const oppId = await opportunityWithContact();
+    rc.script(["Success", "Success"], ["Success", "Finished", "Success"]);
+    const started = support.expectStatus(await sales.client.post(`/opportunities/${oppId}/calls`, { number: "087 123 4567" }), 201).body;
+    await followCall(started.call.id);
+    expect(await callTimeline(oppId)).toHaveLength(1);
+
+    rc.logCall({ direction: "Outbound", from: "+35315551234", to: "+353871234567", extensionId: "101", duration: 42, startTime: new Date() });
+    expect(await calls.syncCallLog()).toMatchObject({ imported: 0, matched: 1 });
+    const call = await t.prisma.callLog.findUniqueOrThrow({ where: { id: started.call.id } });
+    expect(call.rcRecordId).not.toBeNull();
+    expect(call.durationSec).toBe(42);
+    expect(await t.prisma.callLog.count({ where: { opportunityId: oppId } })).toBe(1);
+    expect(await callTimeline(oppId)).toHaveLength(1);
+  });
+
+  it("links a lead's number to the lead, and keeps calls from unknown numbers off every timeline", async () => {
+    const leadId = await fx.createOpportunity(sales.client, "gas", { phone: "087 911 2222", companyName: "Lead Only Ltd" });
+    rc.logCall({ direction: "Inbound", from: "+353879112222", to: "+35315550000", extensionId: "101", duration: 30 });
+    const unknown = rc.logCall({ direction: "Inbound", from: "+447700900123", to: "+35315550000", extensionId: "101", duration: 10 });
+    await calls.syncCallLog();
+    expect(await t.prisma.callLog.findFirstOrThrow({ where: { opportunityId: leadId } })).toMatchObject({ customerId: null, direction: "inbound" });
+    const stranger = await t.prisma.callLog.findUniqueOrThrow({ where: { rcRecordId: unknown } });
+    expect(stranger).toMatchObject({ opportunityId: null, customerId: null, toNumber: "+447700900123" });
+    expect(await t.prisma.timelineEntry.count({ where: { data: { path: ["callId"], equals: stranger.id } } })).toBe(0);
+  });
+});

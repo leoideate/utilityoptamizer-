@@ -17,6 +17,30 @@ export class MockRingCentral {
   private readonly calls = new Map<string, { script: Status[]; step: number; cancelled: boolean }>();
   readonly ringOuts: { from: string; to: string; callerId?: string; playPrompt?: boolean }[] = [];
   tokenRequests = 0;
+  /** Company users (extensions) with their emails. */
+  extensions: { id: string; email: string }[] = [];
+  /** The account call log, newest last. */
+  readonly callLog: Record<string, unknown>[] = [];
+  callLogRequests: URLSearchParams[] = [];
+  private nextRecord = 5000;
+
+  /** Adds a finished call to the account call log; returns its record id. */
+  logCall(c: { direction: "Inbound" | "Outbound"; from: string; to: string; extensionId?: string; result?: string; duration?: number; startTime?: Date; recording?: { id: string; contentUri: string } }) {
+    const id = String(++this.nextRecord);
+    const inbound = c.direction === "Inbound";
+    this.callLog.push({
+      id,
+      sessionId: `s-${id}`,
+      startTime: (c.startTime ?? new Date()).toISOString(),
+      duration: c.duration ?? 0,
+      direction: c.direction,
+      result: c.result ?? (c.duration ? "Call connected" : "Missed"),
+      from: { phoneNumber: c.from, ...(inbound ? {} : { extensionId: c.extensionId }) },
+      to: { phoneNumber: c.to, ...(inbound ? { extensionId: c.extensionId } : {}) },
+      ...(c.recording ? { recording: c.recording } : {}),
+    });
+    return id;
+  }
 
   /** The statuses the next RingOut will go through. */
   script(...steps: [caller: string, callee: string, call?: string][]) {
@@ -41,6 +65,23 @@ export class MockRingCentral {
           return json(200, { access_token: "rc-access", expires_in: 3600 });
         }
         if (req.headers.authorization !== "Bearer rc-access") return json(401, { message: "Unauthorized" });
+        if (url.startsWith("/restapi/v1.0/account/~/extension?") && req.method === "GET") {
+          return json(200, { records: this.extensions.map((e) => ({ id: e.id, contact: { email: e.email } })), navigation: {} });
+        }
+        if (url.startsWith("/restapi/v1.0/account/~/call-log?") && req.method === "GET") {
+          const q = new URLSearchParams(url.slice(url.indexOf("?") + 1));
+          this.callLogRequests.push(q);
+          const from = new Date(q.get("dateFrom")!).getTime();
+          const to = new Date(q.get("dateTo")!).getTime();
+          const inWindow = this.callLog.filter((r) => {
+            const t = new Date(r.startTime as string).getTime();
+            return t >= from && t <= to;
+          });
+          const perPage = Number(q.get("perPage") ?? 100);
+          const page = Number(q.get("page") ?? 1);
+          const records = inWindow.slice((page - 1) * perPage, page * perPage);
+          return json(200, { records, navigation: page * perPage < inWindow.length ? { nextPage: { uri: "next" } } : {} });
+        }
         const base = "/restapi/v1.0/account/~/extension/~/ring-out";
         if (url === base && req.method === "POST") {
           const b = JSON.parse(raw);
