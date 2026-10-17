@@ -1,6 +1,0 @@
-interface:
-  display_name: "Utilityoptamizer"
-  short_description: "Repo-specific patterns and workflows for utilityoptamizer-"
-  default_prompt: "Use the utilityoptamizer- repo skill to follow existing architecture, testing, and workflow conventions."
-policy:
-  allow_implicit_invocation: true

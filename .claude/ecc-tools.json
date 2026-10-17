@@ -151,14 +151,7 @@
   ],
   "managedFiles": [
     ".claude/skills/utilityoptamizer-/SKILL.md",
-    ".agents/skills/utilityoptamizer-/SKILL.md",
-    ".agents/skills/utilityoptamizer-/agents/openai.yaml",
     ".claude/identity.json",
-    ".codex/config.toml",
-    ".codex/AGENTS.md",
-    ".codex/agents/explorer.toml",
-    ".codex/agents/reviewer.toml",
-    ".codex/agents/docs-researcher.toml",
     ".claude/homunculus/instincts/inherited/utilityoptamizer--instincts.yaml",
     ".claude/commands/database-migration.md",
     ".claude/commands/feature-development.md"
@@ -166,14 +159,7 @@
   "packageFiles": {
     "runtime-core": [
       ".claude/skills/utilityoptamizer-/SKILL.md",
-      ".agents/skills/utilityoptamizer-/SKILL.md",
-      ".agents/skills/utilityoptamizer-/agents/openai.yaml",
       ".claude/identity.json",
-      ".codex/config.toml",
-      ".codex/AGENTS.md",
-      ".codex/agents/explorer.toml",
-      ".codex/agents/reviewer.toml",
-      ".codex/agents/docs-researcher.toml",
       ".claude/homunculus/instincts/inherited/utilityoptamizer--instincts.yaml"
     ],
     "workflow-pack": [
@@ -184,14 +170,7 @@
   "moduleFiles": {
     "runtime-core": [
       ".claude/skills/utilityoptamizer-/SKILL.md",
-      ".agents/skills/utilityoptamizer-/SKILL.md",
-      ".agents/skills/utilityoptamizer-/agents/openai.yaml",
       ".claude/identity.json",
-      ".codex/config.toml",
-      ".codex/AGENTS.md",
-      ".codex/agents/explorer.toml",
-      ".codex/agents/reviewer.toml",
-      ".codex/agents/docs-researcher.toml",
       ".claude/homunculus/instincts/inherited/utilityoptamizer--instincts.yaml"
     ],
     "workflow-pack": [
@@ -207,43 +186,8 @@
     },
     {
       "moduleId": "runtime-core",
-      "path": ".agents/skills/utilityoptamizer-/SKILL.md",
-      "description": "Codex-facing copy of the generated repository skill."
-    },
-    {
-      "moduleId": "runtime-core",
-      "path": ".agents/skills/utilityoptamizer-/agents/openai.yaml",
-      "description": "Codex skill metadata so the repo skill appears cleanly in the skill interface."
-    },
-    {
-      "moduleId": "runtime-core",
       "path": ".claude/identity.json",
       "description": "Suggested identity.json baseline derived from repository conventions."
-    },
-    {
-      "moduleId": "runtime-core",
-      "path": ".codex/config.toml",
-      "description": "Repo-local Codex MCP and multi-agent baseline aligned with ECC defaults."
-    },
-    {
-      "moduleId": "runtime-core",
-      "path": ".codex/AGENTS.md",
-      "description": "Codex usage guide that points at the generated repo skill and workflow bundle."
-    },
-    {
-      "moduleId": "runtime-core",
-      "path": ".codex/agents/explorer.toml",
-      "description": "Read-only explorer role config for Codex multi-agent work."
-    },
-    {
-      "moduleId": "runtime-core",
-      "path": ".codex/agents/reviewer.toml",
-      "description": "Read-only reviewer role config focused on correctness and security."
-    },
-    {
-      "moduleId": "runtime-core",
-      "path": ".codex/agents/docs-researcher.toml",
-      "description": "Read-only docs researcher role config for API verification."
     },
     {
       "moduleId": "runtime-core",
@@ -279,11 +223,6 @@
         ".claude/commands/database-migration.md",
         ".claude/commands/feature-development.md"
       ]
-    },
-    "codex": {
-      "configPath": ".codex/config.toml",
-      "agentsGuidePath": ".codex/AGENTS.md",
-      "skillPath": ".agents/skills/utilityoptamizer-/SKILL.md"
     }
   }
 }

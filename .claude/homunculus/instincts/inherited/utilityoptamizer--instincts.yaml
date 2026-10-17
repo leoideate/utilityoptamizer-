@@ -1,111 +1,124 @@
 # Instincts generated from https://github.com/leoideate/utilityoptamizer-
-# Generated: 2026-10-17T08:56:30.279Z
+# Generated: 2026-10-17T08:56:30.279Z, corrected by hand against CLAUDE.md and the code.
 # Version: 2.0
 # NOTE: This file supplements (does not replace) any existing curated instincts.
-# High-confidence manually curated instincts should be preserved alongside these.
 
 ---
-id: utilityoptamizer--commit-length
+id: utilityoptamizer--commit-style
 trigger: "when writing a commit message"
-confidence: 0.6
+confidence: 0.8
 domain: git
 source: repo-analysis
 source_repo: https://github.com/leoideate/utilityoptamizer-
 ---
 
-# Utilityoptamizer  Commit Length
+# Utilityoptamizer Commit Style
 
 ## Action
 
-Write moderate-length commit messages (~54 characters)
+Write one imperative sentence (~50-80 characters) describing the outcome, with no conventional-commit prefix.
 
 ## Evidence
 
-- Average commit message length: 54 chars
-- Based on 10 commits
+- All commits follow this style, e.g. "Add supplier PDF forms, signature upload and change-of-supplier checks"
 
 ---
 id: utilityoptamizer--naming-files
 trigger: "when creating a new file"
-confidence: 0.8
+confidence: 0.9
 domain: code-style
 source: repo-analysis
 source_repo: https://github.com/leoideate/utilityoptamizer-
 ---
 
-# Utilityoptamizer  Naming Files
+# Utilityoptamizer Naming Files
 
 ## Action
 
-Use camelCase naming convention
+Use kebab-case file names; API files add a NestJS role suffix (`*.service.ts`, `*.controller.ts`, `*.module.ts`).
 
 ## Evidence
 
-- Analyzed file naming patterns in repository
-- Dominant pattern: camelCase
+- apps/web/src/components/forms/template-editor.tsx, apps/api/src/opportunities/access.service.ts
 
 ---
-id: utilityoptamizer--import-relative
+id: utilityoptamizer--imports
 trigger: "when importing modules"
-confidence: 0.75
+confidence: 0.85
 domain: code-style
 source: repo-analysis
 source_repo: https://github.com/leoideate/utilityoptamizer-
 ---
 
-# Utilityoptamizer  Import Relative
+# Utilityoptamizer Imports
 
 ## Action
 
-Use relative imports for project files
+In apps/web use the `@/` alias; in apps/api use relative imports; import domain code from `@uo/shared`. Never `import type` a constructor-injected class in the API.
 
 ## Evidence
 
-- Import analysis shows relative import pattern
-- Example: import { x } from '../lib/x'
+- 200+ `from "@/` imports in apps/web/src; CLAUDE.md (NestJS DI needs value imports)
 
 ---
 id: utilityoptamizer--export-style
 trigger: "when exporting from a module"
-confidence: 0.7
+confidence: 0.8
 domain: code-style
 source: repo-analysis
 source_repo: https://github.com/leoideate/utilityoptamizer-
 ---
 
-# Utilityoptamizer  Export Style
+# Utilityoptamizer Export Style
 
 ## Action
 
-Prefer named exports
+Prefer named exports; Next.js page files export only the default page component.
 
 ## Evidence
 
-- Export pattern analysis
-- Dominant style: named
+- Export pattern analysis; CLAUDE.md (page file rule)
 
 ---
-id: utilityoptamizer--arch-type-based
+id: utilityoptamizer--arch-feature-modules
 trigger: "when adding new code"
-confidence: 0.8
+confidence: 0.85
 domain: architecture
 source: repo-analysis
 source_repo: https://github.com/leoideate/utilityoptamizer-
 ---
 
-# Utilityoptamizer  Arch Type Based
+# Utilityoptamizer Feature Modules
 
 ## Action
 
-Place code in the appropriate type folder (components/, services/, utils/, etc.)
+Put API code in its feature module (`apps/api/src/<feature>/`) and shared rules, schemas and permissions in `packages/shared/src`; rebuild `@uo/shared` after changing it.
 
 ## Evidence
 
-- Type-based module organization detected
-- Folders: 
+- apps/api/src/{activities,auth,opportunities,forms,workflows}/; CLAUDE.md
 
 ---
-id: utilityoptamizer--test-framework
+id: utilityoptamizer--errors
+trigger: "when handling errors or rejecting a request"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/leoideate/utilityoptamizer-
+---
+
+# Utilityoptamizer Errors
+
+## Action
+
+Throw `RuleViolation(issues[])` for business rules and `Forbidden`/`NotFound`/`Conflict` otherwise; don't catch and rethrow generic errors.
+
+## Evidence
+
+- HttpErrorFilter mapping described in CLAUDE.md
+
+---
+id: utilityoptamizer--tests
 trigger: "when writing tests"
 confidence: 0.9
 domain: testing
@@ -113,56 +126,15 @@ source: repo-analysis
 source_repo: https://github.com/leoideate/utilityoptamizer-
 ---
 
-# Utilityoptamizer  Test Framework
+# Utilityoptamizer Tests
 
 ## Action
 
-Use jest as the test framework
+Jest (globals, `*.test.ts`) for shared unit tests and API unit/integration tests (`test/integration/`, real AppModule, `--runInBand`); Playwright + axe (`*.spec.ts`) in apps/web/e2e for UI flows.
 
 ## Evidence
 
-- Test framework detected: jest
-- File pattern: *.test.ts
-
----
-id: utilityoptamizer--test-naming
-trigger: "when creating a test file"
-confidence: 0.85
-domain: testing
-source: repo-analysis
-source_repo: https://github.com/leoideate/utilityoptamizer-
----
-
-# Utilityoptamizer  Test Naming
-
-## Action
-
-Name test files using the pattern: *.test.ts
-
-## Evidence
-
-- File pattern: *.test.ts
-- Consistent across test files
-
----
-id: utilityoptamizer--test-types
-trigger: "when planning tests for a feature"
-confidence: 0.7
-domain: testing
-source: repo-analysis
-source_repo: https://github.com/leoideate/utilityoptamizer-
----
-
-# Utilityoptamizer  Test Types
-
-## Action
-
-Write unit, integration, e2e tests to match project standards
-
-## Evidence
-
-- Test types detected: unit, integration, e2e
-- Coverage config: no
+- packages/shared/jest.config.js, apps/api/jest.config.js, apps/web/playwright.config.ts
 
 ---
 id: utilityoptamizer--workflow-database-migration
@@ -173,20 +145,15 @@ source: repo-analysis
 source_repo: https://github.com/leoideate/utilityoptamizer-
 ---
 
-# Utilityoptamizer  Workflow Database Migration
+# Utilityoptamizer Workflow Database Migration
 
 ## Action
 
-Follow the database-migration workflow:
-1. Create migration file
-2. Update schema definitions
-3. Generate/update types
+Follow `/database-migration`: edit `apps/api/prisma/schema.prisma`, add a new timestamped folder under `apps/api/prisma/migrations/` (extra constraints and append-only triggers in SQL), regenerate the Prisma client, then `node scripts/gen-field-dictionary.js`.
 
 ## Evidence
 
-- Workflow detected from commit patterns
-- Frequency: ~18x per month
-- Files: migrations/*, **/schema.*, **/types.ts
+- apps/api/prisma/migrations/*, CLAUDE.md (schema changes)
 
 ---
 id: utilityoptamizer--workflow-feature-development
@@ -197,18 +164,12 @@ source: repo-analysis
 source_repo: https://github.com/leoideate/utilityoptamizer-
 ---
 
-# Utilityoptamizer  Workflow Feature Development
+# Utilityoptamizer Workflow Feature Development
 
 ## Action
 
-Follow the feature-development workflow:
-1. Add feature implementation
-2. Add tests for feature
-3. Update documentation
+Follow `/feature-development`: shared rules first, then API with capability and row-level access checks plus audit, then web, then unit/integration/e2e tests and regenerated docs.
 
 ## Evidence
 
-- Workflow detected from commit patterns
-- Frequency: ~15x per month
-- Files: apps/api/prisma/*, apps/api/scripts/*, apps/api/src/activities/*
-
+- CLAUDE.md (architecture rules that span files)
