@@ -49,7 +49,8 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  transpilePackages: ["@uo/shared"],
+  // AWC UI (Material Design 3 web components) ships ESM with "use client" wrappers.
+  transpilePackages: ["@uo/shared", "@awc-ui/react", "@awc-ui/core"],
   outputFileTracingRoot: path.join(__dirname, "../.."),
   poweredByHeader: false,
   // Self-contained server bundle for the Docker image (apps/web/Dockerfile).

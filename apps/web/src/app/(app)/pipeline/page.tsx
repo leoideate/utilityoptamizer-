@@ -143,7 +143,7 @@ export default function PipelinePage() {
                   ))}
                   {col.count > col.cards.length && (
                     <li className="px-1 text-center text-xs text-muted">
-                      <Link className="hover:underline" href={`/opportunities?view=${view}&stage=${col.stage.key}`}>
+                      <Link className="inline-flex min-h-6 items-center hover:underline" href={`/opportunities?view=${view}&stage=${col.stage.key}`}>
                         +{col.count - col.cards.length} more
                       </Link>
                     </li>

@@ -2,11 +2,11 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
-import { Zap } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { Logo } from "@/components/brand";
 import { Button, Card, Field, Input } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api";
 
@@ -142,15 +142,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-6 px-4">
-      <div className="flex items-center gap-2">
-        <span className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-fg">
-          <Zap aria-hidden />
-        </span>
-        <div>
-          <p className="text-lg font-semibold leading-tight">Utility Optimizer</p>
-          <p className="text-sm text-muted">CRM</p>
-        </div>
-      </div>
+      <Logo size={56} product="CRM" />
       <h1 className="sr-only">Sign in</h1>
       <Suspense>
         <LoginForm />

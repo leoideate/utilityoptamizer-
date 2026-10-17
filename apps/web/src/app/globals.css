@@ -1,81 +1,187 @@
-@import "tailwindcss";
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+/* Tailwind's reset, minus the AWC UI elements (see tailwind-preflight.css). */
+@import "./tailwind-preflight.css" layer(base);
+@import "tailwindcss/utilities.css" layer(utilities);
 
 /*
- * Utility Optimizer visual identity: deep teal (trust, energy savings) with a warm amber accent.
- * Every colour is a token so light and dark themes stay in step.
+ * Material Design 3 (AWC UI) themed with the Utility Optimizer brand. The colour roles are a
+ * tonal-spot scheme generated from the brand teal #0b6b5d with material-color-utilities. They load
+ * after @awc-ui/core/css/tokens.css (imported first in app/layout.tsx), so they win. Dark mode
+ * follows the OS unless the user picks a theme (data-theme on <html>), which is also the attribute
+ * the components read.
+ *
+ * The CRM's own colour names (bg-surface, text-muted, bg-primary-soft...) map onto the Material
+ * roles further down, so every screen and component shares one palette.
  */
+
+/* Material Symbols, subset to the glyphs AWC components draw internally (fonts/material-symbols-glyphs.txt). */
+@font-face {
+  font-family: "Material Symbols Outlined";
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+  src: url("./fonts/material-symbols-outlined.woff2") format("woff2");
+}
+
 :root {
-  --bg: #f6f8f7;
-  --surface: #ffffff;
-  --surface-2: #eef3f1;
-  --border: #d9e2de;
-  --text: #13201c;
-  --muted: #55655f;
-  --primary: #0b6b5d;
-  --primary-hover: #095a4e;
-  --primary-fg: #ffffff;
-  --primary-soft: #e0f1ed;
+  --md-sys-color-primary: #036b5c;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #9ff2e0;
+  --md-sys-color-on-primary-container: #005045;
+  --md-sys-color-secondary: #4a635d;
+  --md-sys-color-on-secondary: #ffffff;
+  --md-sys-color-secondary-container: #cde8e0;
+  --md-sys-color-on-secondary-container: #334b46;
+  --md-sys-color-tertiary: #446278;
+  --md-sys-color-on-tertiary: #ffffff;
+  --md-sys-color-tertiary-container: #c9e6ff;
+  --md-sys-color-on-tertiary-container: #2b4a60;
+  --md-sys-color-error: #ba1a1a;
+  --md-sys-color-on-error: #ffffff;
+  --md-sys-color-error-container: #ffdad6;
+  --md-sys-color-on-error-container: #93000a;
+  --md-sys-color-background: #f5fbf7;
+  --md-sys-color-on-background: #171d1b;
+  --md-sys-color-surface: #f5fbf7;
+  --md-sys-color-on-surface: #171d1b;
+  --md-sys-color-surface-variant: #dae5e1;
+  --md-sys-color-on-surface-variant: #3f4946;
+  --md-sys-color-surface-container-lowest: #ffffff;
+  --md-sys-color-surface-container-low: #eff5f2;
+  --md-sys-color-surface-container: #e9efec;
+  --md-sys-color-surface-container-high: #e3eae6;
+  --md-sys-color-surface-container-highest: #dee4e1;
+  --md-sys-color-surface-dim: #d5dbd8;
+  --md-sys-color-surface-bright: #f5fbf7;
+  --md-sys-color-outline: #6f7976;
+  --md-sys-color-outline-variant: #bec9c5;
+  --md-sys-color-inverse-surface: #2b3230;
+  --md-sys-color-inverse-on-surface: #ecf2ef;
+  --md-sys-color-inverse-primary: #84d5c4;
+  --md-sys-color-surface-tint: #036b5c;
   --accent: #f2a516;
   --accent-soft: #fdf2d8;
-  --danger: #b42318;
-  --danger-soft: #fdeceb;
-  --success: #12733f;
-  --success-soft: #e3f4ea;
-  --warning: #9a5b00;
-  --warning-soft: #fdf3e1;
-  --info: #1d5fa8;
-  --info-soft: #e5eff9;
-  --ring: #0b6b5d;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0d1513;
-    --surface: #131e1b;
-    --surface-2: #1a2824;
-    --border: #2a3a35;
-    --text: #e6eeeb;
-    --muted: #9db0a9;
-    --primary: #3cc2a8;
-    --primary-hover: #5fd3bc;
-    --primary-fg: #06231d;
-    --primary-soft: #143630;
+    --md-sys-color-primary: #84d5c4;
+    --md-sys-color-on-primary: #00382f;
+    --md-sys-color-primary-container: #005045;
+    --md-sys-color-on-primary-container: #9ff2e0;
+    --md-sys-color-secondary: #b1ccc5;
+    --md-sys-color-on-secondary: #1c3530;
+    --md-sys-color-secondary-container: #334b46;
+    --md-sys-color-on-secondary-container: #cde8e0;
+    --md-sys-color-tertiary: #abcae4;
+    --md-sys-color-on-tertiary: #123348;
+    --md-sys-color-tertiary-container: #2b4a60;
+    --md-sys-color-on-tertiary-container: #c9e6ff;
+    --md-sys-color-error: #ffb4ab;
+    --md-sys-color-on-error: #690005;
+    --md-sys-color-error-container: #93000a;
+    --md-sys-color-on-error-container: #ffdad6;
+    --md-sys-color-success: #9dd5b0;
+    --md-sys-color-on-success: #003920;
+    --md-sys-color-success-container: #14512f;
+    --md-sys-color-on-success-container: #b8f0ce;
+    --md-sys-color-warning: #efc148;
+    --md-sys-color-on-warning: #402d00;
+    --md-sys-color-warning-container: #5c4200;
+    --md-sys-color-on-warning-container: #ffdf9b;
+    --md-sys-color-info: #a2c9fe;
+    --md-sys-color-on-info: #00325a;
+    --md-sys-color-info-container: #1e4975;
+    --md-sys-color-on-info-container: #d3e4ff;
+    --md-sys-color-background: #0e1513;
+    --md-sys-color-on-background: #dee4e1;
+    --md-sys-color-surface: #0e1513;
+    --md-sys-color-on-surface: #dee4e1;
+    --md-sys-color-surface-variant: #3f4946;
+    --md-sys-color-on-surface-variant: #bec9c5;
+    --md-sys-color-surface-container-lowest: #090f0e;
+    --md-sys-color-surface-container-low: #171d1b;
+    --md-sys-color-surface-container: #1b211f;
+    --md-sys-color-surface-container-high: #252b29;
+    --md-sys-color-surface-container-highest: #303634;
+    --md-sys-color-surface-dim: #0e1513;
+    --md-sys-color-surface-bright: #343b39;
+    --md-sys-color-outline: #89938f;
+    --md-sys-color-outline-variant: #3f4946;
+    --md-sys-color-inverse-surface: #dee4e1;
+    --md-sys-color-inverse-on-surface: #2b3230;
+    --md-sys-color-inverse-primary: #036b5c;
+    --md-sys-color-surface-tint: #84d5c4;
+    --md-sys-elevation-1: 0px 1px 2px rgba(0, 0, 0, 0.5), 0px 1px 3px 1px rgba(0, 0, 0, 0.25);
+    --md-sys-elevation-2: 0px 1px 2px rgba(0, 0, 0, 0.5), 0px 2px 6px 2px rgba(0, 0, 0, 0.25);
+    --md-sys-elevation-3: 0px 4px 8px 3px rgba(0, 0, 0, 0.25), 0px 1px 3px rgba(0, 0, 0, 0.5);
     --accent: #f5b942;
     --accent-soft: #3a2c10;
-    --danger: #f2817a;
-    --danger-soft: #3b1715;
-    --success: #5fcf8e;
-    --success-soft: #133222;
-    --warning: #f0b45c;
-    --warning-soft: #36260d;
-    --info: #79aeea;
-    --info-soft: #14263b;
-    --ring: #3cc2a8;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #0d1513;
-  --surface: #131e1b;
-  --surface-2: #1a2824;
-  --border: #2a3a35;
-  --text: #e6eeeb;
-  --muted: #9db0a9;
-  --primary: #3cc2a8;
-  --primary-hover: #5fd3bc;
-  --primary-fg: #06231d;
-  --primary-soft: #143630;
+  --md-sys-color-primary: #84d5c4;
+  --md-sys-color-on-primary: #00382f;
+  --md-sys-color-primary-container: #005045;
+  --md-sys-color-on-primary-container: #9ff2e0;
+  --md-sys-color-secondary: #b1ccc5;
+  --md-sys-color-on-secondary: #1c3530;
+  --md-sys-color-secondary-container: #334b46;
+  --md-sys-color-on-secondary-container: #cde8e0;
+  --md-sys-color-tertiary: #abcae4;
+  --md-sys-color-on-tertiary: #123348;
+  --md-sys-color-tertiary-container: #2b4a60;
+  --md-sys-color-on-tertiary-container: #c9e6ff;
+  --md-sys-color-error: #ffb4ab;
+  --md-sys-color-on-error: #690005;
+  --md-sys-color-error-container: #93000a;
+  --md-sys-color-on-error-container: #ffdad6;
+  --md-sys-color-background: #0e1513;
+  --md-sys-color-on-background: #dee4e1;
+  --md-sys-color-surface: #0e1513;
+  --md-sys-color-on-surface: #dee4e1;
+  --md-sys-color-surface-variant: #3f4946;
+  --md-sys-color-on-surface-variant: #bec9c5;
+  --md-sys-color-surface-container-lowest: #090f0e;
+  --md-sys-color-surface-container-low: #171d1b;
+  --md-sys-color-surface-container: #1b211f;
+  --md-sys-color-surface-container-high: #252b29;
+  --md-sys-color-surface-container-highest: #303634;
+  --md-sys-color-surface-dim: #0e1513;
+  --md-sys-color-surface-bright: #343b39;
+  --md-sys-color-outline: #89938f;
+  --md-sys-color-outline-variant: #3f4946;
+  --md-sys-color-inverse-surface: #dee4e1;
+  --md-sys-color-inverse-on-surface: #2b3230;
+  --md-sys-color-inverse-primary: #036b5c;
+  --md-sys-color-surface-tint: #84d5c4;
   --accent: #f5b942;
   --accent-soft: #3a2c10;
-  --danger: #f2817a;
-  --danger-soft: #3b1715;
-  --success: #5fcf8e;
-  --success-soft: #133222;
-  --warning: #f0b45c;
-  --warning-soft: #36260d;
-  --info: #79aeea;
-  --info-soft: #14263b;
-  --ring: #3cc2a8;
+}
+
+/* The CRM's colour names, defined from the Material roles. */
+:root {
+  --bg: var(--md-sys-color-surface);
+  --surface: var(--md-sys-color-surface-container-lowest);
+  --surface-2: var(--md-sys-color-surface-container);
+  --border: var(--md-sys-color-outline-variant);
+  --text: var(--md-sys-color-on-surface);
+  --muted: var(--md-sys-color-on-surface-variant);
+  --primary: var(--md-sys-color-primary);
+  --primary-hover: color-mix(in srgb, var(--md-sys-color-primary) 88%, var(--md-sys-color-on-surface));
+  --primary-fg: var(--md-sys-color-on-primary);
+  --primary-soft: var(--md-sys-color-secondary-container);
+  --danger: var(--md-sys-color-error);
+  --danger-soft: var(--md-sys-color-error-container);
+  --success: var(--md-sys-color-success);
+  --success-soft: var(--md-sys-color-success-container);
+  --warning: var(--md-sys-color-warning);
+  --warning-soft: var(--md-sys-color-warning-container);
+  --info: var(--md-sys-color-info);
+  --info-soft: var(--md-sys-color-info-container);
+  --ring: var(--md-sys-color-primary);
 }
 
 @theme inline {
@@ -100,7 +206,10 @@
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
   --color-ring: var(--ring);
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: Roboto, ui-sans-serif, system-ui, sans-serif;
+  --radius-lg: var(--md-sys-shape-corner-small);
+  --radius-xl: var(--md-sys-shape-corner-medium);
+  --shadow-sm: var(--md-sys-elevation-1);
 }
 
 html,
@@ -110,7 +219,6 @@ body {
 }
 
 body {
-  font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
 }
 
@@ -121,4 +229,49 @@ body {
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* Material components stretch to their container in forms, like the native inputs they replace. */
+md-text-field,
+md-select {
+  display: block;
+  width: 100%;
+}
+
+/* Dialog widths (the CRM's standard and wide dialogs). */
+md-dialog.uo-dialog::part(container) {
+  width: min(32rem, calc(100vw - 2rem));
+  max-width: none;
+}
+md-dialog.uo-dialog-wide::part(container) {
+  width: min(48rem, calc(100vw - 2rem));
+}
+
+/* The tab strip scrolls inside the component; clip the host so it never widens the page. */
+md-tabs {
+  display: block;
+  overflow-x: hidden;
+}
+
+/* Loading logo: each dot of the ring brightens in turn, so a wave travels around it. */
+@keyframes uo-logo-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.7);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.uo-logo-animated circle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: uo-logo-pulse 1.4s ease-in-out infinite both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .uo-logo-animated circle {
+    animation: none;
+  }
 }

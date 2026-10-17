@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { type Page, expect, test } from "@playwright/test";
+import { type Locator, type Page, expect, test } from "@playwright/test";
 
 const PASSWORD = process.env.SEED_DEMO_PASSWORD ?? "ChangeMe-Demo-2026!";
 const users = {
@@ -28,6 +28,16 @@ async function signIn(page: Page, email: string) {
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("searchbox", { name: "Search" })).toBeVisible();
   sessions.set(email, await page.context().cookies());
+}
+
+/**
+ * Picks an option in a Material select: open it, then choose the option by its visible label.
+ * The select is found by its text box (its option list carries the same label).
+ */
+async function choose(scope: Page | Locator, label: string, option: string) {
+  await scope.getByRole("textbox", { name: label, exact: true }).click();
+  const page = "page" in scope ? scope.page() : scope;
+  await page.getByRole("option", { name: option, exact: true }).click();
 }
 
 /** Fails on serious or critical WCAG 2.1 AA violations. */
@@ -61,7 +71,7 @@ test("salesperson captures an electricity lead and sees electricity-only fields"
   await page.getByRole("link", { name: "New opportunity" }).click();
   const name = `E2E Bakery ${Date.now()}`;
   await page.getByLabel("Opportunity name").fill(name);
-  await page.getByLabel("Service", { exact: true }).selectOption("electricity");
+  await choose(page, "Service", "Electricity");
   await page.getByLabel("Business name").fill("E2E Bakery Ltd");
   await expectAccessible(page, "new opportunity");
   await page.getByRole("button", { name: "Create opportunity" }).click();
@@ -75,7 +85,7 @@ test("salesperson captures an electricity lead and sees electricity-only fields"
   await expect(page.getByText("Electricity: each site needs an MPRN.")).toBeVisible();
   await page.getByRole("button", { name: "Add site" }).click();
   await page.getByLabel("Address line 1").fill("1 Quay Street");
-  await page.getByLabel("Occupancy").selectOption("rented");
+  await choose(page, "Occupancy", "Rented premises");
   await expect(page.getByLabel("Landlord name")).toBeVisible();
   await page.getByRole("button", { name: "Save" }).click();
   await page.getByRole("button", { name: "Add meter" }).click();
@@ -91,7 +101,9 @@ test("salesperson captures an electricity lead and sees electricity-only fields"
   // Stage gate: a proposal needs nothing more for energy once there's a site, but Supplier Selected needs a supplier.
   await page.getByRole("button", { name: "More" }).click();
   await page.getByRole("menuitem", { name: "Supplier or Product Selected" }).click();
-  await expect(page.getByRole("dialog")).toContainText("Select the supplier.");
+  // The dialog's message is slotted content, so check it on the page while the dialog is open.
+  await expect(page.getByRole("alertdialog", { name: /Can't move to Supplier or Product Selected yet/ })).toBeVisible();
+  await expect(page.getByText("Select the supplier.")).toBeVisible();
 });
 
 test("a change of entity case shows its status and guided checklist, and records where the supply details came from", async ({ page }) => {
@@ -99,7 +111,7 @@ test("a change of entity case shows its status and guided checklist, and records
   await page.goto("/opportunities/new");
   const name = `E2E Change of entity ${Date.now()}`;
   await page.getByLabel("Opportunity name").fill(name);
-  await page.getByLabel("Service", { exact: true }).selectOption("electricity");
+  await choose(page, "Service", "Electricity");
   await page.getByLabel("Business name").fill("E2E Incoming Ltd");
   await page.getByRole("button", { name: "Create opportunity" }).click();
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
@@ -116,13 +128,12 @@ test("a change of entity case shows its status and guided checklist, and records
   await expect(page.getByRole("heading", { name: "Change of legal entity New request" })).toBeVisible();
   await expect(page.getByText("Incoming customer's IBAN on file")).toBeVisible();
   await page.getByRole("button", { name: "Case details" }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Request came by").selectOption("whatsapp");
-  await dialog.getByLabel("Supply point", { exact: true }).selectOption("new_supply_point");
-  await dialog.getByLabel("Where the MPRN/GPRN and address came from").fill("ESB Networks connection letter");
+  await choose(page, "Request came by", "WhatsApp");
+  await choose(page, "Supply point", "Supply point new to us");
+  await page.getByLabel("Where the MPRN/GPRN and address came from").fill("ESB Networks connection letter");
   await expectAccessible(page, "case details");
-  await dialog.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: /^Change of legal entity (Awaiting incoming details|Request received)$/ })).toBeVisible();
   await expect(page.getByText(/ESB Networks connection letter \(verified by/)).toBeVisible();
   await expectAccessible(page, "forms tab with case");
@@ -154,7 +165,7 @@ test("Worldpay opportunity shows the merchant workspace and hides energy section
   await signIn(page, users.sales);
   await page.goto("/opportunities/new");
   await page.getByLabel("Opportunity name").fill(`E2E Card payments ${Date.now()}`);
-  await page.getByLabel("Service", { exact: true }).selectOption("merchant_services");
+  await choose(page, "Service", "Merchant Services / Worldpay");
   await page.getByRole("button", { name: "Create opportunity" }).click();
   await expect(page.getByRole("tab", { name: /Worldpay/ })).toBeVisible();
   await expect(page.getByRole("tab", { name: /Energy/ })).toHaveCount(0);
@@ -205,7 +216,7 @@ test("won opportunities stay visible under All won and in the pipeline", async (
   await page.goto("/opportunities?view=all_won");
   await expect(page.getByRole("link", { name: "Quayside Bakery – electricity", exact: true })).toBeVisible();
   await page.goto("/pipeline");
-  await page.getByLabel("Whose opportunities").selectOption("all");
+  await choose(page, "Whose opportunities", "Everyone");
   await expect(page.getByRole("listitem", { name: /Live \/ Won/ })).toContainText("Quayside Bakery – electricity");
   await expectAccessible(page, "pipeline");
 });
@@ -252,7 +263,7 @@ test("colleagues chat in real time, with mentions in deal discussions", async ({
   // Sarah opens a direct message with Sean.
   await sarah.goto("/chat");
   await sarah.getByRole("button", { name: "New direct message" }).click();
-  await sarah.getByLabel("Colleague").selectOption({ label: "Sean Sales" });
+  await choose(sarah, "Colleague", "Sean Sales");
   await sarah.getByRole("button", { name: "Start conversation" }).click();
   await expectAccessible(sarah, "chat");
 
@@ -286,14 +297,14 @@ test("calling a customer without a phone system opens the dialler and logs the o
   await page.getByLabel("Search opportunities").fill("Doyle");
   await page.getByRole("link", { name: "Doyle Pharmacy – electricity" }).click();
   await page.getByRole("button", { name: "Call", exact: true }).click();
-  await expect(page.getByLabel("Number")).toContainText("+353875550199");
+  await expect(page.getByRole("textbox", { name: "Number", exact: true })).toHaveValue(/\+353875550199/);
   await expectAccessible(page, "call dialog");
   // Don't actually leave the page for tel: in the test browser.
   await page.evaluate(() => {
     Object.defineProperty(window, "location", { value: { ...window.location, set href(_v: string) {} }, configurable: true });
   }).catch(() => undefined);
   await page.getByRole("button", { name: "Dial on my phone" }).click();
-  await page.getByLabel("Outcome").selectOption("answered");
+  await choose(page, "Outcome", "Answered: we spoke");
   await page.getByLabel("Length (minutes)").fill("4");
   const note = `Sending latest bill ${Date.now()}`;
   await page.getByLabel("Notes").fill(note);

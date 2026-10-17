@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, Building2, CalendarCheck, ClipboardList, FileSignature, MessagesSquare, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Menu as MenuIcon, ScanLine, Search, Settings, Zap } from "lucide-react";
+import { Bell, Building2, CalendarCheck, ClipboardList, FileSignature, MessagesSquare, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Menu as MenuIcon, ScanLine, Search, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -10,9 +10,10 @@ import { api } from "@/lib/api";
 import { cn, ref, relative } from "@/lib/format";
 import { useChannels } from "@/lib/chat";
 import { useUser } from "@/lib/session";
-import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "./ui/overlays";
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "./ui/overlays";
 import { DESK_LABELS, type Desk } from "@uo/shared";
 import { useDesk } from "@/lib/desk";
+import { Logo } from "./brand";
 import { Button } from "./ui/primitives";
 
 /** Sales (office and field) capture and work leads; the back office completes deals after the sale. */
@@ -46,16 +47,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => setOpen(false), [pathname]);
 
   const nav = (
-    <nav aria-label="Main" className="flex flex-col gap-0.5 p-3">
+    <nav aria-label="Main" className="flex flex-col gap-0.5 px-3 py-2">
       {desks.length > 1 && (
-        <div role="group" aria-label="Interface" className="mb-2 grid grid-cols-2 gap-1 rounded-lg bg-surface-2 p-1">
+        <div role="group" aria-label="Interface" className="mb-3 grid grid-cols-2 overflow-hidden rounded-full border border-[var(--md-sys-color-outline)]">
           {desks.map((d) => (
             <button
               key={d}
               type="button"
               aria-pressed={desk === d}
               onClick={() => setDesk(d)}
-              className={cn("min-h-8 rounded-md px-2 text-xs font-medium text-muted", desk === d && "bg-surface text-text shadow-sm")}
+              className={cn("min-h-10 px-2 text-sm font-medium text-text first:border-r first:border-[var(--md-sys-color-outline)]", desk === d && "bg-[var(--md-sys-color-secondary-container)] text-[var(--md-sys-color-on-secondary-container)]")}
             >
               {DESK_LABELS[d]}
             </button>
@@ -73,9 +74,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             key={href}
             href={href}
             aria-current={active ? "page" : undefined}
-            className={cn("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-surface-2 hover:text-text", active && "bg-primary-soft text-primary hover:bg-primary-soft hover:text-primary")}
+            className={cn("flex min-h-14 items-center gap-3 rounded-full px-4 text-sm font-medium tracking-[0.1px] text-muted hover:bg-[color-mix(in_srgb,var(--md-sys-color-on-surface)_8%,transparent)]", active && "bg-[var(--md-sys-color-secondary-container)] text-[var(--md-sys-color-on-secondary-container)] hover:bg-[var(--md-sys-color-secondary-container)]")}
           >
-            <Icon className="size-4" aria-hidden />
+            <Icon className="size-5" aria-hidden />
             {label}
             {href === "/chat" && unread > 0 && (
               <span className="ml-auto rounded-full bg-primary px-1.5 text-xs font-semibold leading-5 text-primary-fg" aria-label={`${unread} unread`}>
@@ -93,21 +94,21 @@ export function AppShell({ children }: { children: ReactNode }) {
       <a href="#main" className="sr-only z-50 rounded bg-surface px-3 py-2 focus:not-sr-only focus:fixed focus:left-2 focus:top-2">
         Skip to content
       </a>
-      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-border bg-surface lg:flex">
+      <aside className="sticky top-0 hidden h-dvh w-72 shrink-0 flex-col bg-[var(--md-sys-color-surface-container-low)] lg:flex">
         <Brand />
         {nav}
       </aside>
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 w-64 border-r border-border bg-surface">
+          <div className="absolute inset-0 bg-black/32" onClick={() => setOpen(false)} />
+          <aside className="absolute inset-y-0 left-0 w-72 rounded-r-[var(--md-sys-shape-corner-large)] bg-[var(--md-sys-color-surface-container-low)]">
             <Brand />
             {nav}
           </aside>
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-surface/95 px-3 backdrop-blur sm:px-4">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-2 bg-bg px-3 sm:px-4">
           <Button variant="ghost" size="icon" className="shrink-0 lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
             <MenuIcon />
           </Button>
@@ -127,11 +128,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function Brand() {
   return (
-    <Link href="/" className="flex h-14 items-center gap-2 border-b border-border px-5">
-      <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-fg">
-        <Zap className="size-4" aria-hidden />
-      </span>
-      <span className="font-semibold">Utility Optimizer</span>
+    <Link href="/" className="flex h-20 items-center px-6" aria-label="Utility Optimizer CRM home">
+      <Logo size={40} />
     </Link>
   );
 }
@@ -166,7 +164,7 @@ function GlobalSearch() {
 
   return (
     <div ref={box} className="relative w-full max-w-md">
-      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
+      <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted" aria-hidden />
       <input
         type="search"
         value={q}
@@ -178,10 +176,10 @@ function GlobalSearch() {
         onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
         placeholder="Search customers, opportunities, MPRN…"
         aria-label="Search"
-        className="h-9 w-full rounded-lg border border-border bg-surface-2 pl-9 pr-3 text-sm"
+        className="h-12 w-full rounded-full bg-[var(--md-sys-color-surface-container-high)] pl-11 pr-4 text-base placeholder:text-muted"
       />
       {open && debounced.length >= 2 && (
-        <div className="absolute left-0 right-0 top-11 z-50 max-h-96 overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-lg" role="listbox" aria-label="Search results">
+        <div className="absolute left-0 right-0 top-14 z-50 max-h-96 overflow-y-auto rounded-[var(--md-sys-shape-corner-large)] bg-[var(--md-sys-color-surface-container-high)] p-1 shadow-[var(--md-sys-elevation-2)]" role="listbox" aria-label="Search results">
           {isFetching && !data && <p className="px-3 py-2 text-sm text-muted">Searching…</p>}
           {empty && <p className="px-3 py-2 text-sm text-muted">No matches for “{debounced}”.</p>}
           {!!data?.opportunities.length && <p className="px-3 pb-1 pt-2 text-xs font-medium text-muted">Opportunities</p>}
@@ -248,20 +246,13 @@ function Notifications() {
         {list.data?.slice(0, 15).map((x) => (
           <MenuItem
             key={x.id}
+            headline={x.title}
+            supportingText={[x.readAt ? null : "Unread", x.body, relative(x.createdAt)].filter(Boolean).join(" · ")}
             onSelect={() => {
               if (!x.readAt) markRead.mutate([x.id]);
               if (x.link) router.push(x.link);
             }}
-          >
-            <div className="flex w-72 items-start gap-2">
-              <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", x.readAt ? "bg-transparent" : "bg-primary")} aria-hidden />
-              <div className="min-w-0">
-                <p className={cn("truncate", !x.readAt && "font-medium")}>{x.title}</p>
-                {x.body && <p className="line-clamp-2 text-xs text-muted">{x.body}</p>}
-                <p className="text-xs text-muted">{relative(x.createdAt)}</p>
-              </div>
-            </div>
-          </MenuItem>
+          />
         ))}
       </MenuContent>
     </Menu>
@@ -294,11 +285,10 @@ function UserMenu() {
         </button>
       </MenuTrigger>
       <MenuContent>
-        <MenuLabel>
+        <div className="px-4 py-2">
           <span className="block text-sm font-medium text-text">{user.name}</span>
-          {user.roles.map((r) => ROLE_LABELS[r]).join(", ")}
-        </MenuLabel>
-        <MenuSeparator />
+          <span className="text-xs text-muted">{user.roles.map((r) => ROLE_LABELS[r]).join(", ")}</span>
+        </div>
         <MenuItem onSelect={() => router.push("/account")}>Security, 2FA &amp; phone</MenuItem>
         <MenuItem onSelect={() => setTheme("light")}>Light theme</MenuItem>
         <MenuItem onSelect={() => setTheme("dark")}>Dark theme</MenuItem>
