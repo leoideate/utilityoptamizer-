@@ -50,7 +50,11 @@ import { ReportsController } from "./reports/reports.controller";
 import { ReportsService } from "./reports/reports.service";
 import { ManualSignatureProvider, SIGNATURE_PROVIDER } from "./signatures/provider";
 import { FormsController } from "./forms/forms.controller";
+import { EmailSignaturesController } from "./email-signatures/email-signatures.controller";
+import { EmailSignaturesService } from "./email-signatures/email-signatures.service";
 import { FormsService } from "./forms/forms.service";
+import { SigningController } from "./forms/signing.controller";
+import { SigningService } from "./forms/signing.service";
 import { SignaturesController } from "./signatures/signatures.controller";
 import { SignaturesService } from "./signatures/signatures.service";
 import { WorkflowsController } from "./workflows/workflows.controller";
@@ -94,9 +98,6 @@ export class MerchantModule {}
 })
 export class SignaturesModule {}
 
-@Module({ imports: [DocumentsModule], controllers: [FormsController], providers: [FormsService] })
-export class FormsModule {}
-
 @Module({ imports: [OpportunitiesModule], controllers: [WorkflowsController], providers: [WorkflowsService] })
 export class WorkflowsModule {}
 
@@ -114,8 +115,11 @@ export class WorkflowsModule {}
 })
 export class OcrModule {}
 
+@Module({ controllers: [EmailSignaturesController], providers: [EmailSignaturesService], exports: [EmailSignaturesService] })
+export class EmailSignaturesModule {}
+
 @Module({
-  imports: [MailboxesModule],
+  imports: [MailboxesModule, EmailSignaturesModule],
   controllers: [IntegrationsController],
   providers: [
     IntegrationsService,
@@ -130,6 +134,10 @@ export class OcrModule {}
   exports: [IntegrationsService],
 })
 export class IntegrationsModule {}
+
+// After IntegrationsModule: online signing emails links through it.
+@Module({ imports: [DocumentsModule, IntegrationsModule], controllers: [FormsController, SigningController], providers: [FormsService, SigningService] })
+export class FormsModule {}
 
 @Module({ controllers: [ReportsController], providers: [ReportsService] })
 export class ReportsModule {}

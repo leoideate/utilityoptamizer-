@@ -14,6 +14,8 @@ export interface EmailMessage {
   to: string;
   subject: string;
   text: string;
+  /** Optional HTML version (e.g. with the sender's signature); sent alongside the text. */
+  html?: string;
   replyTo?: string;
 }
 
@@ -36,7 +38,7 @@ export class SmtpEmailSender implements EmailSender {
   }
   async send(msg: EmailMessage) {
     if (!this.transport) throw new NotConfigured("Email (SMTP_URL)");
-    const info = await this.transport.sendMail({ from: this.from, to: msg.to, subject: msg.subject, text: msg.text, replyTo: msg.replyTo });
+    const info = await this.transport.sendMail({ from: this.from, to: msg.to, subject: msg.subject, text: msg.text, html: msg.html, replyTo: msg.replyTo });
     return { messageId: String(info.messageId) };
   }
 }

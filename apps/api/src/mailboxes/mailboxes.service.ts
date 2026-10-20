@@ -440,7 +440,7 @@ export class MailboxesService {
       if (orig && orig.mailboxId === mb.id) inReplyTo = { providerMessageId: orig.providerMessageId, threadId: orig.threadId, internetMessageId: orig.internetMessageId };
     }
     try {
-      return await this.withToken(mb, (token) => this.providers[mb.provider].send(token, { from: mb.address, to: mail.to, subject: mail.subject, text: mail.text, inReplyTo }));
+      return await this.withToken(mb, (token) => this.providers[mb.provider].send(token, { from: mb.address, to: mail.to, subject: mail.subject, text: mail.text, html: mail.html, inReplyTo }));
     } catch (e) {
       if (e instanceof MailReauthRequired) throw new MailboxUnavailable();
       throw e;

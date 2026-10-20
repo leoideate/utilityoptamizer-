@@ -50,6 +50,15 @@ Setup uses the same app registrations as single sign-on, plus mail permissions:
 
 If someone changes their password or revokes access, their mailbox shows **Needs reconnecting** and they get a notification; sending from the CRM then asks them to reconnect.
 
+### Email signatures
+
+Email sent from the CRM (deal emails, replies and signing links) ends with the sender's signature, as HTML with a plain-text copy, through Outlook, Gmail or SMTP.
+
+- **Company template:** **Administration → Company email signature** sets the company name, address, phone, website, general email and optional small print, plus the logo. It starts with the letterhead logo and the Greenhills Road details. Uploading a different logo (PNG or JPEG, up to 1 MB) replaces it for everyone using the company logo; **Use the letterhead logo** goes back.
+- **Each person:** **My account → Email signature** starts from the template with their name. People can change anything: job title, phone, mobile, email, extra lines, colour, picture size, whether to show the company details, and the picture (company logo, their own uploaded picture, or none). The preview is exactly what recipients see. Turning the signature off sends plain text.
+- Pictures are served from `/api/public/email-images/<id>` so recipients' mail apps can show them. They're public by an unguessable id and are only ever signature pictures, never documents. Many mail apps hide pictures until the reader allows them; the text still shows.
+- The deal timeline records the message without the signature.
+
 ## Calling customers with RingCentral
 
 The **Call** button on an opportunity uses RingCentral **RingOut**. RingCentral rings the salesperson's own phone first (desk phone, the RingCentral app or a mobile), and when they answer it dials the customer, showing your company number. No softphone or browser plug-in is needed.
@@ -88,9 +97,9 @@ A user can hold several roles. The full permission table is in [security-matrix.
 
 Salespeople see the customers they created and those on deals they can see. If a salesperson enters details that match a customer they can't see, the duplicate warning shows only the company name; a manager links that customer to the deal.
 
-## Sales and back-office interfaces
+## One interface for sales and the back office
 
-Roles decide the interface: salespeople (including field agents) get the sales interface; Operations, Compliance and Finance get the back office; managers and administrators can switch. A deal is handed to the back office when it reaches **Supplier selected** (a task goes to the Operations user with the fewest open tasks). The interfaces only change what's shown: every permission is still enforced by the server from the security matrix.
+There is one interface for every role. The menu and Home show what a user's role allows (for example **Scan business card** needs permission to create opportunities, **Supplier forms** needs template management, and the **Work queue** on Home shows to those who can submit deals). A deal is handed to the back office when it reaches **Supplier selected** (a task goes to the Operations user with the fewest open tasks). Hiding a screen is only a convenience: every permission is still enforced by the server from the security matrix.
 
 ## Suppliers and pipeline (Administration → Suppliers & pipeline)
 
@@ -119,6 +128,8 @@ Before the first form is generated, set the **broker company name** (Administrat
 On a deal, the **Forms** tab fills the supplier's form from the CRM. Anything typed or changed is recorded against the form, and an IBAN that differs from the one on file must be confirmed. The generated PDF has no fillable fields left (so nothing can drop out when it's opened in Adobe), and the CRM reopens it to check every value and signature is present; a failed check blocks signing and submission.
 
 **Signatures** are uploaded as a photo or scan; the browser removes the paper background. The uploader records who signed, in what capacity and how they authorised it *for that form*, and the signed copy then needs **review by someone else** with document review rights. An approved form counts as the customer's signature for submission. Stored signatures are never reused automatically.
+
+**Online signing.** Instead of uploading, choose **Send for signature** next to a signature box. The signer is emailed a private link (`/sign/…`): they read the filled form, type their name, tick the consent, draw their signature with a finger, pen or mouse, and sign. They don't need a CRM account. When every box is signed, the CRM builds the signed copy and adds an *Electronic signature record* page with each signer's name, email, time (Europe/Dublin), IP address, browser, a SHA-256 fingerprint of the exact PDF they saw and the consent they agreed to. The form then goes to review as usual, and neither whoever uploaded a signature nor whoever sent a link can approve it. Links work once, expire after 14 days and are stored only as a hash. Sending a new link for the same box, **Send again** (which issues a new URL) or **Cancel link** stops the old one. Links are emailed through SMTP (`SMTP_URL`, `MAIL_FROM`). Without SMTP, the CRM shows the link once so it can be copied and sent by WhatsApp or from your own mailbox.
 
 **Cases (Forms tab and Cases in the menu)**: every energy deal is a case following its workflow brief: change of legal entity, change of supplier, renewal with the existing supplier, or a new supply. Its status (e.g. *Awaiting incoming details*, *Awaiting tenancy evidence*, *Sent*, *Accepted*, *Entity change confirmed*, *Completed*) is worked out from the evidence recorded, so a step can't be skipped. Sending is recorded separately from acceptance: **Record submission** keeps the recipient, channel, date, exact file versions and proof of delivery; **Record response** keeps acceptance (with the external reference), changes required or rejection (with a reason, a correction owner and due date, which become a task) and, for a change of entity, the confirmed effective date. Activation needs the acceptance (and for a change of entity the confirmed date). Submissions, responses, lease checks, terms checks and supply-point occupancy can't be changed or deleted.
 

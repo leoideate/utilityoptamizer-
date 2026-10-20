@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Eye, FilePen, FileSignature, Info, PenLine, ShieldCheck, XCircle } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle2, Copy, Eye, FilePen, FileSignature, Info, Mail, PenLine, RotateCw, ShieldCheck, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   FORM_SIGNER_ROLE_LABELS,
@@ -9,9 +9,11 @@ import {
   type FormField,
   type FormSignerRole,
   type FormStatus,
-  SIGNATURE_AUTHORISATIONS,
+  STAFF_SIGNATURE_AUTHORISATIONS,
   SIGNATURE_AUTHORISATION_LABELS,
+  SIGNING_LINK_STATUS_LABELS,
   type SignatureAuthorisation,
+  type SigningLinkStatus,
   isEnergyService,
   isHandedOver,
 } from "@uo/shared";
@@ -54,13 +56,26 @@ interface FormRow {
   signedVersionId: string | null;
   monoVersionId: string | null;
   requiredSigners: FormSignerRole[];
-  signatures: { id: string; role: FormSignerRole; signerName: string; signerCapacity: string | null; authorisation: SignatureAuthorisation; note: string | null; uploadedAt: string; uploadedBy: string | null; uploadedById: string | null }[];
+  signatures: { id: string; role: FormSignerRole; signerName: string; signerCapacity: string | null; authorisation: SignatureAuthorisation; note: string | null; uploadedAt: string; uploadedBy: string | null; uploadedById: string | null; linkSentById: string | null }[];
   createdAt: string;
   createdBy: string | null;
   reviewedAt: string | null;
   reviewedBy: string | null;
   reviewNote: string | null;
 }
+
+interface SigningLinkRow {
+  id: string;
+  role: FormSignerRole;
+  signerName: string;
+  signerEmail: string;
+  status: SigningLinkStatus;
+  expiresAt: string;
+  lastSentAt: string;
+  openedAt: string | null;
+  signedAt: string | null;
+}
+const LINK_TONE: Record<SigningLinkStatus, Tone> = { sent: "info", opened: "warning", signed: "success", expired: "neutral", revoked: "neutral" };
 
 const STATUS_TONE: Record<FormStatus, Tone> = { generated: "warning", awaiting_review: "info", approved: "success", rejected: "danger", superseded: "neutral" };
 const issuesOf = (e: unknown) => ((e as ApiError).issues?.length ? (e as ApiError).issues : [(e as ApiError).message]);
@@ -422,6 +437,7 @@ function FormsList({ opp }: { opp: Workspace }) {
   const forms = useQuery({ queryKey: ["opportunity", opp.id, "forms"], queryFn: () => api.get<FormRow[]>(`/opportunities/${opp.id}/forms`) });
   const [showOld, setShowOld] = useState(false);
   const [signing, setSigning] = useState<{ form: FormRow; role: FormSignerRole } | null>(null);
+  const [sendingLink, setSendingLink] = useState<{ form: FormRow; role: FormSignerRole } | null>(null);
   const [reviewing, setReviewing] = useState<FormRow | null>(null);
   const [preview, setPreview] = useState<{ url: string; title: string } | null>(null);
   const open = useMutation({
@@ -444,7 +460,7 @@ function FormsList({ opp }: { opp: Workspace }) {
         <ul className="divide-y divide-border">
           {visible.map((f) => {
             const latest = new Map(f.signatures.map((s) => [s.role, s]));
-            const uploadedByMe = f.signatures.some((s) => s.uploadedById === user.id);
+            const uploadedByMe = f.signatures.some((s) => s.uploadedById === user.id || s.linkSentById === user.id);
             return (
               <li key={f.id} className="space-y-2 px-5 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -474,7 +490,7 @@ function FormsList({ opp }: { opp: Workspace }) {
                     )}
                     {opp.permissions.write && f.qcPassed && (f.status === "approved" || (f.status === "generated" && !f.requiredSigners.length)) && <MonoButton opp={opp} form={f} />}
                     {f.status === "awaiting_review" && can("document.review") && (
-                      <Button size="sm" disabled={uploadedByMe} title={uploadedByMe ? "Someone else must review signatures you uploaded." : undefined} onClick={() => setReviewing(f)}>
+                      <Button size="sm" disabled={uploadedByMe} title={uploadedByMe ? "Someone else must review signatures you uploaded or asked for." : undefined} onClick={() => setReviewing(f)}>
                         <ShieldCheck /> Review
                       </Button>
                     )}
@@ -495,7 +511,7 @@ function FormsList({ opp }: { opp: Workspace }) {
                         <div key={role} className="flex min-h-9 items-center gap-2 rounded-lg border border-border px-3 py-1 text-sm">
                           <span className="font-medium">{FORM_SIGNER_ROLE_LABELS[role]}:</span>
                           {s ? (
-                            <span title={`${SIGNATURE_AUTHORISATION_LABELS[s.authorisation]}. Uploaded by ${s.uploadedBy} ${dateTime(s.uploadedAt)}.`}>
+                            <span title={`${SIGNATURE_AUTHORISATION_LABELS[s.authorisation]}. ${s.uploadedBy ? `Uploaded by ${s.uploadedBy}` : "Signed"} ${dateTime(s.uploadedAt)}.`}>
                               {s.signerName}
                               {s.signerCapacity ? ` (${s.signerCapacity})` : ""}
                             </span>
@@ -503,15 +519,21 @@ function FormsList({ opp }: { opp: Workspace }) {
                             <span className="text-muted">not signed</span>
                           )}
                           {opp.permissions.write && f.qcPassed && (f.status === "generated" || f.status === "awaiting_review") && (
-                            <Button size="sm" variant="ghost" onClick={() => setSigning({ form: f, role })}>
-                              <PenLine /> {s ? "Replace" : "Add signature"}
-                            </Button>
+                            <>
+                              <Button size="sm" variant="ghost" onClick={() => setSendingLink({ form: f, role })}>
+                                <Mail /> Send for signature
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setSigning({ form: f, role })}>
+                                <PenLine /> {s ? "Replace" : "Upload"}
+                              </Button>
+                            </>
                           )}
                         </div>
                       );
                     })}
                   </div>
                 )}
+                {!!f.requiredSigners.length && f.status !== "superseded" && <SigningLinks opp={opp} form={f} />}
                 {f.reviewedAt && (
                   <p className="text-xs text-muted">
                     {f.status === "approved" ? "Approved" : "Reviewed"} by {f.reviewedBy} {dateTime(f.reviewedAt)}
@@ -524,6 +546,7 @@ function FormsList({ opp }: { opp: Workspace }) {
         </ul>
       )}
       {signing && <SignatureDialog opp={opp} form={signing.form} role={signing.role} onClose={() => setSigning(null)} />}
+      {sendingLink && <SendLinkDialog opp={opp} form={sendingLink.form} role={sendingLink.role} onClose={() => setSendingLink(null)} />}
       {reviewing && <ReviewDialog opp={opp} form={reviewing} onClose={() => setReviewing(null)} onOpen={() => open.mutate({ versionId: reviewing.signedVersionId!, title: `${reviewing.name} (signed)` })} />}
       <Dialog
         open={!!preview}
@@ -544,6 +567,117 @@ function FormsList({ opp }: { opp: Workspace }) {
         {preview && <iframe src={preview.url} title={preview.title} className="h-[65vh] w-full rounded-lg border border-border" />}
       </Dialog>
     </Card>
+  );
+}
+
+/** The online signing links sent for one form, with their status. */
+function SigningLinks({ opp, form }: { opp: Workspace; form: FormRow }) {
+  const qc = useQueryClient();
+  const key = ["opportunity", opp.id, "forms", form.id, "signing-links"];
+  const links = useQuery({ queryKey: key, queryFn: () => api.get<SigningLinkRow[]>(`/forms/${form.id}/signing-links`) });
+  const [issued, setIssued] = useState<{ url: string; emailed: boolean } | null>(null);
+  const resend = useMutation({ mutationFn: (id: string) => api.post<{ url: string; emailed: boolean }>(`/signing-links/${id}/resend`, {}), onSuccess: (r) => (setIssued(r), qc.invalidateQueries({ queryKey: key })) });
+  const revoke = useMutation({ mutationFn: (id: string) => api.post(`/signing-links/${id}/revoke`, {}), onSuccess: () => qc.invalidateQueries({ queryKey: key }) });
+  const signable = opp.permissions.write && (form.status === "generated" || form.status === "awaiting_review");
+  if (!links.data?.length) return null;
+  return (
+    <div className="space-y-2">
+      <ul className="space-y-1 text-sm">
+        {links.data.map((l) => {
+          const live = l.status === "sent" || l.status === "opened";
+          return (
+            <li key={l.id} className="flex flex-wrap items-center gap-2">
+              <Badge tone={LINK_TONE[l.status]}>{SIGNING_LINK_STATUS_LABELS[l.status]}</Badge>
+              <span className="min-w-0 break-words">
+                {FORM_SIGNER_ROLE_LABELS[l.role]} link to {l.signerName} ({l.signerEmail}) · sent {dateTime(l.lastSentAt)}
+                {l.signedAt ? ` · signed ${dateTime(l.signedAt)}` : l.openedAt ? ` · opened ${dateTime(l.openedAt)}` : ""}
+                {live && ` · expires ${date(l.expiresAt)}`}
+              </span>
+              {signable && (live || l.status === "expired") && (
+                <Button size="sm" variant="ghost" loading={resend.isPending && resend.variables === l.id} onClick={() => resend.mutate(l.id)}>
+                  <RotateCw /> Send again
+                </Button>
+              )}
+              {signable && live && (
+                <Button size="sm" variant="ghost" loading={revoke.isPending && revoke.variables === l.id} onClick={() => revoke.mutate(l.id)}>
+                  <Ban /> Cancel link
+                </Button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {issued && <LinkResult url={issued.url} emailed={issued.emailed} />}
+    </div>
+  );
+}
+
+/** Shows a newly issued link once (only its hash is stored), so it can also be sent another way. */
+function LinkResult({ url, emailed }: { url: string; emailed: boolean }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-surface-2 p-3 text-sm">
+      <p>{emailed ? "The link has been emailed. You can also copy it and send it another way, e.g. by WhatsApp:" : "Email isn't set up, so copy this link and send it to the signer yourself, e.g. by WhatsApp:"}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <code className="min-w-0 flex-1 break-all rounded bg-surface px-2 py-1 text-xs">{url}</code>
+        <Button size="sm" variant="secondary" onClick={() => navigator.clipboard.writeText(url).then(() => setCopied(true))}>
+          <Copy /> {copied ? "Copied" : "Copy link"}
+        </Button>
+      </div>
+      <p className="text-xs text-muted">This is the only time the link is shown. If it gets lost, use Send again for a new one.</p>
+    </div>
+  );
+}
+
+function SendLinkDialog({ opp, form, role, onClose }: { opp: Workspace; form: FormRow; role: FormSignerRole; onClose: () => void }) {
+  const qc = useQueryClient();
+  const refresh = useRefreshOpportunity(opp.id);
+  const contact = opp.customer?.contacts[0];
+  const [signerName, setSignerName] = useState(role === "customer" ? (contact ? [contact.firstName, contact.lastName].filter(Boolean).join(" ") : (opp.contactName ?? "")) : (opp.owner?.name ?? ""));
+  const [email, setEmail] = useState(role === "customer" ? (contact?.email ?? opp.email ?? "") : "");
+  const [issues, setIssues] = useState<string[]>([]);
+  const [result, setResult] = useState<{ url: string; emailed: boolean } | null>(null);
+  const send = useMutation({
+    meta: { silent: true },
+    mutationFn: () => api.post<{ id: string; url: string; emailed: boolean }>(`/forms/${form.id}/signing-links`, { role, signerName, email }),
+    onSuccess: (r) => (setResult(r), setIssues([]), qc.invalidateQueries({ queryKey: ["opportunity", opp.id, "forms", form.id, "signing-links"] }), refresh()),
+    onError: (e) => setIssues(issuesOf(e)),
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title={`Send ${form.name} for ${FORM_SIGNER_ROLE_LABELS[role].toLowerCase()} signature`}
+      description="The signer gets an email with a private link. They read the form and draw their signature online, and the signed copy comes back here for review. The link works once and expires after 14 days."
+      footer={
+        result ? (
+          <Button onClick={onClose}>Done</Button>
+        ) : (
+          <>
+            <Button variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button disabled={!signerName.trim() || !email.trim()} loading={send.isPending} onClick={() => send.mutate()}>
+              <Mail /> Send link
+            </Button>
+          </>
+        )
+      }
+    >
+      {result ? (
+        <LinkResult url={result.url} emailed={result.emailed} />
+      ) : (
+        <div className="space-y-3">
+          <IssueList issues={issues} title="Please check:" />
+          <Field label="Signer's name" required>
+            {(p) => <Input {...p} value={signerName} onChange={(e) => setSignerName(e.target.value)} />}
+          </Field>
+          <Field label="Signer's email" required hint="Any earlier open link for this signature box stops working.">
+            {(p) => <Input {...p} type="email" inputMode="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} />}
+          </Field>
+        </div>
+      )}
+    </Dialog>
   );
 }
 
@@ -658,7 +792,7 @@ function SignatureDialog({ opp, form, role, onClose }: { opp: Workspace; form: F
     onSuccess: () => (qc.invalidateQueries({ queryKey: ["opportunity", opp.id, "forms"] }), refresh(), onClose()),
     onError: (e) => setIssues(issuesOf(e)),
   });
-  const options = SIGNATURE_AUTHORISATIONS.filter((a) => (role === "broker" ? true : a !== "broker_own_signature"));
+  const options = STAFF_SIGNATURE_AUTHORISATIONS.filter((a) => (role === "broker" ? true : a !== "broker_own_signature"));
   return (
     <Dialog
       open

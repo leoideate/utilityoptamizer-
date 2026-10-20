@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { htmlToText, tidy } from "./html-text";
 
 /** One message as the provider reports it, already reduced to what the CRM stores. */
@@ -21,6 +22,8 @@ export interface OutgoingMail {
   to: string[];
   subject: string;
   text: string;
+  /** HTML version of the same message (e.g. with the sender's email signature). The text stays as the plain-text part. */
+  html?: string;
   /** Reply in this message's thread (the provider ids of the original). */
   inReplyTo?: { providerMessageId: string; threadId: string | null; internetMessageId: string | null };
 }
@@ -136,11 +139,13 @@ export class GraphMailProvider implements MailProvider {
 
   /** Graph keeps a copy in Sent Items; it arrives with the next sync (no id is returned). */
   async send(token: string, mail: OutgoingMail) {
+    const body = mail.html ? { contentType: "HTML", content: mail.html } : { contentType: "Text", content: mail.text };
     if (mail.inReplyTo) {
-      await call(`${this.base}/me/messages/${encodeURIComponent(mail.inReplyTo.providerMessageId)}/reply`, token, { method: "POST", body: JSON.stringify({ comment: mail.text }) });
+      const reply = mail.html ? { message: { body } } : { comment: mail.text };
+      await call(`${this.base}/me/messages/${encodeURIComponent(mail.inReplyTo.providerMessageId)}/reply`, token, { method: "POST", body: JSON.stringify(reply) });
     } else {
       const recipients = mail.to.map((address) => ({ emailAddress: { address } }));
-      await call(`${this.base}/me/sendMail`, token, { method: "POST", body: JSON.stringify({ message: { subject: mail.subject, body: { contentType: "Text", content: mail.text }, toRecipients: recipients }, saveToSentItems: true }) });
+      await call(`${this.base}/me/sendMail`, token, { method: "POST", body: JSON.stringify({ message: { subject: mail.subject, body, toRecipients: recipients }, saveToSentItems: true }) });
     }
     return { providerMessageId: null, threadId: mail.inReplyTo?.threadId ?? null };
   }
@@ -195,15 +200,21 @@ export function buildRfc822(mail: OutgoingMail): string {
     `To: ${mail.to.map((t) => t.replace(/[\r\n,<>]/g, "")).join(", ")}`,
     `Subject: ${encodeHeader(mail.subject)}`,
     "MIME-Version: 1.0",
-    "Content-Type: text/plain; charset=UTF-8",
-    "Content-Transfer-Encoding: base64",
   ];
   if (mail.inReplyTo?.internetMessageId) {
     const ref = mail.inReplyTo.internetMessageId.replace(/[\r\n]/g, "");
     headers.push(`In-Reply-To: ${ref}`, `References: ${ref}`);
   }
-  const body = Buffer.from(mail.text).toString("base64").replace(/(.{76})/g, "$1\r\n");
-  return `${headers.join("\r\n")}\r\n\r\n${body}`;
+  const b64 = (s: string) => Buffer.from(s).toString("base64").replace(/(.{76})/g, "$1\r\n");
+  if (!mail.html) {
+    headers.push("Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64");
+    return `${headers.join("\r\n")}\r\n\r\n${b64(mail.text)}`;
+  }
+  // Plain text first, HTML last: mail apps show the last part they can display.
+  const boundary = `uo-${randomUUID()}`;
+  headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+  const part = (type: string, content: string) => `--${boundary}\r\nContent-Type: ${type}; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64(content)}`;
+  return `${headers.join("\r\n")}\r\n\r\n${part("text/plain", mail.text)}\r\n${part("text/html", mail.html)}\r\n--${boundary}--`;
 }
 
 export class GmailMailProvider implements MailProvider {

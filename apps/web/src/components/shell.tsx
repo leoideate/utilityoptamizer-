@@ -5,71 +5,43 @@ import { Bell, Building2, CalendarCheck, ClipboardList, FileSignature, MessagesS
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { ROLE_LABELS } from "@uo/shared";
+import { type Capability, ROLE_LABELS } from "@uo/shared";
 import { api } from "@/lib/api";
 import { cn, ref, relative } from "@/lib/format";
 import { useChannels } from "@/lib/chat";
 import { useUnreadEmail } from "@/lib/email";
 import { useUser } from "@/lib/session";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "./ui/overlays";
-import { DESK_LABELS, type Desk } from "@uo/shared";
-import { useDesk } from "@/lib/desk";
 import { Logo } from "./brand";
 import { Button } from "./ui/primitives";
 
-/** Sales (office and field) capture and work leads; the back office completes deals after the sale. */
-const NAV: Record<Desk, { href: string; label: string; icon: typeof LayoutDashboard }[]> = {
-  sales: [
-    { href: "/", label: "Home", icon: LayoutDashboard },
-    { href: "/scan", label: "Scan business card", icon: ScanLine },
-    { href: "/opportunities", label: "Leads and deals", icon: ListChecks },
-    { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
-    { href: "/customers", label: "Customers", icon: Building2 },
-    { href: "/activities", label: "My tasks", icon: CalendarCheck },
-    { href: "/inbox", label: "Email", icon: Mail },
-    { href: "/chat", label: "Chat", icon: MessagesSquare },
-  ],
-  back_office: [
-    { href: "/", label: "Work queue", icon: LayoutDashboard },
-    { href: "/cases", label: "All cases", icon: ClipboardList },
-    { href: "/opportunities", label: "Opportunities", icon: ListChecks },
-    { href: "/customers", label: "Customers", icon: Building2 },
-    { href: "/activities", label: "My tasks", icon: CalendarCheck },
-    { href: "/inbox", label: "Email", icon: Mail },
-    { href: "/chat", label: "Chat", icon: MessagesSquare },
-  ],
-};
+/** One menu for everyone; an item with a capability shows only to users who have it (the API enforces it either way). */
+const NAV: { href: string; label: string; icon: typeof LayoutDashboard; capability?: Capability }[] = [
+  { href: "/", label: "Home", icon: LayoutDashboard },
+  { href: "/scan", label: "Scan business card", icon: ScanLine, capability: "opportunity.create" },
+  { href: "/opportunities", label: "Leads and deals", icon: ListChecks },
+  { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
+  { href: "/cases", label: "Cases", icon: ClipboardList },
+  { href: "/customers", label: "Customers", icon: Building2 },
+  { href: "/activities", label: "My tasks", icon: CalendarCheck },
+  { href: "/inbox", label: "Email", icon: Mail },
+  { href: "/chat", label: "Chat", icon: MessagesSquare },
+  { href: "/forms", label: "Supplier forms", icon: FileSignature, capability: "form.template_manage" },
+];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const user = useUser();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const isAdmin = user.capabilities.some((c) => c.startsWith("admin."));
-  const { desk, desks, setDesk } = useDesk();
   const unread = useChannels().data?.totalUnread ?? 0;
   const unreadEmail = useUnreadEmail().data ?? 0;
   useEffect(() => setOpen(false), [pathname]);
 
   const nav = (
     <nav aria-label="Main" className="flex flex-col gap-0.5 px-3 py-2">
-      {desks.length > 1 && (
-        <div role="group" aria-label="Interface" className="mb-3 grid grid-cols-2 overflow-hidden rounded-full border border-[var(--md-sys-color-outline)]">
-          {desks.map((d) => (
-            <button
-              key={d}
-              type="button"
-              aria-pressed={desk === d}
-              onClick={() => setDesk(d)}
-              className={cn("min-h-10 px-2 text-sm font-medium text-text first:border-r first:border-[var(--md-sys-color-outline)]", desk === d && "bg-[var(--md-sys-color-secondary-container)] text-[var(--md-sys-color-on-secondary-container)]")}
-            >
-              {DESK_LABELS[d]}
-            </button>
-          ))}
-        </div>
-      )}
       {[
-        ...NAV[desk],
-        ...(desk === "back_office" && user.capabilities.includes("form.template_manage") ? [{ href: "/forms", label: "Supplier forms", icon: FileSignature }] : []),
+        ...NAV.filter((i) => !i.capability || user.capabilities.includes(i.capability)),
         ...(isAdmin ? [{ href: "/admin", label: "Administration", icon: Settings }] : []),
       ].map(({ href, label, icon: Icon }) => {
         const active = href === "/" ? pathname === "/" : pathname.startsWith(href);

@@ -8,6 +8,7 @@ import {
   type FormSignerRole,
   type FormSource,
   SIGNATURE_AUTHORISATION_LABELS,
+  type SignatureAuthorisation,
   SUPPLY_CHANGE_LABELS,
   billCheckPassed,
   can,
@@ -40,6 +41,26 @@ import { presetFor } from "./presets";
 type Values = Record<string, FillValue>;
 const normIban = (v: unknown) => (typeof v === "string" ? v.replace(/\s+/g, "").toUpperCase() : "");
 const MAX_SIGNATURE_BYTES = 2 * 1024 * 1024;
+
+/** Problems with a signature image: it must be a real PNG of at most 2 MB. */
+export function signatureImageIssues(png: Buffer, mimetype = "image/png"): string[] {
+  const issues: string[] = [];
+  if (mimetype !== "image/png" || !sniffMatches("image/png", png)) issues.push("Upload the signature as a PNG image.");
+  if (png.length > MAX_SIGNATURE_BYTES) issues.push("Signature images must be 2 MB or smaller.");
+  return issues;
+}
+
+const dublinTime = (d: Date) => new Intl.DateTimeFormat("en-IE", { timeZone: "Europe/Dublin", dateStyle: "long", timeStyle: "long" }).format(d);
+
+/** Evidence stored with a signature drawn on the online signing page. */
+export interface OnlineSignatureEvidence {
+  signingLinkId: string;
+  signerEmail: string;
+  signerIp: string | null;
+  signerUserAgent: string | null;
+  consentText: string;
+  documentSha256: string;
+}
 
 /**
  * Supplier PDF forms: templates with positioned fields, filling them from the CRM, uploaded
@@ -355,7 +376,7 @@ export class FormsService {
     };
   }
 
-  private async brokerProfile(): Promise<{ companyName: string }> {
+  async brokerProfile(): Promise<{ companyName: string }> {
     const saved = (await this.prisma.setting.findUnique({ where: { key: "broker.profile" } }))?.value as { companyName?: string } | undefined;
     return { companyName: saved?.companyName ?? "Utility Optimizer Limited" };
   }
@@ -424,7 +445,7 @@ export class FormsService {
     await this.access.readable(actor, opportunityId);
     const forms = await this.prisma.generatedForm.findMany({
       where: { opportunityId },
-      include: { template: { select: { name: true, documentType: true } }, signatures: { orderBy: { uploadedAt: "asc" } } },
+      include: { template: { select: { name: true, documentType: true } }, signatures: { orderBy: { uploadedAt: "asc" }, include: { signingLink: { select: { createdById: true } } } } },
       orderBy: { createdAt: "desc" },
     });
     const users = await this.userNames([...forms.flatMap((f) => [f.createdById, f.reviewedById]), ...forms.flatMap((f) => f.signatures.map((s) => s.uploadedById))]);
@@ -457,6 +478,8 @@ export class FormsService {
         uploadedAt: s.uploadedAt,
         uploadedBy: users.get(s.uploadedById ?? "") ?? null,
         uploadedById: s.uploadedById,
+        /** Who sent the signing link, for online signatures (they can't review it either). */
+        linkSentById: s.signingLink?.createdById ?? null,
       })),
       createdAt: f.createdAt,
       createdBy: users.get(f.createdById ?? "") ?? null,
@@ -614,61 +637,104 @@ export class FormsService {
    */
   async addSignature(actor: Actor, formId: string, meta: z.infer<typeof formSignatureSchema>, file: UploadedFile) {
     const { form, opp } = await this.loadForm(actor, formId);
-    if (form.status !== "generated" && form.status !== "awaiting_review") throw new RuleViolation([`This form is ${form.status.replace("_", " ")}; generate a new one to sign it again.`]);
-    if (!form.qcPassed) throw new RuleViolation(["This form failed its quality check. Generate it again before signing."]);
-    const fields = form.fields as FormField[];
-    const needed = requiredSigners(fields);
-    if (!needed.includes(meta.role)) throw new RuleViolation([`This form has no ${FORM_SIGNER_ROLE_LABELS[meta.role].toLowerCase()} signature box.`]);
-    const issues: string[] = [];
-    if (file.mimetype !== "image/png" || !sniffMatches("image/png", file.buffer)) issues.push("Upload the signature as a PNG image.");
-    if (file.size > MAX_SIGNATURE_BYTES) issues.push("Signature images must be 2 MB or smaller.");
+    this.assertSignable(form, meta.role);
+    const issues = signatureImageIssues(file.buffer, file.mimetype);
     if (meta.authorisation === "broker_own_signature" && meta.role !== "broker") issues.push("Only the broker's signature can be authorised as the broker's own.");
     if (issues.length) throw new RuleViolation(issues);
+    await this.storeSignature(actor, form, opp, { role: meta.role, signerName: meta.signerName, signerCapacity: meta.signerCapacity ?? null, authorisation: meta.authorisation, note: meta.note ?? null, png: file.buffer });
+    return this.completeIfSigned(actor, formId);
+  }
 
+  /** The form can take a signature for this role: generated (or awaiting review), passed QC, and has that box. */
+  assertSignable(form: { status: string; qcPassed: boolean; fields: Prisma.JsonValue }, role: FormSignerRole) {
+    if (form.status !== "generated" && form.status !== "awaiting_review") throw new RuleViolation([`This form is ${form.status.replace("_", " ")}; generate a new one to sign it again.`]);
+    if (!form.qcPassed) throw new RuleViolation(["This form failed its quality check. Generate it again before signing."]);
+    if (!requiredSigners(form.fields as FormField[]).includes(role)) throw new RuleViolation([`This form has no ${FORM_SIGNER_ROLE_LABELS[role].toLowerCase()} signature box.`]);
+  }
+
+  /** Stores one signature image and how it was authorised (append-only), with its audit and timeline entry. */
+  async storeSignature(
+    actor: Actor,
+    form: { id: string; opportunityId: string; template: { name: string } },
+    opp: { id: string; customerId: string | null },
+    input: { role: FormSignerRole; signerName: string; signerCapacity: string | null; authorisation: SignatureAuthorisation; note: string | null; png: Buffer; online?: OnlineSignatureEvidence },
+  ) {
     const storageKey = `form-signatures/${form.opportunityId}/${form.id}/${randomUUID()}.png`;
-    await this.storage.put(storageKey, file.buffer, "image/png");
+    await this.storage.put(storageKey, input.png, "image/png");
     const sig = await this.prisma.formSignature.create({
       data: {
-        formId,
-        role: meta.role,
-        signerName: meta.signerName,
-        signerCapacity: meta.signerCapacity ?? null,
-        authorisation: meta.authorisation,
-        note: meta.note ?? null,
+        formId: form.id,
+        role: input.role,
+        signerName: input.signerName,
+        signerCapacity: input.signerCapacity,
+        authorisation: input.authorisation,
+        note: input.note,
         storageKey,
-        sha256: CryptoService.sha256(file.buffer),
+        sha256: CryptoService.sha256(input.png),
         uploadedById: actorRef(actor),
+        ...(input.online ?? {}),
       },
     });
+    const how = input.online ? "signed online" : "uploaded";
     await this.audit.record(
       actor,
-      { action: "form.signature_upload", entityType: "generated_form", entityId: formId, summary: `${FORM_SIGNER_ROLE_LABELS[meta.role]} signature uploaded for ${form.template.name}`, data: { signatureId: sig.id, authorisation: meta.authorisation } },
+      {
+        action: input.online ? "form.signature_online" : "form.signature_upload",
+        entityType: "generated_form",
+        entityId: form.id,
+        summary: `${FORM_SIGNER_ROLE_LABELS[input.role]} signature ${how} for ${form.template.name}`,
+        data: { signatureId: sig.id, authorisation: input.authorisation, signingLinkId: input.online?.signingLinkId },
+      },
       {
         opportunityId: opp.id,
         customerId: opp.customerId,
         kind: "signature",
-        body: `${FORM_SIGNER_ROLE_LABELS[meta.role]} signature for "${form.template.name}" uploaded: ${meta.signerName}${meta.signerCapacity ? ` (${meta.signerCapacity})` : ""}. ${SIGNATURE_AUTHORISATION_LABELS[meta.authorisation]}.`,
+        body: `${FORM_SIGNER_ROLE_LABELS[input.role]} signature for "${form.template.name}" ${how}: ${input.signerName}${input.signerCapacity ? ` (${input.signerCapacity})` : ""}. ${SIGNATURE_AUTHORISATION_LABELS[input.authorisation]}.`,
       },
     );
+    return sig;
+  }
 
-    // The latest upload per role is the one used.
-    const all = [...form.signatures, sig];
-    const latest = new Map<FormSignerRole, (typeof all)[number]>();
-    for (const s of all) latest.set(s.role, s);
+  /**
+   * When every required signer has a signature (the latest per role counts), builds the signed
+   * copy, checks it and sends it for review. Online signatures add an evidence page at the end.
+   */
+  async completeIfSigned(actor: Actor, formId: string) {
+    const form = await this.prisma.generatedForm.findUniqueOrThrow({ where: { id: formId }, include: { template: true, opportunity: true, signatures: { orderBy: { uploadedAt: "asc" } } } });
+    const opp = form.opportunity;
+    const fields = form.fields as FormField[];
+    const needed = requiredSigners(fields);
+    const latest = new Map<FormSignerRole, (typeof form.signatures)[number]>();
+    for (const s of form.signatures) latest.set(s.role, s);
     if (!needed.every((r) => latest.has(r))) return { signed: false, missing: needed.filter((r) => !latest.has(r)) };
 
     const signatures: Partial<Record<FormSignerRole, Uint8Array>> = {};
     const signedDates: Partial<Record<FormSignerRole, string>> = {};
+    const signingRecord: { heading: string; lines: string[] }[] = [];
     for (const [role, s] of latest) {
       signatures[role] = await this.storage.get(s.storageKey);
       signedDates[role] = fmtDate(today(s.uploadedAt));
+      if (s.signingLinkId) {
+        signingRecord.push({
+          heading: `${FORM_SIGNER_ROLE_LABELS[role]}: ${s.signerName}`,
+          lines: [
+            `Signed online on ${dublinTime(s.uploadedAt)} (Europe/Dublin).`,
+            `Signing link sent to: ${s.signerEmail}`,
+            `IP address: ${s.signerIp ?? "not recorded"}`,
+            `Browser: ${s.signerUserAgent ?? "not recorded"}`,
+            `Document shown (SHA-256 of the unsigned PDF): ${s.documentSha256}`,
+            `Signature image (SHA-256): ${s.sha256}`,
+            `Agreed: ${s.consentText}`,
+          ],
+        });
+      }
     }
     const values = this.crypto.decryptJson<Values>(form.valuesEnc) ?? {};
     const template = await this.storage.get(form.template.storageKey);
     const title = `${form.template.name} – UO-${String(opp.number).padStart(6, "0")} (signed)`;
     let filled: Awaited<ReturnType<typeof fillPdf>>;
     try {
-      filled = await fillPdf({ template, fields, values, signatures, signedDates, requireSignatures: true, title });
+      filled = await fillPdf({ template, fields, values, signatures, signedDates, requireSignatures: true, signingRecord, title });
     } catch {
       throw new RuleViolation(["The signature image couldn't be read. Upload it again as a PNG."]);
     }
@@ -691,6 +757,10 @@ export class FormsService {
     const { form, opp } = await this.loadForm(actor, formId);
     if (form.status !== "awaiting_review") throw new RuleViolation(["Only signed forms awaiting review can be reviewed."]);
     if (form.signatures.some((s) => s.uploadedById === actor.id)) throw new RuleViolation(["Someone other than the person who uploaded the signatures must review this form."]);
+    const linkIds = form.signatures.flatMap((s) => (s.signingLinkId ? [s.signingLinkId] : []));
+    if (linkIds.length && (await this.prisma.signingLink.count({ where: { id: { in: linkIds }, createdById: actor.id } }))) {
+      throw new RuleViolation(["Someone other than the person who sent the signing link must review this form."]);
+    }
     if (input.decision === "rejected" && !input.note) throw new RuleViolation(["Say why the form is rejected."]);
     await this.prisma.$transaction(async (tx) => {
       await tx.generatedForm.update({ where: { id: formId }, data: { status: input.decision, reviewedById: actorRef(actor), reviewedAt: new Date(), reviewNote: input.note ?? null } });

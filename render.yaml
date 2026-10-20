@@ -49,6 +49,15 @@ envVarGroups:
         sync: false
       - key: MAIL_FROM
         sync: false
+      # Google Workspace: one OAuth client for "Sign in with Google" and Gmail mailboxes.
+      # Redirect URIs: <WEB_ORIGIN>/api/auth/sso/google/callback and /api/mailboxes/google/callback.
+      - key: SSO_GOOGLE_CLIENT_ID
+        sync: false
+      - key: SSO_GOOGLE_CLIENT_SECRET
+        sync: false
+      # Company email domains allowed to use SSO, e.g. utilityoptimizer.com
+      - key: SSO_ALLOWED_DOMAINS
+        sync: false
 
 services:
   - name: uo-crm-redis

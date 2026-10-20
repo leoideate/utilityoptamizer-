@@ -90,6 +90,8 @@ export interface FillInput {
   signedDates?: Partial<Record<"customer" | "broker", string>>;
   /** Signature fields must all be filled (signed copy). */
   requireSignatures?: boolean;
+  /** Evidence for online signatures, printed on an extra last page (one block per signer). */
+  signingRecord?: { heading: string; lines: string[] }[];
   title: string;
 }
 
@@ -160,12 +162,68 @@ export async function fillPdf(input: FillInput): Promise<{ bytes: Uint8Array; is
     }
   }
 
+  for (const e of input.signingRecord?.length ? drawSigningRecord(doc, font, input.signingRecord) : []) expect.set(e.page, e);
+
   doc.setTitle(input.title);
   doc.setProducer("Utility Optimizer CRM");
   doc.setCreator("Utility Optimizer CRM");
   const bytes = await doc.save({ useObjectStreams: false });
-  issues.push(...(await verifyPdf(bytes, pages.length, [...expect.values()])));
+  issues.push(...(await verifyPdf(bytes, doc.getPageCount(), [...expect.values()])));
   return { bytes, issues };
+}
+
+/**
+ * Adds A4 pages listing who signed online, when, from where and which document they saw.
+ * Returns what was written per page, so the release check confirms it survived saving.
+ */
+function drawSigningRecord(doc: PDFDocument, font: PDFFont, blocks: { heading: string; lines: string[] }[]): Expectation[] {
+  const [width, height, margin] = [595.28, 841.89, 50];
+  const out: Expectation[] = [];
+  let page!: PDFPage;
+  let y = 0;
+  const newPage = () => {
+    page = doc.addPage([width, height]);
+    out.push({ page: doc.getPageCount() - 1, text: [], images: 0 });
+    y = height - margin;
+  };
+  const line = (text: string, size: number) => {
+    for (const part of wrap(font, printable(font, text), size, width - margin * 2)) {
+      if (y < margin + size) newPage();
+      page.drawText(part, { x: margin, y, size, font, color: rgb(0, 0, 0) });
+      out[out.length - 1].text.push(font.encodeText(part).toString().toLowerCase());
+      y -= size * 1.45;
+    }
+  };
+  newPage();
+  line("Electronic signature record", 16);
+  y -= 6;
+  for (const b of blocks) {
+    line(b.heading, 11);
+    for (const l of b.lines) line(l, 9);
+    y -= 10;
+  }
+  return out;
+}
+
+/** Splits text into lines that fit the width at the given size. */
+function wrap(font: PDFFont, text: string, size: number, maxWidth: number): string[] {
+  const out: string[] = [];
+  let current = "";
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const next = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(next, size) <= maxWidth || !current) current = next;
+    else {
+      out.push(current);
+      current = word;
+    }
+  }
+  if (current) out.push(current);
+  return out;
+}
+
+/** Replaces characters the standard font can't show, so evidence text never breaks the PDF. */
+function printable(font: PDFFont, text: string): string {
+  return [...text].map((c) => (safeChar(font, c) ? c : "?")).join("");
 }
 
 /** Drops the form and its widget annotations at the object level (works on malformed forms too). */

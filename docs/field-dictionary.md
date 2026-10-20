@@ -24,6 +24,41 @@ Generated from `apps/api/prisma/schema.prisma` (`node scripts/gen-field-dictiona
 | created_at | DateTime | ✓ | Default now() |
 | updated_at | DateTime | ✓ |  |
 
+## email_signatures
+
+A person's email signature, added to email they send from the CRM. Starts from the company template.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| user_id | UUID | ✓ | Primary key |
+| enabled | Boolean | ✓ | Default true |
+| full_name | String | ✓ |  |
+| job_title | String |  |  |
+| phone | String |  |  |
+| mobile | String |  |  |
+| email | String |  |  |
+| extra | String |  |  |
+| image | String | ✓ | company | own | non. Default "company" |
+| image_width | Int | ✓ | Default 160 |
+| accent_color | String | ✓ | Default "#036b5c" |
+| show_company | Boolean | ✓ | Default true |
+| own_image_id | UUID |  | The person's own picture (an EmailImage), used when image = own |
+| updated_at | DateTime | ✓ |  |
+
+## email_images
+
+Pictures used in email signatures (company logo, people's own pictures). Served publicly by an
+unguessable id so recipients' mail apps can load them; they are never documents.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| storage_key | String | ✓ | Unique |
+| mime_type | String | ✓ |  |
+| sha256 | String | ✓ |  |
+| uploaded_by_id | UUID |  |  |
+| created_at | DateTime | ✓ | Default now() |
+
 ## user_roles
 
 | Column | Type | Required | Notes |
@@ -549,6 +584,32 @@ An uploaded signature image, authorised for one generated form only.
 | sha256 | String | ✓ |  |
 | uploaded_by_id | UUID |  |  |
 | uploaded_at | DateTime | ✓ | Default now() |
+| signing_link_id | UUID |  | Set when the signer drew the signature on the online signing page; the columns below are its evidence. Unique |
+| signer_email | String |  |  |
+| signer_ip | String |  |  |
+| signer_user_agent | String |  |  |
+| consent_text | String |  | Version and wording of the consent the signer ticked |
+| document_sha256 | String |  | sha256 of the unsigned PDF the signer was shown |
+
+## signing_links
+
+An emailed link that lets one signer sign one generated form online. Only the token's hash is stored.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| form_id | UUID | ✓ |  |
+| role | Enum: customer, broker | ✓ |  |
+| signer_name | String | ✓ |  |
+| signer_email | String | ✓ |  |
+| token_hash | String | ✓ | Unique |
+| expires_at | DateTime | ✓ |  |
+| opened_at | DateTime |  |  |
+| signed_at | DateTime |  |  |
+| revoked_at | DateTime |  |  |
+| last_sent_at | DateTime | ✓ | Default now() |
+| created_by_id | UUID |  |  |
+| created_at | DateTime | ✓ | Default now() |
 
 ## bill_checks
 

@@ -342,13 +342,50 @@ model User {
   createdAt              DateTime   @default(now()) @map("created_at")
   updatedAt              DateTime   @updatedAt @map("updated_at")
 
-  sessions      Session[]
-  ownedOpps     Opportunity[]  @relation("OppOwner")
-  activities    Activity[]     @relation("ActivityOwner")
-  notifications Notification[]
-  mailboxes     Mailbox[]
+  sessions       Session[]
+  ownedOpps      Opportunity[]   @relation("OppOwner")
+  activities     Activity[]      @relation("ActivityOwner")
+  notifications  Notification[]
+  mailboxes      Mailbox[]
+  emailSignature EmailSignature?
 
   @@map("users")
+}
+
+/// A person's email signature, added to email they send from the CRM. Starts from the company template.
+model EmailSignature {
+  userId      String   @id @map("user_id") @db.Uuid
+  user        User     @relation(fields: [userId], references: [id])
+  enabled     Boolean  @default(true)
+  fullName    String   @map("full_name")
+  jobTitle    String?  @map("job_title")
+  phone       String?
+  mobile      String?
+  email       String?
+  extra       String?
+  /// company | own | none
+  image       String   @default("company")
+  imageWidth  Int      @default(160) @map("image_width")
+  accentColor String   @default("#036b5c") @map("accent_color")
+  showCompany Boolean  @default(true) @map("show_company")
+  /// The person's own picture (an EmailImage), used when image = own.
+  ownImageId  String?  @map("own_image_id") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("email_signatures")
+}
+
+/// Pictures used in email signatures (company logo, people's own pictures). Served publicly by an
+/// unguessable id so recipients' mail apps can load them; they are never documents.
+model EmailImage {
+  id           String   @id @default(uuid()) @db.Uuid
+  storageKey   String   @unique @map("storage_key")
+  mimeType     String   @map("mime_type")
+  sha256       String
+  uploadedById String?  @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("email_images")
 }
 
 model UserRole {
@@ -1030,6 +1067,7 @@ model GeneratedForm {
   createdById          String?         @map("created_by_id") @db.Uuid
   createdAt            DateTime        @default(now()) @map("created_at")
   signatures           FormSignature[]
+  signingLinks         SigningLink[]
 
   @@index([opportunityId])
   @@map("generated_forms")
@@ -1037,21 +1075,53 @@ model GeneratedForm {
 
 /// An uploaded signature image, authorised for one generated form only.
 model FormSignature {
-  id             String        @id @default(uuid()) @db.Uuid
-  formId         String        @map("form_id") @db.Uuid
-  form           GeneratedForm @relation(fields: [formId], references: [id])
-  role           SignerRole
-  signerName     String        @map("signer_name")
-  signerCapacity String?       @map("signer_capacity")
-  authorisation  String
-  note           String?
-  storageKey     String        @unique @map("storage_key")
-  sha256         String
-  uploadedById   String?       @map("uploaded_by_id") @db.Uuid
-  uploadedAt     DateTime      @default(now()) @map("uploaded_at")
+  id              String        @id @default(uuid()) @db.Uuid
+  formId          String        @map("form_id") @db.Uuid
+  form            GeneratedForm @relation(fields: [formId], references: [id])
+  role            SignerRole
+  signerName      String        @map("signer_name")
+  signerCapacity  String?       @map("signer_capacity")
+  authorisation   String
+  note            String?
+  storageKey      String        @unique @map("storage_key")
+  sha256          String
+  uploadedById    String?       @map("uploaded_by_id") @db.Uuid
+  uploadedAt      DateTime      @default(now()) @map("uploaded_at")
+  /// Set when the signer drew the signature on the online signing page; the columns below are its evidence.
+  signingLinkId   String?       @unique @map("signing_link_id") @db.Uuid
+  signingLink     SigningLink?  @relation(fields: [signingLinkId], references: [id], onDelete: Restrict)
+  signerEmail     String?       @map("signer_email")
+  signerIp        String?       @map("signer_ip")
+  signerUserAgent String?       @map("signer_user_agent")
+  /// Version and wording of the consent the signer ticked.
+  consentText     String?       @map("consent_text")
+  /// sha256 of the unsigned PDF the signer was shown.
+  documentSha256  String?       @map("document_sha256")
 
   @@index([formId])
   @@map("form_signatures")
+}
+
+/// An emailed link that lets one signer sign one generated form online. Only the token's hash is stored.
+model SigningLink {
+  id          String         @id @default(uuid()) @db.Uuid
+  formId      String         @map("form_id") @db.Uuid
+  form        GeneratedForm  @relation(fields: [formId], references: [id])
+  role        SignerRole
+  signerName  String         @map("signer_name")
+  signerEmail String         @map("signer_email")
+  tokenHash   String         @unique @map("token_hash")
+  expiresAt   DateTime       @map("expires_at")
+  openedAt    DateTime?      @map("opened_at")
+  signedAt    DateTime?      @map("signed_at")
+  revokedAt   DateTime?      @map("revoked_at")
+  lastSentAt  DateTime       @default(now()) @map("last_sent_at")
+  createdById String?        @map("created_by_id") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at")
+  signature   FormSignature?
+
+  @@index([formId])
+  @@map("signing_links")
 }
 
 /// Verification of the previous supplier's bill for a change of supplier.

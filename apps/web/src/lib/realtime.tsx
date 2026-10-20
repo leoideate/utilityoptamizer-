@@ -60,6 +60,11 @@ export function RealtimeProvider({ userId, children }: { userId: string; childre
         qc.invalidateQueries({ queryKey: ["opportunity", d.opportunityId] });
       }
     });
+    es.addEventListener("form.signed", (e) => {
+      const d = JSON.parse((e as MessageEvent).data) as { opportunityId: string; preview: string };
+      qc.invalidateQueries({ queryKey: ["opportunity", d.opportunityId] });
+      toast(d.preview, { action: { label: "Open deal", onClick: () => window.location.assign(`/opportunities/${d.opportunityId}`) } });
+    });
     es.addEventListener("call.incoming", async (e) => {
       const d = JSON.parse((e as MessageEvent).data) as { sessionId: string; state: "ringing" | "answered" | "ended"; from: string | null };
       const id = `call-${d.sessionId}`;

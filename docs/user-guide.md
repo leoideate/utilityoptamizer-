@@ -80,14 +80,13 @@ Changes of legal entity and renewals add their own requirements (see **Cases** b
 
 If something's missing, the CRM lists it. The **Overview → Checklist** shows the same list in advance.
 
-## Sales and back office
+## One CRM for sales and the back office
 
-The CRM has two interfaces, chosen by your role:
+Everyone works in the same interface. The menu shows every screen your role allows: Home, **Scan business card** (the card becomes a lead), leads and deals, pipeline, cases, customers, tasks, email and chat, plus **Supplier forms** and **Administration** for those who manage them.
 
-- **Sales** (salespeople and field agents): Home with your figures, **Scan business card** (the card becomes a lead), leads and deals, pipeline, customers and tasks. On a deal's Overview, **Collect from the customer** takes a photo of the current bill and the meter reading straight from your phone and lists any other documents still needed.
-- **Back office** (Operations, Compliance, Finance): Home is the **Work queue**: every deal handed over by sales, by where it stands. A handed-over deal opens on its **Back office** tab with the supplier forms, checks, signatures and submission.
-- Deals move to the back office at **Supplier selected**: a task is created for the least busy Operations colleague and the hand-over is noted on the timeline. Sales then sees the deal's **Case** tab read-only, with its progress and anything still needed from the customer.
-- Managers and administrators can switch between the two at the top of the menu; the choice is remembered on the device.
+- **Home** shows your figures and what needs attention. If you complete deals after the sale (Operations, managers, administrators), it starts with the **Work queue**: every deal handed over at Supplier selected, by where it stands. Click a figure, or **Open work queue**, to see those deals under **Cases**.
+- On a deal's Overview, **Collect from the customer** takes a photo of the current bill and the meter reading straight from your phone and lists any other documents still needed.
+- Deals move to the back office at **Supplier selected**: a task is created for the least busy Operations colleague and the hand-over is noted on the timeline. The deal's **Back office** tab has the supplier forms, checks, signatures and submission; anyone who can't submit sees it as **Case**, read-only, with its progress and anything still needed from the customer.
 
 ## Cases: change of entity and renewals
 

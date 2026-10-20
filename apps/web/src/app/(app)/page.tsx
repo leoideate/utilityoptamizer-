@@ -1,16 +1,15 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Download, FileWarning, Plus, RefreshCw, ScanLine } from "lucide-react";
+import { AlertTriangle, ArrowRight, Download, FileWarning, Plus, RefreshCw, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { LEAD_SOURCE_LABELS, type LeadSource, SERVICE_TYPE_LABELS, type ServiceType, addDays } from "@uo/shared";
-import { CasesBoard } from "@/components/cases-board";
+import { BUCKETS, type Bucket } from "@/components/cases-board";
 import { BarList, UserSelect, useSuppliers } from "@/components/domain";
 import { Button, Card, CardHeader, Input, PageHeader, Select, Skeleton, Stat } from "@/components/ui/primitives";
 import { api, qs } from "@/lib/api";
 import { money, moneyCompact, num, pct, todayIso } from "@/lib/format";
-import { useDesk } from "@/lib/desk";
 import { useCan, useUser } from "@/lib/session";
 
 interface Dashboard {
@@ -43,15 +42,6 @@ const PRESETS = [
 ];
 
 export default function HomePage() {
-  const { desk } = useDesk();
-  return desk === "back_office" ? (
-    <CasesBoard scope="back_office" title="Work queue" description="Deals handed over by sales at Supplier selected: forms, checks, signatures, submission and the external party's answer." />
-  ) : (
-    <SalesDashboard />
-  );
-}
-
-function SalesDashboard() {
   const user = useUser();
   const can = useCan();
   const seesAll = can("report.read");
@@ -78,19 +68,25 @@ function SalesDashboard() {
                 </a>
               </Button>
             )}
-            <Button variant="secondary" asChild>
-              <Link href="/scan">
-                <ScanLine /> Scan business card
-              </Link>
-            </Button>
-            <Button asChild>
-              <Link href="/opportunities/new">
-                <Plus /> New lead
-              </Link>
-            </Button>
+            {can("opportunity.create") && (
+              <>
+                <Button variant="secondary" asChild>
+                  <Link href="/scan">
+                    <ScanLine /> Scan business card
+                  </Link>
+                </Button>
+                <Button asChild>
+                  <Link href="/opportunities/new">
+                    <Plus /> New lead
+                  </Link>
+                </Button>
+              </>
+            )}
           </>
         }
       />
+
+      {can("opportunity.submit") && <WorkQueue />}
 
       <Card className="mb-6 p-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6 [&>*]:min-w-0">
@@ -250,6 +246,33 @@ function SalesDashboard() {
         </div>
       )}
     </>
+  );
+}
+
+/** Deals handed over at Supplier selected, by where they stand; each figure opens that part of the queue under Cases. */
+function WorkQueue() {
+  const { data } = useQuery({ queryKey: ["cases", "?scope=back_office"], queryFn: () => api.get<{ counts: Record<Bucket, number> }>("/cases?scope=back_office") });
+  return (
+    <Card className="mb-6">
+      <CardHeader
+        title="Work queue"
+        description="Deals handed over at Supplier selected: forms, checks, signatures, submission and the external party's answer."
+        actions={
+          <Button variant="secondary" asChild>
+            <Link href="/cases?scope=back_office">
+              Open work queue <ArrowRight />
+            </Link>
+          </Button>
+        }
+      />
+      <div className="grid grid-cols-2 gap-3 p-5 pt-2 md:grid-cols-4">
+        {BUCKETS.map((b) => (
+          <Link key={b.key} href={`/cases?scope=back_office&bucket=${b.key}`} className="min-w-0 rounded-xl outline-offset-2">
+            <Stat label={b.label} value={data?.counts[b.key] ?? "—"} tone={data?.counts[b.key] ? b.tone : undefined} />
+          </Link>
+        ))}
+      </div>
+    </Card>
   );
 }
 

@@ -22,7 +22,6 @@ import {
   isEnergyService,
 } from "@uo/shared";
 import { useSuppliers } from "@/components/domain";
-import { useDesk } from "@/lib/desk";
 import { CollectCard } from "./collect";
 import { Dialog } from "@/components/ui/overlays";
 import { Button, Card, CardHeader, CheckboxGroup, Field, Input, Select } from "@/components/ui/primitives";
@@ -40,7 +39,6 @@ const GATE_LABELS: Record<keyof Workspace["gates"], string> = {
 };
 
 export function OverviewTab({ opp, onGoTo }: { opp: Workspace; onGoTo: (tab: string) => void }) {
-  const { desk } = useDesk();
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
       <div className="order-2 min-w-0 lg:order-1">
@@ -48,7 +46,7 @@ export function OverviewTab({ opp, onGoTo }: { opp: Workspace; onGoTo: (tab: str
       </div>
       <div className="order-1 min-w-0 space-y-6 lg:order-2">
         <CustomerCard opp={opp} />
-        {desk === "sales" && opp.serviceType !== "merchant_services" && <CollectCard opp={opp} />}
+        {opp.serviceType !== "merchant_services" && <CollectCard opp={opp} />}
         <Card>
           <CardHeader title="Checklist" description="What's needed for the next milestones." />
           <ul className="divide-y divide-border">
