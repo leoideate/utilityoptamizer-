@@ -1,6 +1,8 @@
 # Render Blueprint for the Utility Optimizer CRM. See docs/deploy-render.md before using it.
 # Everything runs in Render's EU region (Frankfurt). Only the web app is public; the API is a
-# private service reached through the web app's /api proxy.
+# private service reached through the web app's /api proxy. Files live on a Render persistent
+# disk attached to the API, so the background jobs run inside the API (a disk belongs to one
+# service). To use an S3 bucket instead, see "Using S3 instead of a Render disk" in the guide.
 
 databases:
   - name: uo-crm-db
@@ -13,7 +15,7 @@ databases:
     ipAllowList: []
 
 envVarGroups:
-  # Shared by the API and the worker. Secrets marked sync: false are entered in the dashboard.
+  # Settings for the API. Secrets marked sync: false are entered in the dashboard.
   - name: uo-crm-shared
     envVars:
       - key: NODE_ENV
@@ -23,8 +25,10 @@ envVarGroups:
       # Requests reach the API through Render's proxy and the web app on the private network.
       - key: TRUST_PROXY
         value: loopback,linklocal,uniquelocal
+      # Background jobs (reminders, renewals, email, call sync) run in the API process, which
+      # is the only one that can see the files on its disk.
       - key: RUN_WORKERS_IN_API
-        value: "false"
+        value: "true"
       # Generated once by Render. Copy both into your password manager straight away: without
       # FIELD_ENCRYPTION_KEY the encrypted fields (bank details, dates of birth…) can't be read.
       - key: FIELD_ENCRYPTION_KEY
@@ -34,17 +38,12 @@ envVarGroups:
       # Public address of the web app, e.g. https://crm.utilityoptimizer.com
       - key: WEB_ORIGIN
         sync: false
-      # File storage: an S3 bucket (AWS eu-west-1 recommended) or another S3-compatible service.
+      # File storage: the API's persistent disk (mounted at /var/data, see uo-crm-api below).
+      # Files are served through signed, expiring links at /api/files/local.
       - key: STORAGE_DRIVER
-        value: s3
-      - key: S3_REGION
-        sync: false
-      - key: S3_BUCKET
-        sync: false
-      - key: S3_ACCESS_KEY_ID
-        sync: false
-      - key: S3_SECRET_ACCESS_KEY
-        sync: false
+        value: local
+      - key: LOCAL_STORAGE_DIR
+        value: /var/data/storage
       # Outgoing email (e.g. submission packs), e.g. smtps://user:pass@email-smtp.eu-west-1.amazonaws.com:465
       - key: SMTP_URL
         sync: false
@@ -69,30 +68,16 @@ services:
     dockerContext: .
     # Runs before each new version starts; migrations are forward-only.
     preDeployCommand: npx prisma migrate deploy
+    # Documents, signatures and form templates. Render snapshots the disk daily. A service with a
+    # disk runs one instance and has a short pause on each deploy.
+    disk:
+      name: uo-crm-files
+      mountPath: /var/data
+      sizeGB: 10
     envVars:
       - fromGroup: uo-crm-shared
       - key: PORT
         value: "4000"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: uo-crm-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          name: uo-crm-redis
-          type: keyvalue
-          property: connectionString
-
-  - name: uo-crm-worker
-    type: worker
-    runtime: docker
-    region: frankfurt
-    plan: starter
-    dockerfilePath: ./apps/api/Dockerfile
-    dockerContext: .
-    dockerCommand: node dist/worker.js
-    envVars:
-      - fromGroup: uo-crm-shared
       - key: DATABASE_URL
         fromDatabase:
           name: uo-crm-db
@@ -120,7 +105,7 @@ services:
           name: uo-crm-api
           type: pserv
           property: hostport
-      # Build argument: your bucket's origin, allowed by the Content-Security-Policy for document
-      # previews, e.g. https://uo-documents.s3.eu-west-1.amazonaws.com
+      # Build argument for the Content-Security-Policy. Files come from the app's own address
+      # (/api/files/local), so no outside storage origin is allowed.
       - key: STORAGE_ORIGIN
-        sync: false
+        value: "'self'"
