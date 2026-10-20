@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { SignatureCard } from "@/components/account/signature-card";
 import { Badge, Button, Card, CardHeader, Field, Input, IssueList, PageHeader } from "@/components/ui/primitives";
 import { type ApiError, api } from "@/lib/api";
 import { PROVIDER_LABELS, useMailboxes } from "@/lib/email";
@@ -39,6 +40,7 @@ export default function AccountPage() {
         <MailboxCard />
       </Suspense>
       <PhoneCard />
+      <SignatureCard />
       <Card>
         <CardHeader title="Two-factor authentication" description="Adds a 6-digit code from an authenticator app (Microsoft Authenticator, Google Authenticator…) when you sign in." />
         <div className="space-y-4 p-5 text-sm">

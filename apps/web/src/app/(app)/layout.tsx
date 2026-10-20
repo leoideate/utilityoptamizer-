@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
 import { AppShell } from "@/components/shell";
 import { BrandSplash } from "@/components/brand";
-import { DeskProvider } from "@/lib/desk";
 import { RealtimeProvider } from "@/lib/realtime";
 import { SessionProvider, useMe } from "@/lib/session";
 
@@ -16,6 +15,7 @@ export default function AuthedLayout({ children }: { children: ReactNode }) {
     try {
       const t = localStorage.getItem("uo-theme");
       if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      localStorage.removeItem("uo-desk"); // left over from the separate Sales and Back office interfaces
     } catch {
       /* storage unavailable */
     }
@@ -30,9 +30,7 @@ export default function AuthedLayout({ children }: { children: ReactNode }) {
   return (
     <SessionProvider user={me.data}>
       <RealtimeProvider userId={me.data.id}>
-        <DeskProvider>
-          <AppShell>{children}</AppShell>
-        </DeskProvider>
+        <AppShell>{children}</AppShell>
       </RealtimeProvider>
     </SessionProvider>
   );

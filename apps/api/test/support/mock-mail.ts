@@ -17,6 +17,8 @@ export interface MockMail {
   sentAt: Date;
   isRead: boolean;
   inReplyTo?: string;
+  /** The HTML part of a multipart message sent through Gmail. */
+  sentHtml?: string;
 }
 
 /**
@@ -206,9 +208,10 @@ export class MockMailProvider {
     if (reply && req.method === "POST") {
       const orig = this.mail.find((m) => m.id === decodeURIComponent(reply[1]));
       if (!orig) return this.json(res, 404, {});
-      const b = JSON.parse(raw) as { comment: string };
+      // A reply carries either a plain comment or a message body (HTML, e.g. with a signature).
+      const b = JSON.parse(raw) as { comment?: string; message?: { body: { content: string } } };
       const to = orig.folder === "inbox" ? orig.from.address : orig.to[0];
-      const m = this.deliver({ from: me, to, subject: `RE: ${orig.subject}`, body: b.comment, folder: "sent", threadId: orig.threadId, isRead: true });
+      const m = this.deliver({ from: me, to, subject: `RE: ${orig.subject}`, body: b.message?.body.content ?? b.comment ?? "", folder: "sent", threadId: orig.threadId, isRead: true });
       m.inReplyTo = orig.internetMessageId;
       return this.json(res, 202, undefined);
     }
@@ -258,9 +261,19 @@ export class MockMailProvider {
     if (p === "/messages/send" && req.method === "POST") {
       const b = JSON.parse(raw) as { raw: string; threadId?: string };
       const text = Buffer.from(b.raw, "base64url").toString("utf8");
-      const [head, body] = text.split("\r\n\r\n");
+      const [head, ...rest] = text.split("\r\n\r\n");
       const h = new Map(head.split("\r\n").map((l) => [l.slice(0, l.indexOf(":")).toLowerCase(), l.slice(l.indexOf(":") + 1).trim()]));
-      const m = this.deliver({ from: me, to: h.get("to")!.split(",")[0].trim(), subject: h.get("subject")!, body: Buffer.from(body.replace(/\r\n/g, ""), "base64").toString("utf8"), folder: "sent", threadId: b.threadId, isRead: true });
+      const decode = (s: string) => Buffer.from(s.replace(/\r\n/g, ""), "base64").toString("utf8");
+      // multipart/alternative: the text/plain part is the body; the HTML part is kept beside it.
+      const boundary = h.get("content-type")?.match(/boundary="([^"]+)"/)?.[1];
+      const parts = boundary ? rest.join("\r\n\r\n").split(`--${boundary}`).filter((x) => x.includes("Content-Type:")) : [];
+      const part = (type: string) => {
+        const found = parts.find((x) => x.includes(`Content-Type: ${type}`));
+        return found ? decode(found.split("\r\n\r\n")[1]) : undefined;
+      };
+      const body = boundary ? (part("text/plain") ?? "") : decode(rest.join("\r\n\r\n"));
+      const m = this.deliver({ from: me, to: h.get("to")!.split(",")[0].trim(), subject: h.get("subject")!, body, folder: "sent", threadId: b.threadId, isRead: true });
+      m.sentHtml = part("text/html");
       m.to = h.get("to")!.split(",").map((s) => s.trim().toLowerCase());
       m.inReplyTo = h.get("in-reply-to");
       return this.json(res, 200, { id: m.id, threadId: m.threadId });

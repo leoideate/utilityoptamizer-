@@ -27,13 +27,16 @@ export const FORM_STATUS_LABELS = labels<FormStatus>({
 });
 
 /** How the signer authorised use of the uploaded signature for this exact form. */
-export const SIGNATURE_AUTHORISATIONS = ["signed_in_person", "signed_copy_by_email", "signed_copy_by_whatsapp", "broker_own_signature"] as const;
+export const SIGNATURE_AUTHORISATIONS = ["signed_in_person", "signed_copy_by_email", "signed_copy_by_whatsapp", "broker_own_signature", "signed_online"] as const;
 export type SignatureAuthorisation = (typeof SIGNATURE_AUTHORISATIONS)[number];
+/** What staff can claim when uploading a signature; "signed_online" is only set by the signing page. */
+export const STAFF_SIGNATURE_AUTHORISATIONS = ["signed_in_person", "signed_copy_by_email", "signed_copy_by_whatsapp", "broker_own_signature"] as const satisfies readonly SignatureAuthorisation[];
 export const SIGNATURE_AUTHORISATION_LABELS = labels<SignatureAuthorisation>({
   signed_in_person: "Signed on paper in front of us",
   signed_copy_by_email: "Signer emailed their signature for this form",
   signed_copy_by_whatsapp: "Signer sent their signature for this form by WhatsApp",
   broker_own_signature: "Broker's own signature",
+  signed_online: "Signed online through a CRM signing link",
 });
 
 /**
@@ -254,9 +257,38 @@ export const formSignatureSchema = z.object({
   role: z.enum(FORM_SIGNER_ROLES),
   signerName: z.string().trim().min(1, "Enter the signer's name.").max(200),
   signerCapacity: optText(100),
-  authorisation: z.enum(SIGNATURE_AUTHORISATIONS),
+  authorisation: z.enum(STAFF_SIGNATURE_AUTHORISATIONS),
   note: optText(500),
   attest: z.literal(true, { errorMap: () => ({ message: "Confirm the signer authorised this signature for this form." }) }),
+});
+
+// --- Online signing ------------------------------------------------------------------
+
+/** Days a signing link stays valid. */
+export const SIGNING_LINK_DAYS = 14;
+/** Shown next to the tick box on the signing page; the version and wording are stored with each signature. */
+export const SIGNING_CONSENT_VERSION = "2026-10-1";
+export const SIGNING_CONSENT_TEXT =
+  "I have read this document. I agree to sign it electronically, and I intend my drawn signature and typed name to have the same effect as my handwritten signature on it.";
+
+export const SIGNING_LINK_STATUSES = ["sent", "opened", "signed", "expired", "revoked"] as const;
+export type SigningLinkStatus = (typeof SIGNING_LINK_STATUSES)[number];
+export const SIGNING_LINK_STATUS_LABELS = labels<SigningLinkStatus>({ sent: "Sent", opened: "Opened", signed: "Signed", expired: "Expired", revoked: "Cancelled" });
+
+export const signingLinkSchema = z.object({
+  role: z.enum(FORM_SIGNER_ROLES),
+  signerName: z.string().trim().min(1, "Enter the signer's name.").max(200),
+  email: z.string().trim().toLowerCase().email("Enter the signer's email address."),
+});
+
+/** The signature image is a small PNG data URL drawn on the signing page (requests are limited to 100 KB). */
+export const publicSignSchema = z.object({
+  typedName: z.string().trim().min(1, "Type your full name.").max(200),
+  consent: z.literal(true, { errorMap: () => ({ message: "Tick the box to agree to sign electronically." }) }),
+  signaturePng: z
+    .string()
+    .max(95_000, "The signature is too large. Clear it and sign again.")
+    .regex(/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/, "Draw your signature in the box."),
 });
 
 export const formReviewSchema = z.object({ decision: z.enum(["approved", "rejected"]), note: optText(1000) });

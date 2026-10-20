@@ -56,6 +56,13 @@ test("login page is accessible and rejects a wrong password", async ({ page }) =
   await expect(page.getByText("Email or password is incorrect.")).toBeVisible();
 });
 
+test("an invalid signing link explains itself without asking the signer to log in", async ({ page }) => {
+  await page.goto(`/sign/${"x".repeat(43)}`);
+  await expect(page.getByRole("heading", { name: "This signing link isn't valid" })).toBeVisible();
+  await expect(page).toHaveURL(/\/sign\//);
+  await expectAccessible(page, "invalid signing link");
+});
+
 test("single sign-on errors are explained on the login page", async ({ page }) => {
   await page.goto("/login?error=sso_no_account");
   await expect(page.getByText("There's no active CRM account for that email address.")).toBeVisible();
@@ -139,26 +146,29 @@ test("a change of entity case shows its status and guided checklist, and records
   await expectAccessible(page, "forms tab with case");
 });
 
-test("sales and the back office each get their own interface", async ({ page }) => {
+test("everyone works in one interface; the menu follows capabilities", async ({ page }) => {
   await signIn(page, users.sales);
   const nav = page.getByRole("navigation", { name: "Main" });
   await expect(nav.getByRole("link", { name: "Scan business card" })).toBeVisible();
-  await expect(nav.getByRole("link", { name: "Work queue" })).toHaveCount(0);
+  await expect(nav.getByRole("link", { name: "Cases" })).toBeVisible();
   await expect(nav.getByRole("link", { name: "Supplier forms" })).toHaveCount(0);
+  await expect(nav.getByRole("group", { name: "Interface" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "New lead" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Work queue" })).toHaveCount(0);
 
   await signIn(page, users.ops);
-  await expect(nav.getByRole("link", { name: "Work queue" })).toBeVisible();
-  await expect(nav.getByRole("link", { name: "Scan business card" })).toHaveCount(0);
-  await expect(page.getByRole("heading", { level: 1, name: "Work queue" })).toBeVisible();
-  await expectAccessible(page, "back office work queue");
-
-  // Managers can switch between the two.
-  await signIn(page, users.manager);
-  await nav.getByRole("button", { name: "Back office" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Work queue" })).toBeVisible();
-  await nav.getByRole("button", { name: "Sales" }).click();
   await expect(nav.getByRole("link", { name: "Scan business card" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Work queue" })).toBeVisible();
+  await expect(nav.getByRole("group", { name: "Interface" })).toHaveCount(0);
+  await expectAccessible(page, "home with work queue");
+
+  await signIn(page, users.manager);
+  await expect(nav.getByRole("link", { name: "Leads and deals" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Supplier forms" })).toBeVisible();
+  await expect(nav.getByRole("button", { name: "Back office" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Open work queue" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Cases" })).toBeVisible();
+  await expect(page.locator("md-select").first()).toHaveAttribute("value", "back_office");
 });
 
 test("Worldpay opportunity shows the merchant workspace and hides energy sections", async ({ page }) => {

@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { DOCUMENT_TYPES, SERVICE_TYPE_LABELS, can } from "@uo/shared";
+import { DOCUMENT_TYPES, SERVICE_TYPE_LABELS, can, withSignature } from "@uo/shared";
 import { ENV, type Env } from "../config/env";
 import { AuditService } from "../audit/audit.service";
 import { type Actor, SYSTEM, actorRef } from "../common/actor";
@@ -12,6 +12,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { OpportunityAccess } from "../opportunities/access.service";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/storage";
 import { recordSentPack } from "../workflows/workflows.service";
+import { EmailSignaturesService } from "../email-signatures/email-signatures.service";
 import { EMAIL_SENDER, type EmailSender, NotConfigured, SUBMISSION_CHANNEL, type SubmissionChannel, WHATSAPP_SENDER, type WhatsAppSender } from "./adapters";
 
 export type IntegrationKind = "email.send" | "whatsapp.send" | "submission.send";
@@ -37,6 +38,7 @@ export class IntegrationsService {
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
     @Inject(ENV) private readonly env: Env,
     private readonly mailboxes: MailboxesService,
+    private readonly signatures: EmailSignaturesService,
   ) {}
 
   /** What can be used. Email works through the person's own connected mailbox, or the shared SMTP sender. */
@@ -51,6 +53,17 @@ export class IntegrationsService {
       signatures: this.env.SIGNATURE_PROVIDER,
       virusScan: this.env.VIRUS_SCAN_DRIVER,
     };
+  }
+
+  /** Whether system email (SMTP) is set up, for features that email people outside the CRM. */
+  get emailConfigured(): boolean {
+    return this.email.configured;
+  }
+
+  /** A message from this person with their email signature, or ending with `signOff` when they have none. */
+  async withSenderSignature(actor: Actor, body: string, signOff: string) {
+    const signature = await this.signatures.renderedFor(actorRef(actor));
+    return signature ? withSignature(body, signature) : { text: `${body}\n\n${signOff}` };
   }
 
   /** Idempotent: the same key returns the existing job instead of sending twice. */
@@ -71,9 +84,10 @@ export class IntegrationsService {
     const opp = await this.access.writable(actor, opportunityId);
     const mailbox = await this.mailboxes.sendingMailbox(actor.id);
     if (!mailbox && !this.email.configured) throw new RuleViolation(["Connect your mailbox on the Account page to send email from the CRM."]);
+    const message = await this.signatures.compose(actorRef(actor), input.body);
     const payload = mailbox
-      ? { mailboxId: mailbox.id, to: input.to.toLowerCase(), subject: input.subject, text: input.body, customerId: opp.customerId }
-      : { to: input.to, subject: input.subject, text: input.body, replyTo: undefined };
+      ? { mailboxId: mailbox.id, to: input.to.toLowerCase(), subject: input.subject, ...message, customerId: opp.customerId }
+      : { to: input.to, subject: input.subject, ...message, replyTo: undefined };
     const job = await this.enqueue(actor, "email.send", payload, `email:${input.idempotencyKey}`, opportunityId);
     await this.audit.timeline(actor, { opportunityId, customerId: opp.customerId, kind: "email", direction: "outbound", body: `To ${input.to}: ${input.subject}\n\n${input.body}`, data: { integrationJobId: job.id } });
     await this.prisma.opportunity.update({ where: { id: opportunityId }, data: { lastContactAt: new Date(), firstContactAt: opp.firstContactAt ?? new Date() } });
@@ -89,7 +103,7 @@ export class IntegrationsService {
     const job = await this.enqueue(
       actor,
       "email.send",
-      { mailboxId: orig.mailboxId, to: to.join(", "), subject, text: input.body, replyToEmailId: orig.id, customerId: orig.customerId },
+      { mailboxId: orig.mailboxId, to: to.join(", "), subject, ...(await this.signatures.compose(actorRef(actor), input.body)), replyToEmailId: orig.id, customerId: orig.customerId },
       `email:${input.idempotencyKey}`,
       orig.opportunityId ?? undefined,
     );
@@ -169,8 +183,8 @@ export class IntegrationsService {
   private async run(kind: IntegrationKind, p: Record<string, string>): Promise<unknown> {
     switch (kind) {
       case "email.send":
-        if (p.mailboxId) return this.mailboxes.send(p.mailboxId, { to: p.to.split(",").map((t) => t.trim()), subject: p.subject, text: p.text, replyToEmailId: p.replyToEmailId });
-        return this.email.send({ to: p.to, subject: p.subject, text: p.text });
+        if (p.mailboxId) return this.mailboxes.send(p.mailboxId, { to: p.to.split(",").map((t) => t.trim()), subject: p.subject, text: p.text, html: p.html, replyToEmailId: p.replyToEmailId });
+        return this.email.send({ to: p.to, subject: p.subject, text: p.text, html: p.html });
       case "whatsapp.send":
         return this.whatsapp.send(p.to, p.text);
       case "submission.send": {

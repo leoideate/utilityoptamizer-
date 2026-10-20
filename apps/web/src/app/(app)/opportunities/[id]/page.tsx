@@ -4,8 +4,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Check, ChevronDown, CircleSlash, PartyPopper, RotateCcw, ShieldCheck, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
-import { APPROVAL_LABELS, LEAD_SOURCE_LABELS, STAGES, type StageKey, isEnergyService, isHandedOver, stageIndex } from "@uo/shared";
+import { Suspense, useState } from "react";
+import { APPROVAL_LABELS, LEAD_SOURCE_LABELS, STAGES, type StageKey, isEnergyService, stageIndex } from "@uo/shared";
 import { ActivitiesTab } from "@/components/opportunity/activities";
 import { CallButton } from "@/components/opportunity/call";
 import { TeamChatTab } from "@/components/opportunity/team-chat";
@@ -22,7 +22,6 @@ import { Dialog, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrig
 import { Badge, Button, Card, Field, Input, IssueList, Skeleton, Textarea } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api";
 import { cn, date, ref, todayIso } from "@/lib/format";
-import { useDesk } from "@/lib/desk";
 import { useCan, useUser } from "@/lib/session";
 import type { Workspace } from "@/lib/types";
 
@@ -37,14 +36,8 @@ function OpportunityWorkspace() {
   const [dialog, setDialog] = useState<null | "lost" | "activate" | "approve" | "assign">(null);
   const [blocked, setBlocked] = useState<{ stage: string; issues: string[] } | null>(null);
   const can = useCan();
-  const { desk } = useDesk();
   // The back office does the forms, checks and submission; sales sees the case and its progress.
   const backOffice = can("opportunity.submit");
-  const handedOver = isHandedOver(opp?.stage.key);
-  // At the back-office desk, a handed-over deal opens on its back-office tab.
-  useEffect(() => {
-    if (desk === "back_office" && handedOver && !params.get("tab")) setTab("forms");
-  }, [desk, handedOver, params]);
 
   const move = useMutation({
     meta: { silent: true },

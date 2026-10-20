@@ -24,6 +24,8 @@ COPY --from=build /app/apps/api/package.json apps/api/
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY --from=build /app/apps/api/dist-seed apps/api/dist-seed
 COPY --from=build /app/apps/api/prisma apps/api/prisma
+# The default email-signature logo (from the company letterhead).
+COPY --from=build /app/apps/api/assets apps/api/assets
 WORKDIR /app/apps/api
 USER node
 EXPOSE 4000

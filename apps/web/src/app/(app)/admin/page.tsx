@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CAPABILITIES, DEFAULT_WORKFLOW_REMINDERS, RENEWAL_ROUTES, RENEWAL_ROUTE_LABELS, ROLES, ROLE_LABELS, type RenewalRoute, type Role, type WorkflowReminders } from "@uo/shared";
+import { CompanySignatureCard } from "@/components/account/company-signature-card";
 import type { Supplier } from "@/components/domain";
 import { Dialog, TabPanel, Tabs } from "@/components/ui/overlays";
 import { Badge, Button, Card, CardHeader, Checkbox, Field, Input, IssueList, PageHeader, Select, Skeleton } from "@/components/ui/primitives";
@@ -453,6 +454,7 @@ function IntegrationsAdmin() {
         </div>
       </Card>
       <BrokerCard />
+      <CompanySignatureCard />
       <Card>
         <CardHeader
           title="Outbound jobs"

@@ -228,7 +228,11 @@ describe("sending as yourself", () => {
     const { jobId } = support.expectStatus(await p.client.post(`/opportunities/${d.oppId}/emails`, { to: d.email, subject: "Your quote", body: "Please find it below.", idempotencyKey: `k-${Date.now()}-b` }), 201).body;
     await integrations.execute(jobId, 1, 6);
     expect((await t.prisma.integrationJob.findUniqueOrThrow({ where: { id: jobId } })).status).toBe("succeeded");
-    expect(ms.mail.find((m) => m.folder === "sent" && m.subject === "Your quote")).toMatchObject({ to: [d.email], body: "Please find it below." });
+    // Sent as HTML with the company email signature (everyone starts with it).
+    const out = ms.mail.find((m) => m.folder === "sent" && m.subject === "Your quote")!;
+    expect(out.to).toEqual([d.email]);
+    expect(out.body).toContain("Please find it below.</div>");
+    expect(out.body).toContain("Greenhills Road");
 
     await mailboxes.sync(mailbox!.id);
     const sent = await t.prisma.emailMessage.findFirstOrThrow({ where: { mailboxId: mailbox!.id, direction: "outbound" } });
@@ -250,7 +254,10 @@ describe("sending as yourself", () => {
     expect((await other.client.post(`/emails/${msg.id}/reply`, { body: "x", idempotencyKey: `r-${Date.now()}-0` })).status).toBe(404);
     const { jobId } = support.expectStatus(await p.client.post(`/emails/${msg.id}/reply`, { body: "Yes, in March.", idempotencyKey: `r-${Date.now()}-1` }), 201).body;
     await integrations.execute(jobId, 1, 6);
-    const sent = gm.mail.find((m) => m.folder === "sent" && m.body === "Yes, in March.")!;
+    const sent = gm.mail.find((m) => m.folder === "sent" && m.body.startsWith("Yes, in March."))!;
+    // Plain text with the signature after "-- ", and an HTML part with it too.
+    expect(sent.body).toMatch(/^Yes, in March\.\n\n-- \n/);
+    expect(sent.sentHtml).toContain("Greenhills Road");
     expect(sent).toMatchObject({ subject: "Re: Renewal", to: [d.email], threadId: incoming.threadId, inReplyTo: incoming.internetMessageId });
 
     await mailboxes.sync(mailbox!.id);

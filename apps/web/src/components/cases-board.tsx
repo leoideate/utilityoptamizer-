@@ -10,7 +10,7 @@ import { Badge, Card, EmptyState, Field, Input, PageHeader, Select, Skeleton, St
 import { api, qs } from "@/lib/api";
 import { cn, date, ref, todayIso } from "@/lib/format";
 
-type Bucket = "in_progress" | "overdue" | "awaiting_approval" | "ready" | "sent_awaiting" | "accepted" | "rejected" | "completed";
+export type Bucket = "in_progress" | "overdue" | "awaiting_approval" | "ready" | "sent_awaiting" | "accepted" | "rejected" | "completed";
 interface CaseRow {
   id: string;
   number: number;
@@ -25,7 +25,7 @@ interface CaseRow {
   supplier: { id: string; name: string } | null;
 }
 
-const BUCKETS: { key: Bucket; label: string; tone: Tone }[] = [
+export const BUCKETS: { key: Bucket; label: string; tone: Tone }[] = [
   { key: "overdue", label: "Overdue", tone: "danger" },
   { key: "in_progress", label: "In progress", tone: "neutral" },
   { key: "awaiting_approval", label: "Awaiting client or broker", tone: "warning" },
@@ -40,15 +40,16 @@ const labelOf = (b: Bucket) => BUCKETS.find((x) => x.key === b)!.label;
 
 /**
  * Cases (renewals, changes of entity and supplier) by where they stand. With scope "back_office"
- * it's the back office's work queue: deals handed over at Supplier selected.
+ * it's the work queue: deals handed over at Supplier selected.
  */
-export function CasesBoard({ scope, title, description }: { scope?: "back_office"; title: string; description: string }) {
+export function CasesBoard({ title, description, initialScope, initialBucket }: { title: string; description: string; initialScope?: "back_office"; initialBucket?: Bucket }) {
+  const [scope, setScope] = useState<"back_office" | "">(initialScope ?? "");
   const [kind, setKind] = useState<CaseKind | "">("");
   const [ownerId, setOwnerId] = useState("");
   const [dueBefore, setDueBefore] = useState("");
-  const [bucket, setBucket] = useState<Bucket | "">("");
+  const [bucket, setBucket] = useState<Bucket | "">(initialBucket ?? "");
   const users = useAssignableUsers();
-  const query = qs({ kind: kind || undefined, ownerId: ownerId || undefined, dueBefore: dueBefore || undefined, scope });
+  const query = qs({ kind: kind || undefined, ownerId: ownerId || undefined, dueBefore: dueBefore || undefined, scope: scope || undefined });
   const { data, isLoading } = useQuery({ queryKey: ["cases", query], queryFn: () => api.get<{ counts: Record<Bucket, number>; rows: CaseRow[]; capped: boolean }>(`/cases${query}`), placeholderData: (p) => p });
   const rows = data?.rows.filter((r) => !bucket || r.bucket === bucket) ?? [];
   const today = todayIso();
@@ -56,7 +57,15 @@ export function CasesBoard({ scope, title, description }: { scope?: "back_office
   return (
     <>
       <PageHeader title={title} description={description} />
-      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 [&>*]:min-w-0">
+        <Field label="Show">
+          {(p) => (
+            <Select {...p} value={scope} onChange={(e) => setScope(e.target.value as "back_office" | "")}>
+              <option value="">All cases</option>
+              <option value="back_office">Work queue (handed over at Supplier selected)</option>
+            </Select>
+          )}
+        </Field>
         <Field label="Kind">
           {(p) => (
             <Select {...p} value={kind} onChange={(e) => setKind(e.target.value as CaseKind | "")}>
