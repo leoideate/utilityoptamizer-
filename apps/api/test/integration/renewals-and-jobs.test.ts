@@ -185,13 +185,15 @@ describe("stage migration", () => {
 
 describe("lead intake", () => {
   it("imports CSV leads and reports bad rows by line", async () => {
-    const csv = "Company,Contact,Service,Email\nAcme Bakery,Ann Lee,Electricity,ann@acme.ie\nBad Row,,Solar,\nTaste Café,,Worldpay,not-an-email\nPub Ltd,,Dual fuel,\n";
+    const csv = "Company,Contact,Service,Email\nAcme Bakery,Ann Lee,Electricity,ann@acme.ie\nBad Row,,Solar,\nTaste Café,,Worldpay,not-an-email\nPub Ltd,,Gas,\nOld Co,,Dual fuel,\n";
     const res = expectStatus(await team.ops.upload("/opportunities/import", Buffer.from(csv), "leads.csv", "text/csv"), 201).body;
     expect(res.created).toBe(2);
-    expect(res.errors.map((e: { line: number }) => e.line)).toEqual([3, 4]);
+    expect(res.errors.map((e: { line: number }) => e.line)).toEqual([3, 4, 6]);
     expect(res.errors[0].issues[0]).toMatch(/Unknown service "Solar"/);
+    // Dual fuel isn't offered for new leads any more.
+    expect(res.errors[2].issues).toEqual(["Dual fuel isn't offered: import it as an Electricity lead and a Gas lead."]);
     const imported = await t.prisma.opportunity.findMany({ where: { leadSource: "csv_import" } });
-    expect(imported.map((o) => o.serviceType).sort()).toEqual(["dual_fuel", "electricity"]);
+    expect(imported.map((o) => o.serviceType).sort()).toEqual(["electricity", "gas"]);
     expect(imported.every((o) => o.ownerId === null)).toBe(true);
   });
 
@@ -206,6 +208,7 @@ describe("lead intake", () => {
     // Without a Service column the services must be chosen.
     expect(expectStatus(await team.ops.upload("/opportunities/import", Buffer.from(csv), "leads.csv", "text/csv"), 422).body.issues[0]).toMatch(/choose the services/);
     expectStatus(await team.ops.upload("/opportunities/import?services=solar", Buffer.from(csv), "leads.csv", "text/csv"), 400);
+    expectStatus(await team.ops.upload("/opportunities/import?services=dual_fuel", Buffer.from(csv), "leads.csv", "text/csv"), 400);
 
     const res = expectStatus(await team.ops.upload("/opportunities/import?services=merchant_services,electricity", Buffer.from(csv), "leads.csv", "text/csv"), 201).body;
     expect(res).toMatchObject({ created: 6, customers: 2, errors: [] });

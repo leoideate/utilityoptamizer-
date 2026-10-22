@@ -13,6 +13,7 @@ import {
   PRODUCT_INTEREST_LABELS,
   SALE_TYPES,
   SALE_TYPE_LABELS,
+  SELECTABLE_SERVICE_TYPES,
   SERVICE_TYPES,
   SERVICE_TYPE_LABELS,
   SUPPLY_CHANGES,
@@ -85,7 +86,7 @@ function NewOpportunityForm() {
           <Field label="Service">
             {(p) => (
               <Select {...p} {...register("serviceType")}>
-                {SERVICE_TYPES.map((s) => (
+                {SELECTABLE_SERVICE_TYPES.map((s) => (
                   <option key={s} value={s}>
                     {SERVICE_TYPE_LABELS[s]}
                   </option>

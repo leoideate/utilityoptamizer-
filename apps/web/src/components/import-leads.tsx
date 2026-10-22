@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FileUp } from "lucide-react";
 import { useRef, useState } from "react";
-import { SERVICE_TYPES, SERVICE_TYPE_LABELS, type ServiceType } from "@uo/shared";
+import { SELECTABLE_SERVICE_TYPES, SERVICE_TYPE_LABELS, type ServiceType } from "@uo/shared";
 import { Dialog } from "@/components/ui/overlays";
 import { Button, CheckboxGroup, IssueList } from "@/components/ui/primitives";
 import { type ApiError, api, qs } from "@/lib/api";
@@ -43,13 +43,13 @@ export function ImportLeadsButton() {
       <Dialog open={open} onOpenChange={setOpen} title="Import leads from CSV" description="One lead per row. Leads arrive unassigned and are shared out automatically.">
         <div className="space-y-4 text-sm">
           <p>
-            Columns (first row): <strong>Service</strong> (Electricity, Gas, Dual fuel or Worldpay), or choose the services below. Optional: Name, Company or Business name, Contact or Owner / Manager name, Email, Phone, Campaign, Source, Notes, Expected revenue, Category, Address, Area, Opening hours.
+            Columns (first row): <strong>Service</strong> (Electricity, Gas or Worldpay), or choose the services below. Optional: Name, Company or Business name, Contact or Owner / Manager name, Email, Phone, Campaign, Source, Notes, Expected revenue, Category, Address, Area, Opening hours.
           </p>
           <p className="text-muted">With an Address or Category, a customer is created for each business (a possible duplicate is listed instead, never merged), and energy leads get a supply site at the address.</p>
           <CheckboxGroup
             legend="Services for rows without a Service"
             hint="Each business gets one lead per service ticked."
-            options={SERVICE_TYPES}
+            options={SELECTABLE_SERVICE_TYPES}
             labels={SERVICE_TYPE_LABELS}
             value={services}
             onChange={setServices}

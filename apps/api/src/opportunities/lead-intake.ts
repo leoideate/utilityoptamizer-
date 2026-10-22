@@ -1,7 +1,7 @@
 import { Body, Controller, Headers, HttpCode, Inject, Injectable, Post, Query, Req, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { ApiConsumes, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
-import { type ContactInput, LEAD_SOURCES, SERVICE_TYPES, SERVICE_TYPE_LABELS, type ServiceType, addressSchema, createOpportunitySchema, isEnergyService } from "@uo/shared";
+import { type ContactInput, LEAD_SOURCES, SELECTABLE_SERVICE_TYPES, SERVICE_TYPES, SERVICE_TYPE_LABELS, type ServiceType, addressSchema, createOpportunitySchema, isEnergyService } from "@uo/shared";
 import { createHash } from "node:crypto";
 import type { Request } from "express";
 import { z } from "zod";
@@ -153,7 +153,7 @@ export const importQuerySchema = z.object({
     .max(200)
     .optional()
     .transform((v) => [...new Set((v ?? "").split(",").map((x) => x.trim()).filter(Boolean))])
-    .pipe(z.array(z.enum(SERVICE_TYPES))),
+    .pipe(z.array(z.enum(SELECTABLE_SERVICE_TYPES))),
 });
 
 export const leadPayloadSchema = z.object({
@@ -191,7 +191,7 @@ export class LeadIntakeService {
     if (rows.length < 2) throw new RuleViolation(["The file needs a header row and at least one lead."]);
     const header = rows[0].map((h) => COLUMN_ALIASES[h.trim().toLowerCase().replace(/\s+/g, " ")] ?? null);
     if (!header.includes("serviceType") && !services.length) {
-      throw new RuleViolation(['Add a "Service" column (Electricity, Gas, Dual fuel or Worldpay), or choose the services to create for each row.']);
+      throw new RuleViolation(['Add a "Service" column (Electricity, Gas or Worldpay), or choose the services to create for each row.']);
     }
     if ((rows.length - 1) * Math.max(1, services.length) > 2000) throw new RuleViolation(["Import up to 2,000 leads at a time."]);
     // A file is imported once per set of services: retrying after a lost response would otherwise
@@ -214,6 +214,10 @@ export class LeadIntakeService {
         if (key && row[j]?.trim()) rec[key] = row[j].trim();
       });
       const rowServices = rec.serviceType ? [SERVICE_ALIASES[rec.serviceType.toLowerCase()]] : services;
+      if (rowServices[0] === "dual_fuel") {
+        errors.push({ line, issues: ["Dual fuel isn't offered: import it as an Electricity lead and a Gas lead."] });
+        continue;
+      }
       if (!rowServices.length) {
         errors.push({ line, issues: ["No service: fill in the Service column or choose the services to create."] });
         continue;
@@ -313,7 +317,7 @@ export class LeadIntakeController {
    */
   @Post("opportunities/import")
   @ApiConsumes("multipart/form-data")
-  @ApiQuery({ name: "services", required: false, description: `Services for rows without a Service value, comma-separated: ${SERVICE_TYPES.join(", ")}.` })
+  @ApiQuery({ name: "services", required: false, description: `Services for rows without a Service value, comma-separated: ${SELECTABLE_SERVICE_TYPES.join(", ")}.` })
   @UseInterceptors(uploadInterceptor())
   importCsv(@CurrentUser() a: Actor, @Query(new ZodPipe(importQuerySchema)) q: z.infer<typeof importQuerySchema>, @UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new RuleViolation(["Choose a CSV file."]);
