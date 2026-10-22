@@ -651,7 +651,7 @@ export class FlogasElectricityService {
     if (!t) throw new RuleViolation(["The Flogas electricity form hasn't been set up yet. An administrator needs to upload the Flogas Commercial Agreement PDF under Admin → Supplier forms."]);
     const reveal = can(actor, "bank.read");
     const data = this.assemble(ctx, reveal);
-    if (!reveal && data.bankOnFile) Object.assign(data, { iban: `XXXXXXXXXXXXXX${data.ibanLast4 ?? ""}`, debtorName: "On file (restricted)", bic: null });
+    if (!reveal && data.bankOnFile) Object.assign(data, { iban: `${"X".repeat(18)}${data.ibanLast4 ?? ""}`, debtorName: "On file (restricted)", bic: null });
     const rendered = await renderFlogasElectricity(data, flogasSigners(data));
     const filled = await fillPdf({ template: await this.storage.get(t.storageKey), fields: rendered.fields, values: rendered.values, title: "Flogas electricity application (draft preview)" });
     const doc = await PDFDocument.load(filled.bytes);
