@@ -335,7 +335,7 @@ export const BORD_GAIS_TAB_LABELS = labels<BordGaisTab>({
   agreement: "Agreement and Rates",
   declaration: "Declaration and Marketing",
   debit: "SEPA Direct Debit",
-  documents: "Documents",
+  documents: "Signatures and Documents",
 });
 
 export interface BordGaisIssue {
