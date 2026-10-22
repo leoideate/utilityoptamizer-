@@ -1,5 +1,5 @@
 import { Body, Controller, Headers, HttpCode, Inject, Injectable, Post, Query, Req, UploadedFile, UseInterceptors } from "@nestjs/common";
-import { ApiConsumes, ApiTags } from "@nestjs/swagger";
+import { ApiConsumes, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import { type ContactInput, LEAD_SOURCES, SERVICE_TYPES, SERVICE_TYPE_LABELS, type ServiceType, addressSchema, createOpportunitySchema, isEnergyService } from "@uo/shared";
 import { createHash } from "node:crypto";
@@ -313,6 +313,7 @@ export class LeadIntakeController {
    */
   @Post("opportunities/import")
   @ApiConsumes("multipart/form-data")
+  @ApiQuery({ name: "services", required: false, description: `Services for rows without a Service value, comma-separated: ${SERVICE_TYPES.join(", ")}.` })
   @UseInterceptors(uploadInterceptor())
   importCsv(@CurrentUser() a: Actor, @Query(new ZodPipe(importQuerySchema)) q: z.infer<typeof importQuerySchema>, @UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new RuleViolation(["Choose a CSV file."]);

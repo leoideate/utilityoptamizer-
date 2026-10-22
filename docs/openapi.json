@@ -358,7 +358,15 @@
     "/api/opportunities/import": {
       "post": {
         "operationId": "LeadIntakeController_importCsv",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "services",
+            "required": false,
+            "in": "query",
+            "description": "Services for rows without a Service value, comma-separated: electricity, gas, dual_fuel, merchant_services.",
+            "schema": {}
+          }
+        ],
         "responses": {
           "201": {
             "description": ""
