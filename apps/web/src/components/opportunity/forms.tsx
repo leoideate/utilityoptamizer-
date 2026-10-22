@@ -75,7 +75,7 @@ interface SigningLinkRow {
   openedAt: string | null;
   signedAt: string | null;
 }
-const LINK_TONE: Record<SigningLinkStatus, Tone> = { sent: "info", opened: "warning", signed: "success", expired: "neutral", revoked: "neutral" };
+const LINK_TONE: Record<SigningLinkStatus, Tone> = { sent: "info", opened: "warning", signed: "success", declined: "danger", expired: "neutral", revoked: "neutral" };
 
 const STATUS_TONE: Record<FormStatus, Tone> = { generated: "warning", awaiting_review: "info", approved: "success", rejected: "danger", superseded: "neutral" };
 const issuesOf = (e: unknown) => ((e as ApiError).issues?.length ? (e as ApiError).issues : [(e as ApiError).message]);

@@ -11,9 +11,10 @@ export type FormFieldKind = (typeof FORM_FIELD_KINDS)[number];
 export const FORM_FIELD_KIND_LABELS = labels<FormFieldKind>({ text: "Text", check: "Tick box", signature: "Signature", signed_date: "Date signed" });
 
 /** Who a signature or signed-date field belongs to. */
-export const FORM_SIGNER_ROLES = ["customer", "broker"] as const;
+/** `account_holder_2` signs a direct debit mandate for a joint bank account alongside the client. */
+export const FORM_SIGNER_ROLES = ["customer", "broker", "account_holder_2"] as const;
 export type FormSignerRole = (typeof FORM_SIGNER_ROLES)[number];
-export const FORM_SIGNER_ROLE_LABELS = labels<FormSignerRole>({ customer: "Client", broker: "Broker" });
+export const FORM_SIGNER_ROLE_LABELS = labels<FormSignerRole>({ customer: "Client", broker: "Broker", account_holder_2: "Second account holder" });
 
 /** generated → (signatures uploaded) awaiting_review → approved | rejected. A new generation supersedes older forms for the same template. */
 export const FORM_STATUSES = ["generated", "awaiting_review", "approved", "rejected", "superseded"] as const;
@@ -271,9 +272,9 @@ export const SIGNING_CONSENT_VERSION = "2026-10-1";
 export const SIGNING_CONSENT_TEXT =
   "I have read this document. I agree to sign it electronically, and I intend my drawn signature and typed name to have the same effect as my handwritten signature on it.";
 
-export const SIGNING_LINK_STATUSES = ["sent", "opened", "signed", "expired", "revoked"] as const;
+export const SIGNING_LINK_STATUSES = ["sent", "opened", "signed", "declined", "expired", "revoked"] as const;
 export type SigningLinkStatus = (typeof SIGNING_LINK_STATUSES)[number];
-export const SIGNING_LINK_STATUS_LABELS = labels<SigningLinkStatus>({ sent: "Sent", opened: "Opened", signed: "Signed", expired: "Expired", revoked: "Cancelled" });
+export const SIGNING_LINK_STATUS_LABELS = labels<SigningLinkStatus>({ sent: "Sent", opened: "Opened", signed: "Signed", declined: "Declined", expired: "Expired", revoked: "Cancelled" });
 
 export const signingLinkSchema = z.object({
   role: z.enum(FORM_SIGNER_ROLES),
@@ -290,6 +291,9 @@ export const publicSignSchema = z.object({
     .max(95_000, "The signature is too large. Clear it and sign again.")
     .regex(/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/, "Draw your signature in the box."),
 });
+
+/** The signer can refuse to sign; the reason is optional and shown to staff. */
+export const publicDeclineSchema = z.object({ reason: optText(500) });
 
 export const formReviewSchema = z.object({ decision: z.enum(["approved", "rejected"]), note: optText(1000) });
 
