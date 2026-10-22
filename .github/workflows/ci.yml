@@ -71,6 +71,42 @@ jobs:
       # Includes pentest.test.ts (every route from the OpenAPI document) and hardening.test.ts.
       - run: npm run test:integration -w @uo/api
 
+  # Machine-readable security evidence: a CycloneDX SBOM of every workspace and the npm audit report
+  # for production dependencies. A high or critical advisory in a production dependency fails the job;
+  # development-only advisories are in the SBOM and docs/security-assessment.md, not the gate.
+  security:
+    name: SBOM and dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # npm sbom reads the installed tree; no install scripts are needed for that.
+      - run: npm ci --ignore-scripts
+      # --legacy-peer-deps: npm sbom refuses an unmet optional peer (@hookform/resolvers declares
+      # ajv-formats ^2 for a resolver we don't use; @nestjs/cli brings 3.x). Every installed package is still listed.
+      - name: Generate CycloneDX SBOM
+        run: npm sbom --sbom-format cyclonedx --legacy-peer-deps > sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cdx.json
+          if-no-files-found: error
+      # The JSON report lists every severity; the second run is the gate and prints a readable summary.
+      - name: Audit production dependencies
+        run: |
+          npm audit --omit=dev --json > npm-audit.json || true
+          npm audit --omit=dev --audit-level=high
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-audit
+          path: npm-audit.json
+          if-no-files-found: error
+
   # Not yet: Playwright + axe e2e (npm run test:e2e). It needs a migrated and seeded database
   # (npm run db:migrate && npm run db:seed), the API built and started on :4000, the web app
   # built with API_ORIGIN and started on :3000, and `npx playwright install --with-deps`.

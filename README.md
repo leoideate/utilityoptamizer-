@@ -65,6 +65,7 @@ Open http://localhost:3000 and sign in as `manager@demo.utilityoptimizer.ie` (or
 - [Deployment, backup and recovery](docs/deployment.md)
 - [Deploying on Render](docs/deploy-render.md)
 - [Test report](docs/test-report.md)
+- [CI troubleshooting and security evidence (SBOM, dependency audit)](docs/ci-troubleshooting.md)
 - [Known limitations](docs/known-limitations.md)
 
 ## Repository layout
