@@ -36,6 +36,7 @@ import { OpportunityAccess } from "../opportunities/access.service";
 import { loadGateFacts } from "../opportunities/facts";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/storage";
 import { type FillValue, fillPdf, greyscaleCopy, inspectTemplate } from "./pdf";
+import { workflowTemplateFor } from "../supplier-applications/templates";
 import { presetFor } from "./presets";
 
 type Values = Record<string, FillValue>;
@@ -83,7 +84,8 @@ export class FormsService {
 
   templates(supplierId?: string) {
     return this.prisma.formTemplate.findMany({
-      where: { active: true, ...(supplierId ? { OR: [{ supplierId }, { supplierId: null }] } : {}) },
+      // Templates with their own application (e.g. Flogas electricity) are filled from that application.
+      where: { active: true, workflow: null, ...(supplierId ? { OR: [{ supplierId }, { supplierId: null }] } : {}) },
       select: { id: true, name: true, documentType: true, version: true, supplierId: true, supplier: { select: { id: true, name: true } }, updatedAt: true },
       orderBy: [{ name: "asc" }],
     });
@@ -92,7 +94,7 @@ export class FormsService {
   allTemplates(actor: Actor) {
     if (!can(actor, "form.template_manage")) throw new Forbidden();
     return this.prisma.formTemplate.findMany({
-      select: { id: true, name: true, documentType: true, version: true, active: true, filename: true, supplier: { select: { id: true, name: true } }, updatedAt: true, _count: { select: { forms: true } } },
+      select: { id: true, name: true, documentType: true, version: true, active: true, filename: true, workflow: true, supplier: { select: { id: true, name: true } }, updatedAt: true, _count: { select: { forms: true } } },
       orderBy: [{ active: "desc" }, { name: "asc" }],
     });
   }
@@ -120,11 +122,14 @@ export class FormsService {
     } catch {
       throw new RuleViolation(["This PDF can't be used as a template (it may be password-protected or damaged)."]);
     }
-    // A supplier form we've already set up: its fields arrive placed and linked to the CRM.
+    // A supplier form we've already set up: its fields arrive placed and linked to the CRM. A form
+    // with its own application (Flogas electricity) keeps its layout in code.
     const sha256 = CryptoService.sha256(file.buffer);
-    const preset = presetFor(sha256);
+    const workflow = workflowTemplateFor(sha256);
+    if (workflow && inspected.pages.length !== workflow.pageCount) throw new RuleViolation([`This PDF should have ${workflow.pageCount} pages.`]);
+    const preset = workflow ? { name: workflow.name, supplier: workflow.supplier, fields: workflow.fields() } : presetFor(sha256);
     const fields = preset && preset.fields.every((f) => inspected.pages[f.page]) ? preset.fields.map((f) => formFieldSchema.parse(f)) : inspected.fields;
-    const presetSupplier = preset && !meta.supplierId ? await this.prisma.supplier.findFirst({ where: { name: { equals: preset.supplier, mode: "insensitive" } }, select: { id: true } }) : null;
+    const presetSupplier = preset && !meta.supplierId ? await this.prisma.supplier.findFirst({ where: { name: { equals: preset.supplier, mode: "insensitive" }, kind: "energy" }, select: { id: true } }) : null;
     const storageKey = `form-templates/${randomUUID()}.pdf`;
     await this.storage.put(storageKey, file.buffer, "application/pdf");
     const t = await this.prisma.formTemplate.create({
@@ -137,6 +142,7 @@ export class FormsService {
         sha256,
         pages: inspected.pages as unknown as Prisma.InputJsonValue,
         fields: fields as unknown as Prisma.InputJsonValue,
+        workflow: workflow?.workflow ?? null,
         createdById: actorRef(actor),
       },
     });
@@ -155,6 +161,9 @@ export class FormsService {
     const t = await this.template(id);
     const issues: string[] = [];
     const pages = t.pages as unknown as { width: number; height: number }[];
+    if (t.workflow && input.fields && JSON.stringify(input.fields) !== JSON.stringify(t.fields)) {
+      issues.push("This form's layout is maintained with its application and can't be edited here.");
+    }
     if (input.fields) {
       const ids = new Set<string>();
       for (const f of input.fields) {
@@ -399,6 +408,7 @@ export class FormsService {
   async prefill(actor: Actor, opportunityId: string, templateId: string) {
     const opp = await this.access.writable(actor, opportunityId);
     const t = await this.template(templateId);
+    if (t.workflow) throw new RuleViolation(["This supplier form is filled from its own application tab on the opportunity."]);
     const fields = formFieldSchema.array().parse(t.fields);
     const crm = await this.crmValues(opportunityId);
     const seeBank = can(actor, "bank.read");
@@ -500,6 +510,7 @@ export class FormsService {
     if (opp.outcome !== "open") throw new RuleViolation(["Forms can only be generated for open opportunities."]);
     const t = await this.template(input.templateId);
     if (!t.active) throw new RuleViolation(["This template has been retired."]);
+    if (t.workflow) throw new RuleViolation(["This supplier form is filled from its own application tab on the opportunity."]);
     await this.checkWorkflowBeforeGenerating(opp);
     const fields = formFieldSchema.array().parse(t.fields);
     const crm = await this.crmValues(opportunityId);
