@@ -81,6 +81,10 @@ Run: `npm run test:integration -w @uo/api -- pentest hardening`
 
 The production web build (`npm run build -w @uo/web`, served by `npm run start`) returns on every page: `Content-Security-Policy` (as above), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (camera for card scanning only), `Cross-Origin-Opener-Policy: same-origin` and `Strict-Transport-Security`. The Playwright suite (including real-time chat, document upload and call logging) runs under this policy without CSP violations.
 
+## Dependency evidence in CI
+
+Every CI run attaches a CycloneDX SBOM (`sbom-cyclonedx`) and the `npm audit` JSON report for production dependencies (`npm-audit`) as artifacts. The job fails on any high or critical advisory in a production dependency; at the time of writing there are none. See [CI troubleshooting](ci-troubleshooting.md#security-evidence).
+
 ## Residual risks and recommendations
 
 | Risk | Recommendation | Owner |
