@@ -575,7 +575,7 @@ An uploaded signature image, authorised for one generated form only.
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
 | form_id | UUID | ✓ |  |
-| role | Enum: customer, broker | ✓ |  |
+| role | Enum: customer, broker, ///, The, second, holder, of, a, joint, bank, account,, who, also, signs, a, direct, debit, mandate., account_holder_2 | ✓ |  |
 | signer_name | String | ✓ |  |
 | signer_capacity | String |  |  |
 | authorisation | String | ✓ |  |
@@ -599,7 +599,7 @@ An emailed link that lets one signer sign one generated form online. Only the to
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
 | form_id | UUID | ✓ |  |
-| role | Enum: customer, broker | ✓ |  |
+| role | Enum: customer, broker, ///, The, second, holder, of, a, joint, bank, account,, who, also, signs, a, direct, debit, mandate., account_holder_2 | ✓ |  |
 | signer_name | String | ✓ |  |
 | signer_email | String | ✓ |  |
 | token_hash | String | ✓ | Unique |
@@ -607,7 +607,38 @@ An emailed link that lets one signer sign one generated form online. Only the to
 | opened_at | DateTime |  |  |
 | signed_at | DateTime |  |  |
 | revoked_at | DateTime |  |  |
+| declined_at | DateTime |  | The signer refused to sign; the link no longer works |
+| decline_reason | String |  |  |
 | last_sent_at | DateTime | ✓ | Default now() |
+| created_by_id | UUID |  |  |
+| created_at | DateTime | ✓ | Default now() |
+
+## SupplierApplication
+
+A supplier's own application on an opportunity (e.g. the Flogas electricity agreement). Customer,
+site, meter, contract and bank details stay on their CRM records; this keeps only the answers the
+supplier's form asks for that have no other home. Never deleted.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| opportunity_id | UUID | ✓ |  |
+| kind | String | ✓ | "flogas_electricity |
+| answers | Json | ✓ | Supplier-specific answers (see @uo/shared flogasAnswersSchema) |
+
+## supplier_application_versions
+
+One generated document of an application and the exact data it was made from. Append-only.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| application_id | UUID | ✓ |  |
+| version | Int | ✓ |  |
+| form_id | UUID | ✓ | The generated PDF, its field snapshot, values, signing links and signatures. Unique |
+| layout_version | String | ✓ | The coordinate layout (layout.ts) used |
+| data_enc | String | ✓ | Encrypted JSON snapshot of the application data (may include an IBAN) |
+| data_sha256 | String | ✓ | Hash of the data, to spot CRM edits made after this version was generated |
 | created_by_id | UUID |  |  |
 | created_at | DateTime | ✓ | Default now() |
 
@@ -778,7 +809,7 @@ Who occupies a supply point from when. Append-only, so the outgoing customer's h
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
 | request_id | UUID | ✓ |  |
-| role | Enum: customer, broker | ✓ |  |
+| role | Enum: customer, broker, ///, The, second, holder, of, a, joint, bank, account,, who, also, signs, a, direct, debit, mandate., account_holder_2 | ✓ |  |
 | name | String | ✓ |  |
 | email | String | ✓ |  |
 | status | Enum: pending, signed, declined | ✓ | Default pending |

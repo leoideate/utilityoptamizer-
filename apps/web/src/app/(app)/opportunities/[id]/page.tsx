@@ -5,13 +5,14 @@ import { ArrowLeft, Check, ChevronDown, CircleSlash, PartyPopper, RotateCcw, Shi
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { APPROVAL_LABELS, LEAD_SOURCE_LABELS, STAGES, type StageKey, isEnergyService, stageIndex } from "@uo/shared";
+import { APPROVAL_LABELS, LEAD_SOURCE_LABELS, STAGES, type StageKey, flogasElectricityApplies, isEnergyService, stageIndex } from "@uo/shared";
 import { ActivitiesTab } from "@/components/opportunity/activities";
 import { CallButton } from "@/components/opportunity/call";
 import { TeamChatTab } from "@/components/opportunity/team-chat";
 import { useRefreshOpportunity } from "@/components/opportunity/common";
 import { DocumentsTab } from "@/components/opportunity/documents";
 import { EnergyTab } from "@/components/opportunity/energy";
+import { FlogasTab } from "@/components/opportunity/flogas/flogas-tab";
 import { FormsTab } from "@/components/opportunity/forms";
 import { OverviewTab } from "@/components/opportunity/overview";
 import { SignaturesTab } from "@/components/opportunity/signatures";
@@ -72,6 +73,9 @@ function OpportunityWorkspace() {
   }
 
   const energy = isEnergyService(opp.serviceType);
+  // The Flogas form only shows while Electricity + Flogas holds; its saved data is kept either way.
+  const flogas = flogasElectricityApplies({ productInterest: opp.productInterest, serviceType: opp.serviceType, supplierName: opp.selectedSupplier?.name });
+  const activeTab = tab === "flogas" && !flogas ? "overview" : tab;
   const open = opp.outcome === "open";
   const current = opp.stage.key;
   const nextStage = STAGES.find((s) => stageIndex(s.key) === stageIndex(current) + 1 && s.key !== "live_won" && s.key !== "renewal_scheduled");
@@ -183,7 +187,7 @@ function OpportunityWorkspace() {
       </div>
 
       <Tabs
-        value={tab}
+        value={activeTab}
         onValueChange={(v) => {
           setTab(v);
           const u = new URL(window.location.href);
@@ -193,6 +197,7 @@ function OpportunityWorkspace() {
         tabs={[
           { value: "overview", label: "Overview" },
           energy ? { value: "energy", label: `Energy (${opp._count.sites} site${opp._count.sites === 1 ? "" : "s"})` } : { value: "worldpay", label: `Worldpay (${opp._count.merchantApps})` },
+          ...(flogas ? [{ value: "flogas", label: "Flogas form" }] : []),
           { value: "documents", label: `Documents (${opp._count.documents})` },
           { value: "forms", label: backOffice ? "Back office" : "Case" },
           { value: "signatures", label: "Signatures" },
@@ -211,6 +216,11 @@ function OpportunityWorkspace() {
         ) : (
           <TabPanel value="worldpay">
             <WorldpayTab opp={opp} />
+          </TabPanel>
+        )}
+        {flogas && (
+          <TabPanel value="flogas">
+            <FlogasTab opp={opp} />
           </TabPanel>
         )}
         <TabPanel value="documents">

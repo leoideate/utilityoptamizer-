@@ -230,6 +230,8 @@ enum SignatureStatus {
 enum SignerRole {
   customer
   broker
+  /// The second holder of a joint bank account, who also signs a direct debit mandate.
+  account_holder_2
 }
 
 enum SignerStatus {
@@ -662,6 +664,7 @@ model Opportunity {
   generatedForms GeneratedForm[]
   billChecks     BillCheck[]
   workflowCase   WorkflowCase?
+  supplierApps   SupplierApplication[]
   leaseChecks    LeaseCheck[]
   termsChecks    TermsCheck[]
   submissions    Submission[]
@@ -1021,6 +1024,9 @@ model FormTemplate {
   pages        Json
   /// FormField[] (see @uo/shared formFieldSchema).
   fields       Json
+  /// Set for a supplier PDF filled by a dedicated application (e.g. "flogas_electricity"): its layout
+  /// lives in code, and the generic "fill a supplier form" list doesn't offer it.
+  workflow     String?
   active       Boolean         @default(true)
   createdById  String?         @map("created_by_id") @db.Uuid
   createdAt    DateTime        @default(now()) @map("created_at")
@@ -1033,41 +1039,42 @@ model FormTemplate {
 
 /// One filled copy of a template for an opportunity. Never edited; regenerating supersedes it.
 model GeneratedForm {
-  id                   String          @id @default(uuid()) @db.Uuid
-  opportunityId        String          @map("opportunity_id") @db.Uuid
-  opportunity          Opportunity     @relation(fields: [opportunityId], references: [id])
-  templateId           String          @map("template_id") @db.Uuid
-  template             FormTemplate    @relation(fields: [templateId], references: [id])
-  templateVersion      Int             @map("template_version")
+  id                   String                      @id @default(uuid()) @db.Uuid
+  opportunityId        String                      @map("opportunity_id") @db.Uuid
+  opportunity          Opportunity                 @relation(fields: [opportunityId], references: [id])
+  templateId           String                      @map("template_id") @db.Uuid
+  template             FormTemplate                @relation(fields: [templateId], references: [id])
+  templateVersion      Int                         @map("template_version")
   /// Field layout used, so the exact copy can be reproduced.
   fields               Json
   /// Encrypted JSON of the values written (may include an IBAN).
-  valuesEnc            String          @map("values_enc")
+  valuesEnc            String                      @map("values_enc")
   /// Field ids whose value was typed or changed instead of coming from the CRM.
-  changedFields        Json            @default("[]") @map("changed_fields")
-  ibanChangeConfirmed  Boolean         @default(false) @map("iban_change_confirmed")
-  documentItemId       String          @map("document_item_id") @db.Uuid
+  changedFields        Json                        @default("[]") @map("changed_fields")
+  ibanChangeConfirmed  Boolean                     @default(false) @map("iban_change_confirmed")
+  documentItemId       String                      @map("document_item_id") @db.Uuid
   /// The unsigned generated PDF.
-  versionId            String          @map("version_id") @db.Uuid
+  versionId            String                      @map("version_id") @db.Uuid
   /// The PDF with signatures applied, once every required signer has one.
-  signedVersionId      String?         @map("signed_version_id") @db.Uuid
+  signedVersionId      String?                     @map("signed_version_id") @db.Uuid
   /// Black and white copy of the signed (or unsigned) PDF, for suppliers that need one.
-  monoVersionId        String?         @map("mono_version_id") @db.Uuid
+  monoVersionId        String?                     @map("mono_version_id") @db.Uuid
   /// The customer's previous form from the same template (renewals), compared field by field.
-  previousFormId       String?         @map("previous_form_id") @db.Uuid
+  previousFormId       String?                     @map("previous_form_id") @db.Uuid
   /// Labels of fields whose value differs from the previous form.
-  changedSincePrevious Json            @default("[]") @map("changed_since_previous")
-  changeReason         String?         @map("change_reason")
-  status               FormStatus      @default(generated)
-  qcPassed             Boolean         @map("qc_passed")
-  qcIssues             Json            @default("[]") @map("qc_issues")
-  reviewedById         String?         @map("reviewed_by_id") @db.Uuid
-  reviewedAt           DateTime?       @map("reviewed_at")
-  reviewNote           String?         @map("review_note")
-  createdById          String?         @map("created_by_id") @db.Uuid
-  createdAt            DateTime        @default(now()) @map("created_at")
+  changedSincePrevious Json                        @default("[]") @map("changed_since_previous")
+  changeReason         String?                     @map("change_reason")
+  status               FormStatus                  @default(generated)
+  qcPassed             Boolean                     @map("qc_passed")
+  qcIssues             Json                        @default("[]") @map("qc_issues")
+  reviewedById         String?                     @map("reviewed_by_id") @db.Uuid
+  reviewedAt           DateTime?                   @map("reviewed_at")
+  reviewNote           String?                     @map("review_note")
+  createdById          String?                     @map("created_by_id") @db.Uuid
+  createdAt            DateTime                    @default(now()) @map("created_at")
   signatures           FormSignature[]
   signingLinks         SigningLink[]
+  applicationVersion   SupplierApplicationVersion?
 
   @@index([opportunityId])
   @@map("generated_forms")
@@ -1104,24 +1111,72 @@ model FormSignature {
 
 /// An emailed link that lets one signer sign one generated form online. Only the token's hash is stored.
 model SigningLink {
-  id          String         @id @default(uuid()) @db.Uuid
-  formId      String         @map("form_id") @db.Uuid
-  form        GeneratedForm  @relation(fields: [formId], references: [id])
-  role        SignerRole
-  signerName  String         @map("signer_name")
-  signerEmail String         @map("signer_email")
-  tokenHash   String         @unique @map("token_hash")
-  expiresAt   DateTime       @map("expires_at")
-  openedAt    DateTime?      @map("opened_at")
-  signedAt    DateTime?      @map("signed_at")
-  revokedAt   DateTime?      @map("revoked_at")
-  lastSentAt  DateTime       @default(now()) @map("last_sent_at")
-  createdById String?        @map("created_by_id") @db.Uuid
-  createdAt   DateTime       @default(now()) @map("created_at")
-  signature   FormSignature?
+  id            String         @id @default(uuid()) @db.Uuid
+  formId        String         @map("form_id") @db.Uuid
+  form          GeneratedForm  @relation(fields: [formId], references: [id])
+  role          SignerRole
+  signerName    String         @map("signer_name")
+  signerEmail   String         @map("signer_email")
+  tokenHash     String         @unique @map("token_hash")
+  expiresAt     DateTime       @map("expires_at")
+  openedAt      DateTime?      @map("opened_at")
+  signedAt      DateTime?      @map("signed_at")
+  revokedAt     DateTime?      @map("revoked_at")
+  /// The signer refused to sign; the link no longer works.
+  declinedAt    DateTime?      @map("declined_at")
+  declineReason String?        @map("decline_reason")
+  lastSentAt    DateTime       @default(now()) @map("last_sent_at")
+  createdById   String?        @map("created_by_id") @db.Uuid
+  createdAt     DateTime       @default(now()) @map("created_at")
+  signature     FormSignature?
 
   @@index([formId])
   @@map("signing_links")
+}
+
+/// A supplier's own application on an opportunity (e.g. the Flogas electricity agreement). Customer,
+/// site, meter, contract and bank details stay on their CRM records; this keeps only the answers the
+/// supplier's form asks for that have no other home. Never deleted.
+model SupplierApplication {
+  id            String                       @id @default(uuid()) @db.Uuid
+  opportunityId String                       @map("opportunity_id") @db.Uuid
+  opportunity   Opportunity                  @relation(fields: [opportunityId], references: [id])
+  /// "flogas_electricity"
+  kind          String
+  /// Supplier-specific answers (see @uo/shared flogasAnswersSchema).
+  answers       Json                         @default("{}")
+  /// Encrypted JSON of restricted answers (a separate debtor address).
+  restrictedEnc String?                      @map("restricted_enc")
+  createdById   String?                      @map("created_by_id") @db.Uuid
+  updatedById   String?                      @map("updated_by_id") @db.Uuid
+  createdAt     DateTime                     @default(now()) @map("created_at")
+  updatedAt     DateTime                     @updatedAt @map("updated_at")
+  versions      SupplierApplicationVersion[]
+
+  @@unique([opportunityId, kind])
+  @@map("supplier_applications")
+}
+
+/// One generated document of an application and the exact data it was made from. Append-only.
+model SupplierApplicationVersion {
+  id            String              @id @default(uuid()) @db.Uuid
+  applicationId String              @map("application_id") @db.Uuid
+  application   SupplierApplication @relation(fields: [applicationId], references: [id])
+  version       Int
+  /// The generated PDF, its field snapshot, values, signing links and signatures.
+  formId        String              @unique @map("form_id") @db.Uuid
+  form          GeneratedForm       @relation(fields: [formId], references: [id])
+  /// The coordinate layout (layout.ts) used.
+  layoutVersion String              @map("layout_version")
+  /// Encrypted JSON snapshot of the application data (may include an IBAN).
+  dataEnc       String              @map("data_enc")
+  /// Hash of the data, to spot CRM edits made after this version was generated.
+  dataSha256    String              @map("data_sha256")
+  createdById   String?             @map("created_by_id") @db.Uuid
+  createdAt     DateTime            @default(now()) @map("created_at")
+
+  @@unique([applicationId, version])
+  @@map("supplier_application_versions")
 }
 
 /// Verification of the previous supplier's bill for a change of supplier.

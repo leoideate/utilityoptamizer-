@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Req, StreamableFile } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
-import { publicSignSchema, signingLinkSchema } from "@uo/shared";
+import { publicDeclineSchema, publicSignSchema, signingLinkSchema } from "@uo/shared";
 import type { Request } from "express";
 import type { z } from "zod";
 import type { Actor } from "../common/actor";
@@ -61,5 +61,12 @@ export class SigningController {
   @Post("public/sign/:token")
   sign(@Param("token") token: string, @Body(new ZodPipe(publicSignSchema)) body: z.infer<typeof publicSignSchema>, @Req() req: Request, @Headers("user-agent") ua?: string) {
     return this.signing.publicSign(token, body, req.ip ?? null, ua ?? null);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post("public/sign/:token/decline")
+  decline(@Param("token") token: string, @Body(new ZodPipe(publicDeclineSchema)) body: z.infer<typeof publicDeclineSchema>) {
+    return this.signing.publicDecline(token, body);
   }
 }

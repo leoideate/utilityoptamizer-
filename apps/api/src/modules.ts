@@ -55,6 +55,8 @@ import { EmailSignaturesService } from "./email-signatures/email-signatures.serv
 import { FormsService } from "./forms/forms.service";
 import { SigningController } from "./forms/signing.controller";
 import { SigningService } from "./forms/signing.service";
+import { FlogasElectricityController } from "./supplier-applications/flogas-electricity/flogas-electricity.controller";
+import { FlogasElectricityService } from "./supplier-applications/flogas-electricity/flogas-electricity.service";
 import { SignaturesController } from "./signatures/signatures.controller";
 import { SignaturesService } from "./signatures/signatures.service";
 import { WorkflowsController } from "./workflows/workflows.controller";
@@ -136,8 +138,11 @@ export class EmailSignaturesModule {}
 export class IntegrationsModule {}
 
 // After IntegrationsModule: online signing emails links through it.
-@Module({ imports: [DocumentsModule, IntegrationsModule], controllers: [FormsController, SigningController], providers: [FormsService, SigningService] })
+@Module({ imports: [DocumentsModule, IntegrationsModule], controllers: [FormsController, SigningController], providers: [FormsService, SigningService], exports: [FormsService, SigningService] })
 export class FormsModule {}
+
+@Module({ imports: [FormsModule, DocumentsModule], controllers: [FlogasElectricityController], providers: [FlogasElectricityService] })
+export class SupplierApplicationsModule {}
 
 @Module({ controllers: [ReportsController], providers: [ReportsService] })
 export class ReportsModule {}
@@ -160,6 +165,7 @@ export const FEATURE_MODULES = [
   MerchantModule,
   SignaturesModule,
   FormsModule,
+  SupplierApplicationsModule,
   WorkflowsModule,
   OcrModule,
   IntegrationsModule,

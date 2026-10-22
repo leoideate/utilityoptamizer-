@@ -21,7 +21,7 @@ import {
   setFillingGrayscaleColor,
   setGraphicsState,
 } from "pdf-lib";
-import type { FormField } from "@uo/shared";
+import type { FormField, FormSignerRole } from "@uo/shared";
 
 export interface PageSize {
   width: number;
@@ -85,9 +85,9 @@ export interface FillInput {
   /** Value per field id; booleans for tick boxes. */
   values: Record<string, FillValue>;
   /** PNG signature images by signer role. */
-  signatures?: Partial<Record<"customer" | "broker", Uint8Array>>;
+  signatures?: Partial<Record<FormSignerRole, Uint8Array>>;
   /** Date shown in signed-date fields, by signer role. */
-  signedDates?: Partial<Record<"customer" | "broker", string>>;
+  signedDates?: Partial<Record<FormSignerRole, string>>;
   /** Signature fields must all be filled (signed copy). */
   requireSignatures?: boolean;
   /** Evidence for online signatures, printed on an extra last page (one block per signer). */

@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { randomBytes } from "node:crypto";
 import { FORM_SIGNER_ROLE_LABELS, type FormField, SIGNING_CONSENT_TEXT, SIGNING_CONSENT_VERSION, SIGNING_LINK_DAYS, type SigningLinkStatus } from "@uo/shared";
-import type { publicSignSchema, signingLinkSchema } from "@uo/shared";
+import type { publicDeclineSchema, publicSignSchema, signingLinkSchema } from "@uo/shared";
 import type { z } from "zod";
 import { AuditService } from "../audit/audit.service";
 import { type Actor, SYSTEM, actorRef } from "../common/actor";
@@ -19,9 +19,10 @@ const hashToken = (token: string) => CryptoService.sha256(token);
 const linkExpiry = (from: Date) => new Date(from.getTime() + SIGNING_LINK_DAYS * 24 * 3600 * 1000);
 const fmtDay = (d: Date) => new Intl.DateTimeFormat("en-IE", { timeZone: "Europe/Dublin", dateStyle: "long" }).format(d);
 
-type LinkRow = { signedAt: Date | null; revokedAt: Date | null; expiresAt: Date; openedAt: Date | null };
+type LinkRow = { signedAt: Date | null; revokedAt: Date | null; declinedAt?: Date | null; expiresAt: Date; openedAt: Date | null };
 export function signingLinkStatus(l: LinkRow, now = new Date()): SigningLinkStatus {
   if (l.signedAt) return "signed";
+  if (l.declinedAt) return "declined";
   if (l.revokedAt) return "revoked";
   if (l.expiresAt < now) return "expired";
   return l.openedAt ? "opened" : "sent";
@@ -63,17 +64,24 @@ export class SigningService {
       lastSentAt: l.lastSentAt,
       openedAt: l.openedAt,
       signedAt: l.signedAt,
+      declinedAt: l.declinedAt,
+      declineReason: l.declineReason,
     }));
   }
 
-  /** Creates a link for one signer (replacing any open link for the same role) and emails it. The URL is returned once. */
-  async createLink(actor: Actor, formId: string, input: z.infer<typeof signingLinkSchema>) {
+  /**
+   * Creates a link for one signer (replacing any open link for the same role) and emails it. The URL
+   * is returned once. A supplier application's form is sent from the application, which first checks
+   * the version is still current (`viaApplication`).
+   */
+  async createLink(actor: Actor, formId: string, input: z.infer<typeof signingLinkSchema>, opts: { viaApplication?: boolean } = {}) {
     const { form, opp } = await this.writableForm(actor, formId);
+    await this.assertNotApplicationForm(formId, opts);
     this.forms.assertSignable(form, input.role);
     const token = randomBytes(32).toString("base64url");
     const now = new Date();
     const link = await this.prisma.$transaction(async (tx) => {
-      await tx.signingLink.updateMany({ where: { formId, role: input.role, signedAt: null, revokedAt: null }, data: { revokedAt: now } });
+      await tx.signingLink.updateMany({ where: { formId, role: input.role, signedAt: null, revokedAt: null, declinedAt: null }, data: { revokedAt: now } });
       const created = await tx.signingLink.create({
         data: { formId, role: input.role, signerName: input.signerName, signerEmail: input.email, tokenHash: hashToken(token), expiresAt: linkExpiry(now), createdById: actorRef(actor) },
       });
@@ -90,11 +98,12 @@ export class SigningService {
   }
 
   /** Issues a fresh token for an open link (the old URL stops working), restarts its expiry and emails it again. */
-  async resend(actor: Actor, linkId: string) {
+  async resend(actor: Actor, linkId: string, opts: { viaApplication?: boolean } = {}) {
     const link = await this.prisma.signingLink.findUnique({ where: { id: linkId } });
     if (!link) throw new NotFound("Signing link");
     const { form, opp } = await this.writableForm(actor, link.formId);
-    if (link.signedAt || link.revokedAt) throw new RuleViolation(["Only open signing links can be sent again."]);
+    await this.assertNotApplicationForm(link.formId, opts);
+    if (link.signedAt || link.revokedAt || link.declinedAt) throw new RuleViolation(["Only open signing links can be sent again. Send a new link instead."]);
     this.forms.assertSignable(form, link.role);
     const token = randomBytes(32).toString("base64url");
     const now = new Date();
@@ -109,7 +118,7 @@ export class SigningService {
     if (!link) throw new NotFound("Signing link");
     const { form, opp } = await this.writableForm(actor, link.formId);
     if (link.signedAt) throw new RuleViolation(["This link has already been used to sign."]);
-    if (link.revokedAt) return;
+    if (link.revokedAt || link.declinedAt) return;
     await this.prisma.$transaction(async (tx) => {
       await tx.signingLink.update({ where: { id: linkId }, data: { revokedAt: new Date() } });
       await this.audit.record(
@@ -187,7 +196,33 @@ export class SigningService {
     return { signed: true, complete: result.signed };
   }
 
+  /** The signer refuses to sign. The link stops working and staff are told; a new link can be sent. */
+  async publicDecline(token: string, input: z.infer<typeof publicDeclineSchema>) {
+    const { link, form } = await this.openLink(token);
+    const declined = await this.prisma.signingLink.updateMany({
+      where: { id: link.id, signedAt: null, revokedAt: null, declinedAt: null, expiresAt: { gt: new Date() } },
+      data: { declinedAt: new Date(), declineReason: input.reason ?? null },
+    });
+    if (!declined.count) throw new NotFound("Signing link");
+    const opp = form.opportunity;
+    await this.audit.record(
+      SYSTEM,
+      { action: "form.signing_declined", entityType: "generated_form", entityId: form.id, summary: `${FORM_SIGNER_ROLE_LABELS[link.role]} declined to sign ${form.template.name}`, data: { signingLinkId: link.id } },
+      { opportunityId: opp.id, customerId: opp.customerId, kind: "signature", body: `${link.signerName} declined to sign "${form.template.name}"${input.reason ? `: ${input.reason}` : "."}` },
+    );
+    const notify = [opp.ownerId, link.createdById].filter((x): x is string => !!x);
+    await this.realtime.publish([...new Set(notify)], { type: "form.declined", data: { opportunityId: opp.id, formId: form.id, role: link.role, preview: `${link.signerName} declined to sign "${form.template.name}"` } });
+    return { declined: true };
+  }
+
   // --- Helpers ----------------------------------------------------------------------
+
+  private async assertNotApplicationForm(formId: string, opts: { viaApplication?: boolean }) {
+    if (opts.viaApplication) return;
+    if (await this.prisma.supplierApplicationVersion.findUnique({ where: { formId }, select: { id: true } })) {
+      throw new RuleViolation(["Send this form from its application tab on the opportunity, so the latest details are checked first."]);
+    }
+  }
 
   private url(token: string) {
     return `${new URL(this.env.WEB_ORIGIN).origin}/sign/${token}`;

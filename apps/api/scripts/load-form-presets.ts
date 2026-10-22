@@ -16,6 +16,7 @@ import { CryptoService } from "../src/common/crypto.service";
 import { PrismaService } from "../src/common/prisma.service";
 import { FormsService } from "../src/forms/forms.service";
 import { presetFor } from "../src/forms/presets";
+import { workflowTemplateFor } from "../src/supplier-applications/templates";
 
 async function main() {
   const folder = process.argv[2];
@@ -26,7 +27,7 @@ async function main() {
   for (const name of readdirSync(folder).filter((n) => n.toLowerCase().endsWith(".pdf"))) {
     const buffer = readFileSync(path.join(folder, name));
     const sha256 = CryptoService.sha256(buffer);
-    const preset = presetFor(sha256);
+    const preset = workflowTemplateFor(sha256) ?? presetFor(sha256);
     if (!preset) {
       console.log(`  skipped   ${name} (not a form we've set up)`);
       continue;

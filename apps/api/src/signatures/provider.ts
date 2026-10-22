@@ -3,7 +3,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 export interface SignatureEnvelope {
   requestId: string;
   title: string;
-  signers: { id: string; role: "customer" | "broker"; name: string; email: string }[];
+  signers: { id: string; role: "customer" | "broker" | "account_holder_2"; name: string; email: string }[];
   providerTemplateId?: string | null;
 }
 

@@ -2127,9 +2127,9 @@
         ]
       }
     },
-    "/api/opportunities/{id}/case": {
+    "/api/forms/{id}/signing-links": {
       "get": {
-        "operationId": "WorkflowsController_overview",
+        "operationId": "SigningController_list",
         "parameters": [
           {
             "name": "id",
@@ -2146,11 +2146,57 @@
           }
         },
         "tags": [
-          "workflows"
+          "forms"
         ]
       },
-      "put": {
-        "operationId": "WorkflowsController_save",
+      "post": {
+        "operationId": "SigningController_create",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      }
+    },
+    "/api/signing-links/{id}/resend": {
+      "post": {
+        "operationId": "SigningController_resend",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      }
+    },
+    "/api/signing-links/{id}/revoke": {
+      "post": {
+        "operationId": "SigningController_revoke",
         "parameters": [
           {
             "name": "id",
@@ -2167,32 +2213,47 @@
           }
         },
         "tags": [
-          "workflows"
+          "forms"
         ]
       }
     },
-    "/api/supply-points": {
+    "/api/public/sign/{token}": {
       "get": {
-        "operationId": "WorkflowsController_search",
-        "parameters": [],
+        "operationId": "SigningController_view",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
           }
         },
         "tags": [
-          "workflows"
+          "forms"
         ]
-      }
-    },
-    "/api/opportunities/{id}/lease-checks": {
+      },
       "post": {
-        "operationId": "WorkflowsController_lease",
+        "operationId": "SigningController_sign",
         "parameters": [
           {
-            "name": "id",
+            "name": "token",
             "required": true,
             "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user-agent",
+            "required": true,
+            "in": "header",
             "schema": {
               "type": "string"
             }
@@ -2204,113 +2265,16 @@
           }
         },
         "tags": [
-          "workflows"
+          "forms"
         ]
       }
     },
-    "/api/opportunities/{id}/terms-checks": {
-      "post": {
-        "operationId": "WorkflowsController_terms",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "workflows"
-        ]
-      }
-    },
-    "/api/opportunities/{id}/submissions": {
-      "post": {
-        "operationId": "WorkflowsController_submit",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "workflows"
-        ]
-      }
-    },
-    "/api/submissions/{id}/responses": {
-      "post": {
-        "operationId": "WorkflowsController_respond",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "workflows"
-        ]
-      }
-    },
-    "/api/cases": {
+    "/api/public/sign/{token}/document": {
       "get": {
-        "operationId": "WorkflowsController_dashboard",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "workflows"
-        ]
-      }
-    },
-    "/api/business-cards": {
-      "post": {
-        "operationId": "OcrController_upload",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "business-cards"
-        ]
-      }
-    },
-    "/api/business-cards/{id}": {
-      "get": {
-        "operationId": "OcrController_get",
+        "operationId": "SigningController_document",
         "parameters": [
           {
-            "name": "id",
+            "name": "token",
             "required": true,
             "in": "path",
             "schema": {
@@ -2324,16 +2288,16 @@
           }
         },
         "tags": [
-          "business-cards"
+          "forms"
         ]
       }
     },
-    "/api/business-cards/{id}/retry": {
+    "/api/public/sign/{token}/decline": {
       "post": {
-        "operationId": "OcrController_retry",
+        "operationId": "SigningController_decline",
         "parameters": [
           {
-            "name": "id",
+            "name": "token",
             "required": true,
             "in": "path",
             "schema": {
@@ -2347,76 +2311,7 @@
           }
         },
         "tags": [
-          "business-cards"
-        ]
-      }
-    },
-    "/api/business-cards/{id}/duplicates": {
-      "post": {
-        "operationId": "OcrController_duplicates",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "business-cards"
-        ]
-      }
-    },
-    "/api/business-cards/{id}/confirm": {
-      "post": {
-        "operationId": "OcrController_confirm",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "business-cards"
-        ]
-      }
-    },
-    "/api/business-cards/{id}/discard": {
-      "post": {
-        "operationId": "OcrController_discard",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "business-cards"
+          "forms"
         ]
       }
     },
@@ -2726,6 +2621,589 @@
         },
         "tags": [
           "email"
+        ]
+      }
+    },
+    "/api/account/email-signature": {
+      "get": {
+        "operationId": "EmailSignaturesController_mine",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email signatures"
+        ]
+      },
+      "put": {
+        "operationId": "EmailSignaturesController_save",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email signatures"
+        ]
+      }
+    },
+    "/api/account/email-signature/image": {
+      "post": {
+        "operationId": "EmailSignaturesController_image",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email signatures"
+        ]
+      }
+    },
+    "/api/admin/settings/email-signature": {
+      "get": {
+        "operationId": "EmailSignaturesController_company",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email signatures"
+        ]
+      },
+      "put": {
+        "operationId": "EmailSignaturesController_saveCompany",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email signatures"
+        ]
+      }
+    },
+    "/api/admin/settings/email-signature/logo": {
+      "post": {
+        "operationId": "EmailSignaturesController_logo",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email signatures"
+        ]
+      },
+      "delete": {
+        "operationId": "EmailSignaturesController_resetLogo",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email signatures"
+        ]
+      }
+    },
+    "/api/public/email-images/{id}": {
+      "get": {
+        "operationId": "EmailSignaturesController_publicImage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "email signatures"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/flogas-electricity": {
+      "get": {
+        "operationId": "FlogasElectricityController_view",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "supplier-applications"
+        ]
+      },
+      "put": {
+        "operationId": "FlogasElectricityController_save",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "supplier-applications"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/flogas-electricity/preview": {
+      "get": {
+        "operationId": "FlogasElectricityController_preview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "supplier-applications"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/flogas-electricity/versions": {
+      "post": {
+        "operationId": "FlogasElectricityController_generate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "supplier-applications"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/flogas-electricity/versions/{formId}/send": {
+      "post": {
+        "operationId": "FlogasElectricityController_send",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "formId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "supplier-applications"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/flogas-electricity/signing-links/{linkId}/resend": {
+      "post": {
+        "operationId": "FlogasElectricityController_resend",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "linkId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "supplier-applications"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/flogas-electricity/history": {
+      "get": {
+        "operationId": "FlogasElectricityController_history",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "supplier-applications"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/case": {
+      "get": {
+        "operationId": "WorkflowsController_overview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
+        ]
+      },
+      "put": {
+        "operationId": "WorkflowsController_save",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/supply-points": {
+      "get": {
+        "operationId": "WorkflowsController_search",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/lease-checks": {
+      "post": {
+        "operationId": "WorkflowsController_lease",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/terms-checks": {
+      "post": {
+        "operationId": "WorkflowsController_terms",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/submissions": {
+      "post": {
+        "operationId": "WorkflowsController_submit",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/submissions/{id}/responses": {
+      "post": {
+        "operationId": "WorkflowsController_respond",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/cases": {
+      "get": {
+        "operationId": "WorkflowsController_dashboard",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/business-cards": {
+      "post": {
+        "operationId": "OcrController_upload",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "business-cards"
+        ]
+      }
+    },
+    "/api/business-cards/{id}": {
+      "get": {
+        "operationId": "OcrController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "business-cards"
+        ]
+      }
+    },
+    "/api/business-cards/{id}/retry": {
+      "post": {
+        "operationId": "OcrController_retry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "business-cards"
+        ]
+      }
+    },
+    "/api/business-cards/{id}/duplicates": {
+      "post": {
+        "operationId": "OcrController_duplicates",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "business-cards"
+        ]
+      }
+    },
+    "/api/business-cards/{id}/confirm": {
+      "post": {
+        "operationId": "OcrController_confirm",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "business-cards"
+        ]
+      }
+    },
+    "/api/business-cards/{id}/discard": {
+      "post": {
+        "operationId": "OcrController_discard",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "business-cards"
         ]
       }
     },
