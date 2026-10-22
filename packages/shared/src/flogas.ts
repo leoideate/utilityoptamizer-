@@ -133,6 +133,8 @@ export const flogasAnswersSchema = z
     flogasActivationDate: optDate,
     /** The deal's meter points left off this application (kept on the deal). */
     excludedMeterPointIds: z.array(z.string().uuid()).max(50),
+    /** The order of the meter rows (meter point ids); the first is the main supply. */
+    meterOrder: z.array(z.string().uuid()).max(50),
   })
   .partial();
 export type FlogasAnswers = z.infer<typeof flogasAnswersSchema>;
@@ -413,7 +415,8 @@ export function flogasElectricityIssues(d: FlogasElectricityData): FlogasIssue[]
 
   // Direct debit
   if (d.directDebit) {
-    if (blank(d.debtorName)) add("debtorName", "Enter the debtor (account holder) name.");
+    // The account name and IBAN are hidden from viewers without bank.read; on file counts.
+    if (blank(d.debtorName) && !d.bankOnFile) add("debtorName", "Enter the debtor (account holder) name.");
     // When it's the billing address, a missing one is already reported there.
     if (!d.debtorAddressSameAsBilling && blank(d.debtorAddress.line1)) add("debtorAddress", "Enter the debtor's address, or tick that it's the billing address.");
     if (!d.bankOnFile && blank(d.iban)) add("iban", "Enter the IBAN.");

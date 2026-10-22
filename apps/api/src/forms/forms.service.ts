@@ -553,25 +553,72 @@ export class FormsService {
     const template = await this.storage.get(t.storageKey);
     const title = `${t.name} – UO-${String(opp.number).padStart(6, "0")}`;
     const filled = await fillPdf({ template, fields, values, title });
-    const restricted = fields.some((f) => isRestrictedSource(f.source) && values[f.id]);
+    const form = await this.storeGenerated(actor, opp, t, {
+      fields,
+      values,
+      filled,
+      title,
+      extra: { changedFields: changed, ibanChangeConfirmed: ibanChanged, previousFormId: previous?.id ?? null, changedSincePrevious: sincePrevious, changeReason: input.changeReason ?? null },
+      onCreated: async (tx, created) => {
+        const changedLabels = changed.map((id) => fields.find((f) => f.id === id)!.label);
+        await this.audit.record(
+          actor,
+          {
+            action: "form.generate",
+            entityType: "generated_form",
+            entityId: created.id,
+            summary: `Generated ${t.name} v${t.version}`,
+            data: { templateId: t.id, templateVersion: t.version, changedFields: changedLabels, ibanChanged, qcPassed: filled.issues.length === 0, previousFormId: previous?.id ?? null, changedSincePrevious: sincePrevious },
+          },
+          {
+            opportunityId,
+            customerId: opp.customerId,
+            kind: "document",
+            body:
+              `Generated "${t.name}" from the CRM${changedLabels.length ? `; changed by hand: ${changedLabels.join(", ")}` : ""}${ibanChanged ? " (IBAN change confirmed)" : ""}.` +
+              (previous ? (sincePrevious.length ? ` Changed since the previous form (UO-${String(previous.opportunityNumber).padStart(6, "0")}): ${sincePrevious.join(", ")}${input.changeReason ? ` (${input.changeReason})` : ""}.` : " Unchanged since the previous form.") : "") +
+              (filled.issues.length ? ` Quality check failed: ${filled.issues.length} problem${filled.issues.length === 1 ? "" : "s"}.` : " Quality check passed."),
+          },
+          tx,
+        );
+      },
+    });
+    return { id: form.id, qcPassed: filled.issues.length === 0, qcIssues: filled.issues };
+  }
 
+  /**
+   * Stores a filled PDF as a new document version and a new generated form, superseding earlier
+   * forms from the same template. `onCreated` runs in the same transaction (audit, links).
+   */
+  async storeGenerated(
+    actor: Actor,
+    opp: { id: string; customerId: string | null },
+    t: { id: string; version: number; documentType: string },
+    input: {
+      fields: FormField[];
+      values: Values;
+      filled: { bytes: Uint8Array; issues: string[] };
+      title: string;
+      /** Whether the PDF holds restricted values (bank details); worked out from field sources when omitted. */
+      sensitive?: boolean;
+      extra?: Partial<Pick<Prisma.GeneratedFormUncheckedCreateInput, "changedFields" | "ibanChangeConfirmed" | "previousFormId" | "changedSincePrevious" | "changeReason">>;
+      onCreated?: (tx: Prisma.TransactionClient, form: { id: string; versionId: string; documentItemId: string }) => Promise<void>;
+    },
+  ) {
+    const { fields, values, filled } = input;
+    const restricted = input.sensitive ?? fields.some((f) => isRestrictedSource(f.source) && values[f.id]);
     const itemId = await this.itemFor(opp.id, opp.customerId, t.documentType, restricted);
-    const version = await this.documents.upload(actor, itemId, { originalname: `${slug(title)}.pdf`, mimetype: "application/pdf", buffer: Buffer.from(filled.bytes), size: filled.bytes.length });
-
-    const form = await this.prisma.$transaction(async (tx) => {
-      await tx.generatedForm.updateMany({ where: { opportunityId, templateId: t.id, status: { not: "superseded" } }, data: { status: "superseded" } });
+    const version = await this.documents.upload(actor, itemId, { originalname: `${slug(input.title)}.pdf`, mimetype: "application/pdf", buffer: Buffer.from(filled.bytes), size: filled.bytes.length });
+    return this.prisma.$transaction(async (tx) => {
+      await tx.generatedForm.updateMany({ where: { opportunityId: opp.id, templateId: t.id, status: { not: "superseded" } }, data: { status: "superseded" } });
       const created = await tx.generatedForm.create({
         data: {
-          opportunityId,
+          opportunityId: opp.id,
           templateId: t.id,
           templateVersion: t.version,
           fields: fields as unknown as Prisma.InputJsonValue,
           valuesEnc: this.crypto.encryptJson(values),
-          changedFields: changed,
-          ibanChangeConfirmed: ibanChanged,
-          previousFormId: previous?.id ?? null,
-          changedSincePrevious: sincePrevious,
-          changeReason: input.changeReason ?? null,
+          ...input.extra,
           documentItemId: itemId,
           versionId: version.id,
           status: "generated",
@@ -580,30 +627,9 @@ export class FormsService {
           createdById: actorRef(actor),
         },
       });
-      const changedLabels = changed.map((id) => fields.find((f) => f.id === id)!.label);
-      await this.audit.record(
-        actor,
-        {
-          action: "form.generate",
-          entityType: "generated_form",
-          entityId: created.id,
-          summary: `Generated ${t.name} v${t.version}`,
-          data: { templateId: t.id, templateVersion: t.version, changedFields: changedLabels, ibanChanged, qcPassed: filled.issues.length === 0, previousFormId: previous?.id ?? null, changedSincePrevious: sincePrevious },
-        },
-        {
-          opportunityId,
-          customerId: opp.customerId,
-          kind: "document",
-          body:
-            `Generated "${t.name}" from the CRM${changedLabels.length ? `; changed by hand: ${changedLabels.join(", ")}` : ""}${ibanChanged ? " (IBAN change confirmed)" : ""}.` +
-            (previous ? (sincePrevious.length ? ` Changed since the previous form (UO-${String(previous.opportunityNumber).padStart(6, "0")}): ${sincePrevious.join(", ")}${input.changeReason ? ` (${input.changeReason})` : ""}.` : " Unchanged since the previous form.") : "") +
-            (filled.issues.length ? ` Quality check failed: ${filled.issues.length} problem${filled.issues.length === 1 ? "" : "s"}.` : " Quality check passed."),
-        },
-        tx,
-      );
+      await input.onCreated?.(tx, created);
       return created;
     });
-    return { id: form.id, qcPassed: filled.issues.length === 0, qcIssues: filled.issues };
   }
 
   /**

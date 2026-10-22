@@ -169,6 +169,7 @@ describe("Flogas electricity: validation", () => {
 
   it("needs direct debit details only when paying by direct debit", () => {
     const noBank = complete({ debtorName: null, iban: null, bankOnFile: false });
+    expect(paths(complete({ debtorName: null, iban: null }))).toEqual([]); // on file, hidden from this viewer
     expect(paths(noBank)).toEqual(["debtorName", "iban"]);
     expect(paths({ ...noBank, directDebit: false })).toEqual([]);
     expect(paths(complete({ iban: null }))).toEqual([]); // on file, but the viewer can't read it

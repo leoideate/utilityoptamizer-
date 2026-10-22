@@ -631,6 +631,8 @@ export class OpportunitiesService {
         selectedSupplier: true,
         previousOpportunity: { select: { id: true, number: true, name: true } },
         renewals: { select: { id: true, number: true, name: true, outcome: true } },
+        // Supplier applications with generated versions, so changing supplier or product can warn first.
+        supplierApps: { select: { kind: true, _count: { select: { versions: true } } } },
         _count: { select: { sites: true, contracts: true, merchantApps: true, documents: true, activities: { where: { status: "open" } } } },
       },
     });
