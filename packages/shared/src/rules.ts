@@ -91,6 +91,8 @@ export const PRINCIPAL_REQUIREMENTS: Record<LegalEntity, { min: number; roles: P
   limited_company: { min: 1, roles: ["director"], describe: "at least one director" },
   plc: { min: 1, roles: ["director"], describe: "at least one director" },
   charity_club: { min: 1, roles: ["trustee", "signatory"], describe: "a trustee or authorised signatory" },
+  state_body: { min: 1, roles: ["signatory"], describe: "an authorised signatory" },
+  co_operative: { min: 1, roles: ["director", "signatory"], describe: "a director or authorised signatory" },
   other: { min: 1, roles: ["owner", "partner", "director", "shareholder", "trustee", "signatory"], describe: "at least one principal" },
 };
 export const ADDRESS_HISTORY_YEARS = 3;

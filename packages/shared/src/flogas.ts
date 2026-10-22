@@ -7,13 +7,12 @@
 import { z } from "zod";
 import { today } from "./dates";
 import { LEGAL_ENTITIES, OCCUPANCY_TYPES, PRICE_TYPES, type LegalEntity, type OccupancyType, type PriceType, type ProductInterest, type SaleType, type ServiceType, type SupplyChange, isEnergyService } from "./enums";
-import type { FormSignerRole, FormStatus, SigningLinkStatus } from "./forms";
+import type { FormSignerRole } from "./forms";
 import { mprnFormatError, normalizeIdentifier } from "./identifiers";
+import { APPLICATION_STATUSES, APPLICATION_STATUS_LABELS, type ApplicationAddress, type ApplicationStatus, EMPTY_ADDRESS, addressText, applicationStatus, sameAddress } from "./supplier-applications";
 
 const labels = <T extends string>(m: Record<T, string>) => m;
 
-export const SUPPLIER_APPLICATION_KINDS = ["flogas_electricity"] as const;
-export type SupplierApplicationKind = (typeof SUPPLIER_APPLICATION_KINDS)[number];
 
 /** "Flogas" however it's spaced or capitalised ("FloGas", "Flogas Natural Gas"). */
 export const isFlogasSupplier = (name: string | null | undefined) => !!name && name.toLowerCase().replace(/[^a-z]/g, "").startsWith("flogas");
@@ -222,16 +221,8 @@ export const flogasSendSchema = z.object({
 
 // --- The assembled application -------------------------------------------------------
 
-export interface FlogasAddress {
-  line1: string | null;
-  line2: string | null;
-  city: string | null;
-  county: string | null;
-  postcode: string | null;
-}
-export const EMPTY_FLOGAS_ADDRESS: FlogasAddress = { line1: null, line2: null, city: null, county: null, postcode: null };
-export const addressText = (a: FlogasAddress | null | undefined) => (a ? [a.line1, a.line2, a.city, a.county, a.postcode].filter((x) => x && x.trim()).join(", ") : "");
-export const sameAddress = (a: FlogasAddress, b: FlogasAddress) => addressText(a).toLowerCase() === addressText(b).toLowerCase();
+export type FlogasAddress = ApplicationAddress;
+export const EMPTY_FLOGAS_ADDRESS = EMPTY_ADDRESS;
 
 export interface FlogasMeterRow {
   id: string | null;
@@ -435,38 +426,8 @@ export function flogasElectricityIssues(d: FlogasElectricityData): FlogasIssue[]
 
 // --- Status ---------------------------------------------------------------------------
 
-export const FLOGAS_STATUSES = ["draft", "ready", "sent", "viewed", "signed", "declined", "expired", "completed", "rejected"] as const;
-export type FlogasStatus = (typeof FLOGAS_STATUSES)[number];
-export const FLOGAS_STATUS_LABELS = labels<FlogasStatus>({
-  draft: "Draft",
-  ready: "Ready for signature",
-  sent: "Sent",
-  viewed: "Viewed",
-  signed: "Signed, awaiting review",
-  declined: "Declined",
-  expired: "Expired",
-  completed: "Completed",
-  rejected: "Rejected at review",
-});
-
-/**
- * Where the application stands, from its current version and that version's signing links.
- * A version is current until a newer one supersedes it; `stale` means the CRM changed since.
- * `links` are newest first.
- */
-export function flogasStatus(v: { form: { status: FormStatus } | null; stale: boolean; links: { role: FormSignerRole; status: SigningLinkStatus }[] }): FlogasStatus {
-  if (!v.form || v.form.status === "superseded") return "draft";
-  if (v.form.status === "approved") return "completed";
-  if (v.form.status === "rejected") return "rejected";
-  if (v.form.status === "awaiting_review") return "signed";
-  // The newest link per signer counts; cancelled links don't.
-  const latest = new Map<FormSignerRole, SigningLinkStatus>();
-  for (const l of v.links) if (l.status !== "revoked" && !latest.has(l.role)) latest.set(l.role, l.status);
-  const states = [...latest.values()];
-  if (!states.length) return v.stale ? "draft" : "ready";
-  if (states.includes("declined")) return "declined";
-  if (states.includes("opened")) return "viewed";
-  if (states.includes("sent")) return "sent";
-  if (states.includes("expired")) return "expired";
-  return states.every((s) => s === "signed") ? "signed" : "sent";
-}
+/** Statuses are shared by every supplier application (see supplier-applications.ts). */
+export const FLOGAS_STATUSES = APPLICATION_STATUSES;
+export type FlogasStatus = ApplicationStatus;
+export const FLOGAS_STATUS_LABELS = APPLICATION_STATUS_LABELS;
+export const flogasStatus = applicationStatus;
