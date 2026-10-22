@@ -5,16 +5,15 @@ import { FORM_PRESETS } from "../../src/forms/presets";
 const PAGES: Record<string, { pages: number; width: number; height: number }> = {
   "flogas-gas-sme-agreement": { pages: 2, width: 654.3, height: 900.9 },
   "flogas-electricity-commercial-agreement": { pages: 2, width: 654.3, height: 900.9 },
-  "bord-gais-electricity-caf": { pages: 1, width: 595.3, height: 841.9 },
   "bord-gais-gas-caf": { pages: 1, width: 512, height: 722.3 },
   "energia-customer-registration": { pages: 3, width: 648, height: 895 },
 };
 
 describe("supplier form presets", () => {
-  it("has five distinct presets keyed by PDF hash", () => {
-    expect(FORM_PRESETS).toHaveLength(5);
-    expect(new Set(FORM_PRESETS.map((p) => p.key)).size).toBe(5);
-    expect(new Set(FORM_PRESETS.map((p) => p.sha256)).size).toBe(5);
+  it("has four distinct presets keyed by PDF hash", () => {
+    expect(FORM_PRESETS).toHaveLength(4);
+    expect(new Set(FORM_PRESETS.map((p) => p.key)).size).toBe(4);
+    expect(new Set(FORM_PRESETS.map((p) => p.sha256)).size).toBe(4);
     for (const p of FORM_PRESETS) expect(p.sha256).toMatch(/^[0-9a-f]{64}$/);
   });
 

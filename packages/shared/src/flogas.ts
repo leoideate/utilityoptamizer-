@@ -9,7 +9,7 @@ import { today } from "./dates";
 import { LEGAL_ENTITIES, OCCUPANCY_TYPES, PRICE_TYPES, type LegalEntity, type OccupancyType, type PriceType, type ProductInterest, type SaleType, type ServiceType, type SupplyChange, isEnergyService } from "./enums";
 import type { FormSignerRole } from "./forms";
 import { mprnFormatError, normalizeIdentifier } from "./identifiers";
-import { APPLICATION_STATUSES, APPLICATION_STATUS_LABELS, type ApplicationAddress, type ApplicationStatus, EMPTY_ADDRESS, addressText, applicationStatus, sameAddress } from "./supplier-applications";
+import { APPLICATION_STATUSES, APPLICATION_STATUS_LABELS, type ApplicationAddress, type ApplicationStatus, EMPTY_ADDRESS, applicationStatus } from "./supplier-applications";
 
 const labels = <T extends string>(m: Record<T, string>) => m;
 
