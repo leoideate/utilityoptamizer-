@@ -55,6 +55,7 @@ import { EmailSignaturesService } from "./email-signatures/email-signatures.serv
 import { FormsService } from "./forms/forms.service";
 import { SigningController } from "./forms/signing.controller";
 import { SigningService } from "./forms/signing.service";
+import { ApplicationDocuments } from "./supplier-applications/application-documents";
 import { FlogasElectricityController } from "./supplier-applications/flogas-electricity/flogas-electricity.controller";
 import { FlogasElectricityService } from "./supplier-applications/flogas-electricity/flogas-electricity.service";
 import { SignaturesController } from "./signatures/signatures.controller";
@@ -141,7 +142,7 @@ export class IntegrationsModule {}
 @Module({ imports: [DocumentsModule, IntegrationsModule], controllers: [FormsController, SigningController], providers: [FormsService, SigningService], exports: [FormsService, SigningService] })
 export class FormsModule {}
 
-@Module({ imports: [FormsModule, DocumentsModule], controllers: [FlogasElectricityController], providers: [FlogasElectricityService] })
+@Module({ imports: [FormsModule, DocumentsModule], controllers: [FlogasElectricityController], providers: [ApplicationDocuments, FlogasElectricityService] })
 export class SupplierApplicationsModule {}
 
 @Module({ controllers: [ReportsController], providers: [ReportsService] })
