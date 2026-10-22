@@ -35,6 +35,7 @@ import { DocumentsService, type UploadedFile, sniffMatches } from "../documents/
 import { OpportunityAccess } from "../opportunities/access.service";
 import { loadGateFacts } from "../opportunities/facts";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/storage";
+import { fillAcroForm } from "./acroform";
 import { type FillValue, fillPdf, greyscaleCopy, inspectTemplate } from "./pdf";
 import { workflowTemplateFor } from "../supplier-applications/templates";
 import { presetFor } from "./presets";
@@ -771,7 +772,9 @@ export class FormsService {
     const title = `${form.template.name} – UO-${String(opp.number).padStart(6, "0")} (signed)`;
     let filled: Awaited<ReturnType<typeof fillPdf>>;
     try {
-      filled = await fillPdf({ template, fields, values, signatures, signedDates, requireSignatures: true, signingRecord, title });
+      const args = { template, fields, values, signatures, signedDates, requireSignatures: true, signingRecord, title };
+      // A form that fills the PDF's own fields is signed the same way, then flattened so its values can't change.
+      filled = fields.some((f) => f.pdfField) ? await fillAcroForm({ ...args, flatten: true, allowUnmapped: true }) : await fillPdf(args);
     } catch {
       throw new RuleViolation(["The signature image couldn't be read. Upload it again as a PNG."]);
     }

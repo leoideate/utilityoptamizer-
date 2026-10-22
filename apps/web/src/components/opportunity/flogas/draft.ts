@@ -1,63 +1,13 @@
-import type { FlogasAddress, FlogasElectricityData, FlogasIssue, FlogasSaveInput, FlogasStatus, FormSignerRole, FormStatus, SignatureAuthorisation, SigningLinkStatus } from "@uo/shared";
+import type { FlogasAddress, FlogasElectricityData, FlogasIssue, FlogasSaveInput } from "@uo/shared";
+import type { ApplicationVersion, ApplicationViewBase, BankEdit } from "../supplier-application/types";
 
 /** GET /opportunities/:id/flogas-electricity */
-export interface FlogasView {
-  applies: boolean;
-  needsCustomer: boolean;
-  template: { id: string; name: string; version: number } | null;
-  layoutVersion: string;
+export interface FlogasView extends ApplicationViewBase {
   data: FlogasElectricityData;
-  answered: string[];
   issues: FlogasIssue[];
-  signers: FormSignerRole[];
-  status: FlogasStatus;
-  stale: boolean;
-  currentFormId: string | null;
-  contract: { id: string; readOnly: boolean } | null;
-  versions: FlogasVersion[];
-  permissions: { write: boolean; customerWrite: boolean; bankRead: boolean; bankWrite: boolean; readSensitive: boolean; review: boolean };
 }
-
-export interface FlogasVersion {
-  version: number;
-  formId: string;
-  layoutVersion: string;
-  templateVersion: number;
-  createdAt: string;
-  createdBy: string | null;
-  status: FormStatus;
-  current: boolean;
-  qcPassed: boolean;
-  versionId: string;
-  signedVersionId: string | null;
-  sensitive: boolean;
-  requiredSigners: FormSignerRole[];
-  reviewedAt: string | null;
-  reviewedBy: string | null;
-  reviewNote: string | null;
-  signatures: { id: string; role: FormSignerRole; signerName: string; authorisation: SignatureAuthorisation; uploadedAt: string; uploadedById: string | null; online: boolean }[];
-  links: {
-    id: string;
-    role: FormSignerRole;
-    signerName: string;
-    signerEmail: string;
-    status: SigningLinkStatus;
-    sentAt: string;
-    openedAt: string | null;
-    signedAt: string | null;
-    declinedAt: string | null;
-    declineReason: string | null;
-    expiresAt: string;
-    sentById: string | null;
-  }[];
-}
-
-/** New bank details typed on the Direct Debit tab (the saved ones are never sent back to the browser without bank.read). */
-export interface BankEdit {
-  accountName: string;
-  iban: string;
-  bic: string;
-}
+export type FlogasVersion = ApplicationVersion;
+export type { BankEdit };
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const addr = (a: FlogasAddress) => ({ line1: a.line1, line2: a.line2, city: a.city, county: a.county, postcode: a.postcode });

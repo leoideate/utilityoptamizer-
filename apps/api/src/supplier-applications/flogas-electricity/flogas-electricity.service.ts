@@ -1,6 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import {
   EMPTY_FLOGAS_ADDRESS,
   type FlogasAddress,
@@ -9,14 +8,12 @@ import {
   type FlogasMeterRow,
   type FlogasSaveInput,
   can,
-  canWriteOpportunity,
   contactFullName,
   flogasAnswersSchema,
   flogasDefaultRequirements,
   flogasElectricityApplies,
   flogasElectricityIssues,
   flogasSigners,
-  flogasStatus,
   isFlogasSupplier,
   meterPointErrors,
   normalizeIdentifier,
@@ -27,18 +24,17 @@ import type { z } from "zod";
 import { AuditService } from "../../audit/audit.service";
 import { type Actor, actorRef } from "../../common/actor";
 import { CryptoService } from "../../common/crypto.service";
-import { Forbidden, NotFound, RuleViolation } from "../../common/errors";
+import { Forbidden, RuleViolation } from "../../common/errors";
 import { PrismaService } from "../../common/prisma.service";
 import { dateOnly, isoDay, num, phoneKey } from "../../common/values";
-import { FormsService, requiredSigners } from "../../forms/forms.service";
 import { fillPdf } from "../../forms/pdf";
-import { SigningService, signingLinkStatus } from "../../forms/signing.service";
 import { OpportunityAccess } from "../../opportunities/access.service";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../storage/storage";
+import { type ApplicationFiller, ApplicationDocuments, type ApplicationKindInfo, dataHash } from "../application-documents";
 import { FLOGAS_ELECTRICITY_LAYOUT as LAYOUT } from "./layout";
 import { renderFlogasElectricity } from "./render";
 
-const KIND = LAYOUT.workflow;
+const KIND = LAYOUT.workflow as "flogas_electricity";
 const METERS = { meterPoints: { include: { readings: { orderBy: [{ readingDate: "desc" as const }, { createdAt: "desc" as const }] } } } };
 type Tx = Prisma.TransactionClient;
 
@@ -54,7 +50,12 @@ const cent = (euro: Prisma.Decimal | null | undefined) => {
 };
 const addressOf = (a: { line1: string | null; line2: string | null; city: string | null; county: string | null; postcode: string | null } | null | undefined): FlogasAddress =>
   a ? { line1: a.line1, line2: a.line2, city: a.city, county: a.county, postcode: a.postcode } : { ...EMPTY_FLOGAS_ADDRESS };
-const hashOf = (d: FlogasElectricityData) => CryptoService.sha256(JSON.stringify(d));
+const INFO: ApplicationKindInfo = {
+  kind: KIND,
+  label: "Flogas electricity",
+  formName: "the Flogas form",
+  missingTemplate: "The Flogas electricity form hasn't been set up yet. An administrator needs to upload the Flogas Commercial Agreement PDF under Admin → Supplier forms.",
+};
 
 /** How changes are named in the audit trail and timeline (never their values). */
 const LABELS: Record<string, string> = {
@@ -114,8 +115,7 @@ export class FlogasElectricityService {
     private readonly access: OpportunityAccess,
     private readonly audit: AuditService,
     private readonly crypto: CryptoService,
-    private readonly forms: FormsService,
-    private readonly signing: SigningService,
+    private readonly docs: ApplicationDocuments,
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
   ) {}
 
@@ -160,7 +160,7 @@ export class FlogasElectricityService {
       app,
       answers,
       restricted,
-      broker: await this.forms.brokerProfile(),
+      broker: await this.docs.brokerProfile(),
     };
   }
 
@@ -242,36 +242,16 @@ export class FlogasElectricityService {
     };
   }
 
-  /** The Flogas electricity template an administrator uploaded (newest first), if any. */
-  private template() {
-    return this.prisma.formTemplate.findFirst({ where: { workflow: KIND, active: true }, orderBy: { createdAt: "desc" } });
-  }
-
-  private versions(applicationId: string | undefined) {
-    if (!applicationId) return Promise.resolve([]);
-    return this.prisma.supplierApplicationVersion.findMany({
-      where: { applicationId },
-      orderBy: { version: "desc" },
-      include: { form: { include: { signatures: { orderBy: { uploadedAt: "asc" } }, signingLinks: { orderBy: { createdAt: "desc" } } } } },
-    });
-  }
-
   // --- Reading ------------------------------------------------------------------------
 
   async view(actor: Actor, opportunityId: string) {
     await this.access.readable(actor, opportunityId);
     const ctx = await this.context(opportunityId);
-    const bankRead = can(actor, "bank.read");
+    const permissions = this.docs.permissions(actor, ctx.opp);
     const full = this.assemble(ctx, true);
-    const data = bankRead ? full : this.assemble(ctx, false);
-    if (bankRead && ctx.bank) await this.audit.sensitiveAccess(actor, "opportunity", opportunityId, "bank details for the Flogas electricity application");
-    const [template, versions] = await Promise.all([this.template(), this.versions(ctx.app?.id)]);
-    const current = versions.find((v) => v.form.status !== "superseded") ?? null;
-    const stale = !!current && current.dataSha256 !== hashOf(full);
-    const items = await this.prisma.documentItem.findMany({ where: { id: { in: versions.map((v) => v.form.documentItemId) } }, select: { id: true, sensitive: true } });
-    const users = await this.userNames(versions.flatMap((v) => [v.createdById, v.form.reviewedById, ...v.form.signatures.map((s) => s.uploadedById)]));
-    const open = ctx.opp.outcome === "open";
-    const write = open && canWriteOpportunity(actor, { ownerId: ctx.opp.ownerId });
+    const data = permissions.bankRead ? full : this.assemble(ctx, false);
+    if (permissions.bankRead && ctx.bank) await this.audit.sensitiveAccess(actor, "opportunity", opportunityId, "bank details for the Flogas electricity application");
+    const [template, docs] = await Promise.all([this.docs.template(KIND), this.docs.describe(ctx.app?.id, dataHash(full))]);
     return {
       applies: this.applies(ctx),
       needsCustomer: !ctx.customer,
@@ -282,79 +262,16 @@ export class FlogasElectricityService {
       answered: Object.keys(ctx.answers),
       issues: flogasElectricityIssues(full),
       signers: flogasSigners(full),
-      status: flogasStatus({ form: current?.form ?? null, stale, links: current ? current.form.signingLinks.map((l) => ({ role: l.role, status: signingLinkStatus(l) })) : [] }),
-      stale,
-      currentFormId: current?.formId ?? null,
+      ...docs,
       contract: ctx.contract ? { id: ctx.contract.id, readOnly: ctx.contract.status === "live" || ctx.contract.status === "ended" } : null,
-      versions: versions.map((v) => ({
-        version: v.version,
-        formId: v.formId,
-        layoutVersion: v.layoutVersion,
-        templateVersion: v.form.templateVersion,
-        createdAt: v.createdAt,
-        createdBy: users.get(v.createdById ?? "") ?? null,
-        status: v.form.status,
-        current: v.formId === current?.formId,
-        qcPassed: v.form.qcPassed,
-        versionId: v.form.versionId,
-        signedVersionId: v.form.signedVersionId,
-        sensitive: items.find((i) => i.id === v.form.documentItemId)?.sensitive ?? false,
-        requiredSigners: requiredSigners(v.form.fields as never),
-        reviewedAt: v.form.reviewedAt,
-        reviewedBy: users.get(v.form.reviewedById ?? "") ?? null,
-        reviewNote: v.form.reviewNote,
-        signatures: v.form.signatures.map((s) => ({ id: s.id, role: s.role, signerName: s.signerName, authorisation: s.authorisation, uploadedAt: s.uploadedAt, uploadedById: s.uploadedById, online: !!s.signingLinkId })),
-        links: v.form.signingLinks.map((l) => ({
-          id: l.id,
-          role: l.role,
-          signerName: l.signerName,
-          signerEmail: l.signerEmail,
-          status: signingLinkStatus(l),
-          sentAt: l.lastSentAt,
-          openedAt: l.openedAt,
-          signedAt: l.signedAt,
-          declinedAt: l.declinedAt,
-          declineReason: l.declineReason,
-          expiresAt: l.expiresAt,
-          sentById: l.createdById,
-        })),
-      })),
-      permissions: {
-        write,
-        customerWrite: write && can(actor, "customer.write"),
-        bankRead,
-        bankWrite: write && can(actor, "bank.write"),
-        readSensitive: can(actor, "document.read_sensitive"),
-        review: can(actor, "document.review"),
-      },
+      permissions,
     };
-  }
-
-  private async userNames(ids: (string | null)[]) {
-    const clean = [...new Set(ids.filter((x): x is string => !!x))];
-    const users = clean.length ? await this.prisma.user.findMany({ where: { id: { in: clean } }, select: { id: true, name: true } }) : [];
-    return new Map(users.map((u) => [u.id, u.name]));
   }
 
   /** Who did what to this application, its versions, their signing and downloads, newest first. */
   async history(actor: Actor, opportunityId: string) {
     await this.access.readable(actor, opportunityId);
-    const app = await this.prisma.supplierApplication.findUnique({ where: { opportunityId_kind: { opportunityId, kind: KIND } } });
-    if (!app) return [];
-    const versions = await this.prisma.supplierApplicationVersion.findMany({ where: { applicationId: app.id }, select: { formId: true, form: { select: { documentItemId: true } } } });
-    const logs = await this.prisma.auditLog.findMany({
-      where: {
-        OR: [
-          { entityType: "supplier_application", entityId: app.id },
-          { entityType: "generated_form", entityId: { in: versions.map((v) => v.formId) } },
-          { entityType: "document_item", entityId: { in: versions.map((v) => v.form.documentItemId) } },
-        ],
-      },
-      orderBy: { createdAt: "desc" },
-      take: 200,
-    });
-    const users = await this.userNames(logs.map((l) => l.actorId));
-    return logs.map((l) => ({ id: l.id, at: l.createdAt, action: l.action, summary: l.summary, actor: l.actorId ? (users.get(l.actorId) ?? "Unknown user") : "Automation" }));
+    return this.docs.history(opportunityId, KIND);
   }
 
   // --- Saving a draft -------------------------------------------------------------------
@@ -568,75 +485,36 @@ export class FlogasElectricityService {
 
   // --- Documents ------------------------------------------------------------------------
 
-  /**
-   * Generates the next version: validated, filled on the original Flogas PDF, quality-checked and
-   * stored. A version that was already sent or signed is only replaced when confirmed, and is kept.
-   */
+  /** Generates the next version on the original Flogas PDF (see ApplicationDocuments.generate). */
   async generate(actor: Actor, opportunityId: string, input: z.infer<typeof flogasGenerateSchema>) {
     const opp = await this.access.writable(actor, opportunityId);
     if (opp.outcome !== "open") throw new RuleViolation(["Forms can only be generated for open opportunities."]);
     const ctx = await this.context(opportunityId);
     this.assertApplies(ctx);
     if (!ctx.customer) throw new RuleViolation(["Create or link the customer first, so the application is filled from their record."]);
-    const t = await this.template();
-    if (!t) throw new RuleViolation(["The Flogas electricity form hasn't been set up yet. An administrator needs to upload the Flogas Commercial Agreement PDF under Admin → Supplier forms."]);
     const data = this.assemble(ctx, true);
     const issues = flogasElectricityIssues(data);
     if (issues.length) throw new RuleViolation(issues.map((i) => i.message));
-
-    const app = ctx.app ?? (await this.prisma.supplierApplication.create({ data: { opportunityId, kind: KIND, answers: {}, createdById: actorRef(actor), updatedById: actorRef(actor) } }));
-    const versions = await this.versions(app.id);
-    const current = versions.find((v) => v.form.status !== "superseded");
-    const hash = hashOf(data);
-    if (current) {
-      const used = current.form.status !== "generated" || current.form.signatures.length > 0 || current.form.signingLinks.some((l) => !l.revokedAt);
-      if (!used && current.dataSha256 === hash && current.form.templateId === t.id && current.layoutVersion === LAYOUT.version) return { formId: current.formId, version: current.version, unchanged: true };
-      if (used && !input.confirmReplace) {
-        const what = current.form.status === "approved" ? "signed and approved" : current.form.status === "awaiting_review" ? "signed" : "sent for signature";
-        throw new RuleViolation([`Version ${current.version} has already been ${what}. Confirm to replace it with a new version; version ${current.version} is kept.`]);
-      }
-    }
-
-    const signers = flogasSigners(data);
-    const rendered = await renderFlogasElectricity(data, signers);
-    if (rendered.issues.length) throw new RuleViolation(rendered.issues);
-    const version = (versions[0]?.version ?? 0) + 1;
-    const title = `Flogas electricity application v${version} – UO-${String(ctx.opp.number).padStart(6, "0")}`;
-    const filled = await fillPdf({ template: await this.storage.get(t.storageKey), fields: rendered.fields, values: rendered.values, title });
-    if (filled.issues.length) throw new RuleViolation(filled.issues);
-
-    const form = await this.forms.storeGenerated(actor, ctx.opp, t, {
-      fields: rendered.fields,
-      values: rendered.values,
-      filled,
-      title,
-      sensitive: !!rendered.values.iban,
-      onCreated: async (tx, created) => {
-        await tx.supplierApplicationVersion.create({
-          data: { applicationId: app.id, version, formId: created.id, layoutVersion: LAYOUT.version, dataEnc: this.crypto.encryptJson(data), dataSha256: hash, createdById: actorRef(actor) },
-        });
-        // Links for the replaced version stop working with it; cancelling them keeps the record clear.
-        if (current) await tx.signingLink.updateMany({ where: { formId: current.formId, signedAt: null, revokedAt: null, declinedAt: null }, data: { revokedAt: new Date() } });
-        await this.audit.record(
-          actor,
-          {
-            action: "supplier_application.generate",
-            entityType: "supplier_application",
-            entityId: app.id,
-            summary: `Generated Flogas electricity application version ${version}`,
-            data: { formId: created.id, version, layoutVersion: LAYOUT.version, templateId: t.id, templateVersion: t.version, replacedVersion: current?.version ?? null },
-          },
-          {
-            opportunityId,
-            customerId: ctx.opp.customerId,
-            kind: "document",
-            body: `Flogas electricity application version ${version} generated on the Flogas form (template version ${t.version}).${current ? ` Version ${current.version} was replaced and is kept; its open signing links were cancelled.` : ""}`,
-          },
-          tx,
-        );
-      },
+    return this.docs.generate(actor, INFO, {
+      opp: ctx.opp,
+      appId: ctx.app?.id ?? null,
+      data,
+      layoutVersion: LAYOUT.version,
+      filler: this.filler(data),
+      sensitive: (values) => !!values.iban,
+      confirmReplace: input.confirmReplace,
     });
-    return { formId: form.id, version, unchanged: false };
+  }
+
+  private filler(data: FlogasElectricityData): ApplicationFiller {
+    return {
+      fill: async (template, title) => {
+        const rendered = await renderFlogasElectricity(data, flogasSigners(data));
+        if (rendered.issues.length) return { fields: rendered.fields, values: rendered.values, bytes: new Uint8Array(), issues: rendered.issues };
+        const filled = await fillPdf({ template, fields: rendered.fields, values: rendered.values, title });
+        return { fields: rendered.fields, values: rendered.values, bytes: filled.bytes, issues: filled.issues };
+      },
+    };
   }
 
   /**
@@ -647,45 +525,31 @@ export class FlogasElectricityService {
     await this.access.readable(actor, opportunityId);
     const ctx = await this.context(opportunityId);
     this.assertApplies(ctx);
-    const t = await this.template();
-    if (!t) throw new RuleViolation(["The Flogas electricity form hasn't been set up yet. An administrator needs to upload the Flogas Commercial Agreement PDF under Admin → Supplier forms."]);
+    const t = await this.docs.template(KIND);
+    if (!t) throw new RuleViolation([INFO.missingTemplate]);
     const reveal = can(actor, "bank.read");
     const data = this.assemble(ctx, reveal);
     if (!reveal && data.bankOnFile) Object.assign(data, { iban: `${"X".repeat(18)}${data.ibanLast4 ?? ""}`, debtorName: "On file (restricted)", bic: null });
-    const rendered = await renderFlogasElectricity(data, flogasSigners(data));
-    const filled = await fillPdf({ template: await this.storage.get(t.storageKey), fields: rendered.fields, values: rendered.values, title: "Flogas electricity application (draft preview)" });
-    const doc = await PDFDocument.load(filled.bytes);
-    const font = await doc.embedFont(StandardFonts.HelveticaBold);
-    for (const page of doc.getPages()) {
-      page.drawText("DRAFT PREVIEW – NOT FOR SIGNATURE", { x: 250, y: page.getHeight() - 22, size: 10, font, color: rgb(0.75, 0.1, 0.1) });
-    }
+    const filled = await this.filler(data).fill(await this.storage.get(t.storageKey), "Flogas electricity application (draft preview)");
+    if (!filled.bytes.length) throw new RuleViolation(filled.issues);
     await this.audit.log(actor, { action: "supplier_application.preview", entityType: "supplier_application", entityId: ctx.app?.id ?? null, summary: `Previewed the Flogas electricity draft${reveal && data.bankOnFile ? " with bank details" : ""}` });
-    return Buffer.from(await doc.save());
+    return this.docs.markDraft(filled.bytes);
   }
 
-  /** The version to send, checked: it's the current one and the CRM hasn't changed since it was generated. */
-  private async sendable(actor: Actor, opportunityId: string, formId: string) {
+  /** The current data's hash, after the checks every send needs: write access, open deal, still Flogas + Electricity. */
+  private async currentHash(actor: Actor, opportunityId: string) {
     const opp = await this.access.writable(actor, opportunityId);
     if (opp.outcome !== "open") throw new RuleViolation(["Only open opportunities can be sent for signature."]);
     const ctx = await this.context(opportunityId);
     this.assertApplies(ctx);
-    const v = await this.prisma.supplierApplicationVersion.findUnique({ where: { formId }, include: { form: true, application: true } });
-    if (!v || v.application.opportunityId !== opportunityId) throw new NotFound("Application version");
-    if (v.form.status === "superseded") throw new RuleViolation([`Version ${v.version} has been replaced. Send the latest version.`]);
-    if (v.dataSha256 !== hashOf(this.assemble(ctx, true))) throw new RuleViolation([`The application has changed since version ${v.version} was generated. Generate a new version, then send that.`]);
-    return v;
+    return dataHash(this.assemble(ctx, true));
   }
 
   async send(actor: Actor, opportunityId: string, formId: string, input: z.infer<typeof flogasSendSchema>) {
-    const v = await this.sendable(actor, opportunityId, formId);
-    if (!requiredSigners(v.form.fields as never).includes(input.role)) throw new RuleViolation(["This version has no signature box for that signer."]);
-    return this.signing.createLink(actor, formId, input, { viaApplication: true });
+    return this.docs.send(actor, opportunityId, formId, await this.currentHash(actor, opportunityId), input);
   }
 
   async resend(actor: Actor, opportunityId: string, linkId: string) {
-    const link = await this.prisma.signingLink.findUnique({ where: { id: linkId }, select: { formId: true } });
-    if (!link) throw new NotFound("Signing link");
-    await this.sendable(actor, opportunityId, link.formId);
-    return this.signing.resend(actor, linkId, { viaApplication: true });
+    return this.docs.resend(actor, opportunityId, linkId, await this.currentHash(actor, opportunityId));
   }
 }

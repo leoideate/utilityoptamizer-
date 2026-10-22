@@ -121,7 +121,7 @@ export type ContactTitle = (typeof CONTACT_TITLES)[number];
 export const CONTRACT_STATUSES = ["draft", "quoted", "selected", "signed", "submitted", "live", "ended", "cancelled"] as const;
 export type ContractStatus = (typeof CONTRACT_STATUSES)[number];
 
-export const LEGAL_ENTITIES = ["sole_trader", "partnership", "limited_company", "plc", "charity_club", "other"] as const;
+export const LEGAL_ENTITIES = ["sole_trader", "partnership", "limited_company", "plc", "charity_club", "state_body", "co_operative", "other"] as const;
 export type LegalEntity = (typeof LEGAL_ENTITIES)[number];
 export const LEGAL_ENTITY_LABELS = labels<LegalEntity>({
   sole_trader: "Sole trader",
@@ -129,6 +129,8 @@ export const LEGAL_ENTITY_LABELS = labels<LegalEntity>({
   limited_company: "Limited company",
   plc: "PLC",
   charity_club: "Charity / club / association",
+  state_body: "State body",
+  co_operative: "Co-operative",
   other: "Other",
 });
 

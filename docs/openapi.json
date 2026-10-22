@@ -2914,6 +2914,181 @@
         ]
       }
     },
+    "/api/opportunities/{id}/bord-gais-electricity": {
+      "get": {
+        "operationId": "BordGaisElectricityController_view",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "supplier-applications"
+        ]
+      },
+      "put": {
+        "operationId": "BordGaisElectricityController_save",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "supplier-applications"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/bord-gais-electricity/preview": {
+      "get": {
+        "operationId": "BordGaisElectricityController_preview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "supplier-applications"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/bord-gais-electricity/versions": {
+      "post": {
+        "operationId": "BordGaisElectricityController_generate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "supplier-applications"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/bord-gais-electricity/versions/{formId}/send": {
+      "post": {
+        "operationId": "BordGaisElectricityController_send",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "formId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "supplier-applications"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/bord-gais-electricity/signing-links/{linkId}/resend": {
+      "post": {
+        "operationId": "BordGaisElectricityController_resend",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "linkId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "supplier-applications"
+        ]
+      }
+    },
+    "/api/opportunities/{id}/bord-gais-electricity/history": {
+      "get": {
+        "operationId": "BordGaisElectricityController_history",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "supplier-applications"
+        ]
+      }
+    },
     "/api/opportunities/{id}/case": {
       "get": {
         "operationId": "WorkflowsController_overview",

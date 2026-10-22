@@ -19,7 +19,9 @@ import {
   SUPPLY_CHANGE_LABELS,
   type ServiceType,
   type SupplyChange,
-  flogasElectricityApplies,
+  SUPPLIER_APPLICATION_LABELS,
+  type SupplierApplicationKind,
+  supplierApplicationApplies,
   isEnergyService,
 } from "@uo/shared";
 import { useSuppliers } from "@/components/domain";
@@ -182,12 +184,19 @@ function DetailsCard({ opp }: { opp: Workspace }) {
     onSuccess: refresh,
   });
   const ro = !opp.permissions.write;
-  // Changing product or supplier hides the Flogas form; when it already has a document, say so first.
-  const [hidingFlogas, setHidingFlogas] = useState<DetailValues | null>(null);
-  const flogasDocs = opp.supplierApps.find((a) => a.kind === "flogas_electricity")?._count.versions ?? 0;
-  const applies = (v: Pick<DetailValues, "productInterest" | "serviceType" | "selectedSupplierId">) =>
-    flogasElectricityApplies({ productInterest: v.productInterest, serviceType: v.serviceType as ServiceType, supplierName: suppliers.data?.find((s) => s.id === v.selectedSupplierId)?.name ?? (v.selectedSupplierId === opp.selectedSupplierId ? opp.selectedSupplier?.name : null) });
-  const submit = (v: DetailValues) => (flogasDocs > 0 && applies(toValues(opp)) && !applies(v) ? setHidingFlogas(v) : save.mutate(v));
+  // Changing product or supplier hides a supplier's own form (Flogas, Bord Gáis); when it already has a document, say so first.
+  const [hiding, setHiding] = useState<{ values: DetailValues; kind: SupplierApplicationKind } | null>(null);
+  const applies = (kind: SupplierApplicationKind, v: Pick<DetailValues, "productInterest" | "serviceType" | "selectedSupplierId">) =>
+    supplierApplicationApplies(kind, {
+      productInterest: v.productInterest,
+      serviceType: v.serviceType as ServiceType,
+      supplierName: suppliers.data?.find((s) => s.id === v.selectedSupplierId)?.name ?? (v.selectedSupplierId === opp.selectedSupplierId ? opp.selectedSupplier?.name : null),
+    });
+  const submit = (v: DetailValues) => {
+    const hidden = opp.supplierApps.find((a) => a._count.versions > 0 && applies(a.kind as SupplierApplicationKind, toValues(opp)) && !applies(a.kind as SupplierApplicationKind, v));
+    return hidden ? setHiding({ values: v, kind: hidden.kind as SupplierApplicationKind }) : save.mutate(v);
+  };
+  const supplierName = hiding?.kind === "bord_gais_electricity" ? "Bord Gáis" : "Flogas";
 
   return (
     <Card>
@@ -288,22 +297,22 @@ function DetailsCard({ opp }: { opp: Workspace }) {
         <Field label="Phone">{(p) => <Input {...p} type="tel" {...register("phone")} />}</Field>
       </fieldset>
       <Dialog
-        open={!!hidingFlogas}
-        onOpenChange={(o) => !o && setHidingFlogas(null)}
-        title="Hide the Flogas application?"
-        description={`A Flogas electricity document has already been generated. With this change the Flogas form no longer applies: its tab is hidden and nothing more can be generated or sent from it. Everything saved, generated and signed so far is kept.`}
+        open={!!hiding}
+        onOpenChange={(o) => !o && setHiding(null)}
+        title={`Hide the ${supplierName} application?`}
+        description={`A ${hiding ? SUPPLIER_APPLICATION_LABELS[hiding.kind] : ""} document has already been generated. With this change the ${supplierName} form no longer applies: its tab is hidden and nothing more can be generated or sent from it. Everything saved, generated and signed so far is kept.`}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setHidingFlogas(null)}>
+            <Button variant="secondary" onClick={() => setHiding(null)}>
               Cancel
             </Button>
-            <Button loading={save.isPending} onClick={() => (save.mutate(hidingFlogas!), setHidingFlogas(null))}>
+            <Button loading={save.isPending} onClick={() => (save.mutate(hiding!.values), setHiding(null))}>
               Save anyway
             </Button>
           </>
         }
       >
-        <p className="text-sm">Changing back to Electricity with Flogas shows it again.</p>
+        <p className="text-sm">Changing back to Electricity with {supplierName} shows it again.</p>
       </Dialog>
     </Card>
   );

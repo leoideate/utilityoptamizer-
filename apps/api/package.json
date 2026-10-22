@@ -16,6 +16,7 @@
     "stress": "ts-node --transpile-only scripts/stress.ts",
     "forms:presets": "ts-node --transpile-only scripts/load-form-presets.ts",
     "flogas:fixture": "ts-node --transpile-only scripts/flogas-fixture.ts",
+    "bord-gais:fixture": "ts-node --transpile-only scripts/bord-gais-fixture.ts",
     "test": "jest --runInBand",
     "test:unit": "jest --selectProjects unit",
     "test:integration": "jest --runInBand --selectProjects integration"

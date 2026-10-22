@@ -205,8 +205,8 @@ export const formFieldSchema = z
     source: z.enum(FORM_SOURCE_KEYS as [FormSource, ...FormSource[]]).nullable().optional(),
     signer: z.enum(FORM_SIGNER_ROLES).nullable().optional(),
     fontSize: z.number().min(5).max(24).optional(),
-    /** Number of character boxes for comb fields (e.g. an MPRN written one digit per box). */
-    comb: z.number().int().min(2).max(60).optional(),
+    /** Number of character boxes for comb fields (e.g. an MPRN written one digit per box; 1 centres a single character). */
+    comb: z.number().int().min(1).max(60).optional(),
     required: z.boolean().optional(),
     /** Tick (or print) only when the source's value equals this, e.g. "24" for a 24-month box, "false" for "do not contact". */
     match: z.string().trim().min(1).max(60).optional(),
@@ -216,6 +216,8 @@ export const formFieldSchema = z
     mask: z.boolean().optional(),
     /** Write in block capitals. */
     upper: z.boolean().optional(),
+    /** The PDF's own form field this fills (AcroForm forms). Without it the value is drawn on the page. */
+    pdfField: z.string().min(1).max(300).optional(),
   })
   .superRefine((f, ctx) => {
     if ((f.kind === "signature" || f.kind === "signed_date") && !f.signer) ctx.addIssue({ code: "custom", path: ["signer"], message: `Choose whose signature "${f.label}" is.` });
