@@ -26,7 +26,7 @@ generating and sending. The details card warns first when a document was generat
 | Need | Reused | Added |
 | --- | --- | --- |
 | Supplier application, answers, versions, statuses | `SupplierApplication`, `SupplierApplicationVersion`, `applicationStatus` (shared with Flogas) | kind `bord_gais_electricity` |
-| Versions, sending, resending, history | `ApplicationDocuments` (extracted from the Flogas service so both use it) | — |
+| Versions, sending, resending, history | `ApplicationDocuments` (extracted from the Flogas service so both use it) | routes under `/api/opportunities/:id/bord-gais-electricity` (view, save draft, preview, versions, send, resend, history) |
 | Template | `FormTemplate.workflow` recognised by SHA-256 | workflow `bord_gais_electricity`; a migration marks an already-uploaded copy of this PDF |
 | PDF filling | `GeneratedForm` field snapshot + encrypted values | `forms/acroform.ts`: fills AcroForm fields by name, regenerates appearances, draws the three items that have no field, and verifies stored values and visible appearances after reopening. Fields carry a `pdfField` name in the snapshot; `FormsService` uses the AcroForm filler for any form whose fields name PDF fields, so signed copies are built the same way. |
 | Signed copy | Online signing, evidence page, second-person review | The signed copy draws the signature images into the `_es_:signer:signature` boxes, sets the signing dates and is **flattened**. The generated (unsigned) version keeps its fields filled and editable. |
@@ -215,9 +215,10 @@ Creditor name and address (Bord Gáis Energy, One Warrington Place, Dublin 2), c
    point (the red tenths dial). If Bord Gáis means something else, only `splitReading` in
    `bord-gais-electricity/layout.ts` changes.
 2. **`Variable Rate` and `Fully Fixed Rate` are text fields, not checkboxes**, unlike
-   `Fixed Energy Rate`. They are filled with "X". The template's `Fully Fixed Rate` field also
-   carries a stale tick in its appearance with no value; regenerating appearances removes it, so
-   the form never shows Fully Fixed by accident.
+   `Fixed Energy Rate`. They are filled with "X". The template also **prints a tick inside the
+   Fully Fixed Rate box as part of its artwork** (not a field value), so every copy would look
+   Fully Fixed. The CRM covers the inside of that box with white; when Fully Fixed is chosen, the
+   field's "X" is drawn above the cover.
 3. **"Date established" is named `Date32_es_:signer:date`**, an e-signature date tag. An e-sign
    service that reads these tags would overwrite it with the signing date. The CRM fills it with
    the date the business was established and never treats it as a signature date.
@@ -232,6 +233,8 @@ Creditor name and address (Bord Gáis Energy, One Warrington Place, Dublin 2), c
    filled with the date the customer signed.
 7. **The IBAN, BIC and `*Date` fields aren't combed** although the page prints 36, 11 and 6 boxes;
    the filler makes them comb fields of those lengths so each character sits in a box.
+8. **`Address` and `Address 1` have no default appearance (`/DA`)**, so a PDF library can't size
+   their text. The filler gives any such field the form's usual `/Helv 0 Tf 0 g`.
 
 ## Electronic signature
 

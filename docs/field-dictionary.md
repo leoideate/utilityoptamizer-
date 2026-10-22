@@ -133,7 +133,7 @@ Permanent customer record. Merged duplicates are kept with merged_into_id set.
 | phone_key | String |  | Last 9 digits of phone, for duplicate detection |
 | email | String |  |  |
 | advertising_method | String |  |  |
-| legal_entity | Enum: sole_trader, partnership, limited_company, plc, charity_club, other |  |  |
+| legal_entity | Enum: sole_trader, partnership, limited_company, plc, charity_club, state_body, co_operative, other |  |  |
 | employees | Int |  |  |
 | vat_exempt | Boolean |  |  |
 | vat_exempt_number | String |  |  |
@@ -319,6 +319,8 @@ One row per stage visit; drives "average time in each stage".
 | reading_type | Enum: actual, estimated, customer, smart | ✓ |  |
 | register | String |  |  |
 | value | Decimal(14, 2) | ✓ |  |
+| raw_value | String |  | The reading exactly as read ("01234.5"), so leading zeroes survive |
+| meter_serial | String |  | Which of the meter point's meters it was read from (its serial number), when it has more than one |
 | reading_date | Date | ✓ |  |
 | document_item_id | UUID |  | Bill or photo the reading came from |
 | created_by_id | UUID |  |  |
@@ -389,7 +391,7 @@ Live/ended contracts are read-only history; renewals create new rows.
 | opportunity_id | UUID | ✓ |  |
 | customer_id | UUID |  |  |
 | campaign | String |  |  |
-| legal_entity | Enum: sole_trader, partnership, limited_company, plc, charity_club, other |  |  |
+| legal_entity | Enum: sole_trader, partnership, limited_company, plc, charity_club, state_body, co_operative, other |  |  |
 | nature_of_business | String |  |  |
 | estimated_annual_turnover | Decimal(14, 2) |  |  |
 | card_turnover_pct | Decimal(5, 2) |  |  |

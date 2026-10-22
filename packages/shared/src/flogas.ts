@@ -9,7 +9,7 @@ import { today } from "./dates";
 import { LEGAL_ENTITIES, OCCUPANCY_TYPES, PRICE_TYPES, type LegalEntity, type OccupancyType, type PriceType, type ProductInterest, type SaleType, type ServiceType, type SupplyChange, isEnergyService } from "./enums";
 import type { FormSignerRole } from "./forms";
 import { mprnFormatError, normalizeIdentifier } from "./identifiers";
-import { APPLICATION_STATUSES, APPLICATION_STATUS_LABELS, type ApplicationAddress, type ApplicationStatus, EMPTY_ADDRESS, applicationStatus } from "./supplier-applications";
+import { APPLICATION_STATUSES, applicationGenerateSchema, APPLICATION_STATUS_LABELS, type ApplicationAddress, type ApplicationStatus, EMPTY_ADDRESS, applicationStatus } from "./supplier-applications";
 
 const labels = <T extends string>(m: Record<T, string>) => m;
 
@@ -208,10 +208,7 @@ export const flogasSaveSchema = z.object({
 });
 export type FlogasSaveInput = z.infer<typeof flogasSaveSchema>;
 
-export const flogasGenerateSchema = z.object({
-  /** Needed to replace a version that was already sent or signed (the old one is kept). */
-  confirmReplace: z.boolean().optional(),
-});
+export const flogasGenerateSchema = applicationGenerateSchema;
 
 export const flogasSendSchema = z.object({
   role: z.enum(["customer", "account_holder_2", "broker"]),

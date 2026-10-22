@@ -2,6 +2,7 @@
  * What every supplier application shares (Flogas electricity, Bord Gáis electricity): its kinds,
  * when one applies to a deal, where it stands, and the address shape its forms print.
  */
+import { z } from "zod";
 import type { ProductInterest, ServiceType } from "./enums";
 import type { FormSignerRole, FormStatus, SigningLinkStatus } from "./forms";
 
@@ -15,9 +16,12 @@ export const SUPPLIER_APPLICATION_LABELS = labels<SupplierApplicationKind>({ flo
 export const supplierKey = (name: string | null | undefined) =>
   (name ?? "")
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z]/g, "");
+
+/** Generating a version; replacing one that was already sent or signed needs confirming (the old one is kept). */
+export const applicationGenerateSchema = z.object({ confirmReplace: z.boolean().optional() });
 
 // --- Status ---------------------------------------------------------------------------
 
