@@ -1,12 +1,13 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CheckCircle2, FileX2 } from "lucide-react";
+import { CheckCircle2, FileX2, XCircle } from "lucide-react";
 import { useRef, useState } from "react";
 import { FORM_SIGNER_ROLE_LABELS, type FormSignerRole } from "@uo/shared";
 import { Logo } from "@/components/brand";
 import { PdfPage, toScreen, usePdf } from "@/components/forms/pdf-page";
-import { Button, Card, Checkbox, Field, Input, IssueList, Skeleton } from "@/components/ui/primitives";
+import { Dialog } from "@/components/ui/overlays";
+import { Button, Card, Checkbox, Field, Input, IssueList, Skeleton, Textarea } from "@/components/ui/primitives";
 import { type ApiError, api } from "@/lib/api";
 import { date } from "@/lib/format";
 import { SignaturePad, type SignaturePadHandle } from "./signature-pad";
@@ -40,6 +41,17 @@ export function SigningPage({ token }: { token: string }) {
   const [consent, setConsent] = useState(false);
   const [hasInk, setHasInk] = useState(false);
   const [issues, setIssues] = useState<string[]>([]);
+  const [declining, setDeclining] = useState(false);
+  const [reason, setReason] = useState("");
+  const decline = useMutation({
+    meta: { silent: true },
+    mutationFn: () => api.post<{ declined: boolean }>(`${base}/decline`, { reason: reason.trim() || null }),
+    onSettled: () => setDeclining(false),
+    onError: (e) => {
+      const err = e as ApiError;
+      setIssues(err.status === 404 ? ["This signing link is no longer valid."] : err.issues?.length ? err.issues : [err.message]);
+    },
+  });
   const sign = useMutation({
     meta: { silent: true },
     mutationFn: () => api.post<{ signed: boolean }>(base, { typedName, consent, signaturePng: pad.current?.toPng() }),
@@ -78,6 +90,18 @@ export function SigningPage({ token }: { token: string }) {
           <p className="text-muted">
             Your signature for &ldquo;{v.formName}&rdquo; has been sent to {v.brokerName}. You can close this page.
           </p>
+        </Card>
+      </Shell>
+    );
+  }
+
+  if (decline.isSuccess) {
+    return (
+      <Shell>
+        <Card className="space-y-2 p-6">
+          <XCircle className="size-8 text-muted" aria-hidden />
+          <h1 className="text-xl font-semibold">You declined to sign</h1>
+          <p className="text-muted">We&apos;ve let {v.brokerName} know. Nothing was signed, and this link no longer works. You can close this page.</p>
         </Card>
       </Shell>
     );
@@ -129,9 +153,34 @@ export function SigningPage({ token }: { token: string }) {
           <SignaturePad ref={pad} label="Signature drawing area" onChange={setHasInk} />
         </div>
         <Checkbox label={v.consentText} checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-        <Button className="w-full sm:w-auto" disabled={!ready} loading={sign.isPending} onClick={() => (setIssues([]), sign.mutate())}>
-          Sign the form
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button className="w-full sm:w-auto" disabled={!ready} loading={sign.isPending} onClick={() => (setIssues([]), sign.mutate())}>
+            Sign the form
+          </Button>
+          <Button className="w-full sm:w-auto" variant="ghost" onClick={() => setDeclining(true)}>
+            I don&apos;t want to sign
+          </Button>
+        </div>
+        <Dialog
+          open={declining}
+          onOpenChange={setDeclining}
+          title="Decline to sign?"
+          description={`${v.brokerName} will be told you declined. The link stops working; they can send you a new one if something needs correcting.`}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setDeclining(false)}>
+                Back
+              </Button>
+              <Button variant="danger" loading={decline.isPending} onClick={() => decline.mutate()}>
+                Decline
+              </Button>
+            </>
+          }
+        >
+          <Field label="Reason (optional)" hint="For example, a detail on the form is wrong.">
+            {(p) => <Textarea {...p} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />}
+          </Field>
+        </Dialog>
         <p className="text-xs text-muted">When you sign, we record your name, signature, the time, your IP address and browser, and a fingerprint of the exact form you saw, as evidence of the signature.</p>
       </Card>
     </Shell>

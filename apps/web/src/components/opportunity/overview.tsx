@@ -19,6 +19,7 @@ import {
   SUPPLY_CHANGE_LABELS,
   type ServiceType,
   type SupplyChange,
+  flogasElectricityApplies,
   isEnergyService,
 } from "@uo/shared";
 import { useSuppliers } from "@/components/domain";
@@ -181,6 +182,12 @@ function DetailsCard({ opp }: { opp: Workspace }) {
     onSuccess: refresh,
   });
   const ro = !opp.permissions.write;
+  // Changing product or supplier hides the Flogas form; when it already has a document, say so first.
+  const [hidingFlogas, setHidingFlogas] = useState<DetailValues | null>(null);
+  const flogasDocs = opp.supplierApps.find((a) => a.kind === "flogas_electricity")?._count.versions ?? 0;
+  const applies = (v: Pick<DetailValues, "productInterest" | "serviceType" | "selectedSupplierId">) =>
+    flogasElectricityApplies({ productInterest: v.productInterest, serviceType: v.serviceType as ServiceType, supplierName: suppliers.data?.find((s) => s.id === v.selectedSupplierId)?.name ?? (v.selectedSupplierId === opp.selectedSupplierId ? opp.selectedSupplier?.name : null) });
+  const submit = (v: DetailValues) => (flogasDocs > 0 && applies(toValues(opp)) && !applies(v) ? setHidingFlogas(v) : save.mutate(v));
 
   return (
     <Card>
@@ -188,7 +195,7 @@ function DetailsCard({ opp }: { opp: Workspace }) {
         title="Details"
         actions={
           !ro && (
-            <Button size="sm" disabled={!formState.isDirty} loading={save.isPending} onClick={handleSubmit((v) => save.mutate(v))}>
+            <Button size="sm" disabled={!formState.isDirty} loading={save.isPending} onClick={handleSubmit(submit)}>
               Save changes
             </Button>
           )
@@ -280,6 +287,24 @@ function DetailsCard({ opp }: { opp: Workspace }) {
         <Field label="Email">{(p) => <Input {...p} type="email" {...register("email")} />}</Field>
         <Field label="Phone">{(p) => <Input {...p} type="tel" {...register("phone")} />}</Field>
       </fieldset>
+      <Dialog
+        open={!!hidingFlogas}
+        onOpenChange={(o) => !o && setHidingFlogas(null)}
+        title="Hide the Flogas application?"
+        description={`A Flogas electricity document has already been generated. With this change the Flogas form no longer applies: its tab is hidden and nothing more can be generated or sent from it. Everything saved, generated and signed so far is kept.`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setHidingFlogas(null)}>
+              Cancel
+            </Button>
+            <Button loading={save.isPending} onClick={() => (save.mutate(hidingFlogas!), setHidingFlogas(null))}>
+              Save anyway
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm">Changing back to Electricity with Flogas shows it again.</p>
+      </Dialog>
     </Card>
   );
 }

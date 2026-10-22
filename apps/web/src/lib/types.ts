@@ -57,6 +57,8 @@ export interface Workspace extends Omit<OpportunityRow, "stage"> {
   customer: { id: string; legalName: string; tradingName: string | null; vatRegistered: string | null; vatNumber: string | null; website: string | null; contacts: { id: string; firstName: string; lastName: string | null; email: string | null; phone: string | null; mobile: string | null }[] } | null;
   previousOpportunity: { id: string; number: number; name: string } | null;
   renewals: { id: string; number: number; name: string; outcome: Outcome }[];
+  /** Supplier applications on the deal and how many documents each has generated. */
+  supplierApps: { kind: string; _count: { versions: number } }[];
   _count: { sites: number; contracts: number; merchantApps: number; documents: number; activities: number };
   gates: Record<"proposal_sent" | "supplier_selected" | "documents_prepared" | "submitted" | "live_won", string[]>;
   permissions: { write: boolean; assign: boolean; approve: boolean; submit: boolean; activate: boolean; reopenCompleted: boolean };
