@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { SERVICE_TYPE_LABELS, STAGES } from "@uo/shared";
 import { OutcomeBadge, ServiceBadge, UserSelect } from "@/components/domain";
+import { CloseLeadBatchButton } from "@/components/close-lead-batch";
 import { ImportLeadsButton } from "@/components/import-leads";
 import { Badge, Button, Card, EmptyState, Input, PageHeader, Select, Skeleton } from "@/components/ui/primitives";
 import { api, qs } from "@/lib/api";
@@ -71,6 +72,7 @@ function OpportunitiesList() {
         description={VIEWS.find((v) => v.key === view)?.label}
         actions={
           <>
+            {can("opportunity.close_batch") && <CloseLeadBatchButton />}
             {can("opportunity.create") && <ImportLeadsButton />}
             <Button asChild>
               <Link href="/opportunities/new">

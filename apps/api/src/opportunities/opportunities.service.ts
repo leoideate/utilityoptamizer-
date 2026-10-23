@@ -1,8 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import {
+  type CloseLeadBatchInput,
   type CreateOpportunityInput,
   type OpportunityListQuery,
+  SERVICE_TYPE_LABELS,
+  type ServiceType,
   type StageKey,
   type UpdateOpportunityInput,
   STAGES,
@@ -20,7 +23,7 @@ import {
 import { AuditService } from "../audit/audit.service";
 import { type Actor, actorRef } from "../common/actor";
 import { CryptoService } from "../common/crypto.service";
-import { Forbidden, RuleViolation, assertRules } from "../common/errors";
+import { Conflict, Forbidden, RuleViolation, assertRules } from "../common/errors";
 import type { Tx } from "../common/prisma.service";
 import { PrismaService } from "../common/prisma.service";
 import { type Page, dateOnly, defined, isoDay, pageArgs, phoneKey } from "../common/values";
@@ -312,6 +315,59 @@ export class OpportunitiesService {
         tx,
       );
     });
+  }
+
+  /** Imported leads a batch close would mark lost: open, still at New Lead, from the CSV import. */
+  private batchWhere(actor: Actor, campaign?: string, serviceType?: ServiceType): Prisma.OpportunityWhereInput {
+    return {
+      AND: [
+        this.access.visibleWhere(actor),
+        { leadSource: "csv_import", outcome: "open", stage: { key: "new_lead" }, campaign: campaign ?? { not: null }, ...(serviceType ? { serviceType } : {}) },
+      ],
+    };
+  }
+
+  /** The import batches (by campaign) with leads still open at New Lead, counted by service. */
+  async leadBatches(actor: Actor) {
+    if (!can(actor, "opportunity.close_batch")) throw new Forbidden();
+    const rows = await this.prisma.opportunity.groupBy({ by: ["campaign", "serviceType"], where: this.batchWhere(actor), _count: { _all: true } });
+    const batches = new Map<string, { campaign: string; total: number; services: Partial<Record<ServiceType, number>> }>();
+    for (const r of rows) {
+      const b = batches.get(r.campaign!) ?? { campaign: r.campaign!, total: 0, services: {} };
+      b.services[r.serviceType] = r._count._all;
+      b.total += r._count._all;
+      batches.set(r.campaign!, b);
+    }
+    return [...batches.values()].sort((a, b) => a.campaign.localeCompare(b.campaign));
+  }
+
+  /**
+   * Marks a batch of imported leads lost, like markLost does one at a time: the outcome, the reason,
+   * open tasks cancelled and a timeline entry on each, plus one audit entry listing them all.
+   */
+  async closeLeadBatch(actor: Actor, input: CloseLeadBatchInput) {
+    if (!can(actor, "opportunity.close_batch")) throw new Forbidden();
+    return this.prisma.$transaction(
+      async (tx) => {
+        const opps = await tx.opportunity.findMany({ where: this.batchWhere(actor, input.campaign, input.serviceType), select: { id: true, customerId: true } });
+        if (opps.length !== input.expected) {
+          throw new Conflict(`${opps.length} lead(s) in this batch are open at New Lead now, not ${input.expected}: it changed since you opened it. Check the numbers and try again.`);
+        }
+        const ids = opps.map((o) => o.id);
+        await tx.opportunity.updateMany({ where: { id: { in: ids }, outcome: "open" }, data: { outcome: "lost", lostAt: new Date(), lostReason: input.reason, probability: 0 } });
+        await tx.activity.updateMany({ where: { opportunityId: { in: ids }, status: "open" }, data: { status: "cancelled" } });
+        for (const o of opps) await this.audit.timeline(actor, { opportunityId: o.id, customerId: o.customerId, kind: "outcome", body: `Marked lost: ${input.reason}` }, tx);
+        const which = input.serviceType ? `${SERVICE_TYPE_LABELS[input.serviceType]} leads` : "leads";
+        await this.audit.log(
+          actor,
+          { action: "opportunity.lost_batch", entityType: "opportunity", summary: `Marked ${ids.length} imported ${which} lost (${input.campaign})`, data: { campaign: input.campaign, serviceType: input.serviceType ?? null, reason: input.reason, ids } },
+          tx,
+        );
+        return { closed: ids.length };
+      },
+      // One entry per lead: a batch of hundreds takes longer than the default five seconds.
+      { timeout: 60_000 },
+    );
   }
 
   /** Lost → open for the owner; Won → open only for managers (stage goes back to Awaiting Confirmation). */
