@@ -80,8 +80,9 @@ export function CloseLeadBatchButton() {
                 {(p) => (
                   <Select {...p} value={campaign} onChange={(e) => (setCampaign(e.target.value), setService(""), setClosed(null))}>
                     <option value="">Choose…</option>
+                    {/* Keyed by the count too: a Material option keeps its first label, so a new count needs a new option. */}
                     {batches.data.map((b) => (
-                      <option key={b.campaign} value={b.campaign}>
+                      <option key={`${b.campaign}:${b.total}`} value={b.campaign}>
                         {`${b.campaign} (${plural(b.total)})`}
                       </option>
                     ))}
@@ -92,9 +93,9 @@ export function CloseLeadBatchButton() {
                 <Field label="Which leads">
                   {(p) => (
                     <Select {...p} value={service} onChange={(e) => (setService(e.target.value as ServiceType | ""), setClosed(null))}>
-                      <option value="">{`All services (${plural(batch.total)})`}</option>
+                      <option key={`all:${batch.total}`} value="">{`All services (${plural(batch.total)})`}</option>
                       {(Object.keys(batch.services) as ServiceType[]).map((s) => (
-                        <option key={s} value={s}>
+                        <option key={`${s}:${batch.services[s]}`} value={s}>
                           {`Only ${SERVICE_TYPE_LABELS[s]} (${plural(batch.services[s] ?? 0)})`}
                         </option>
                       ))}
