@@ -35,6 +35,8 @@ import {
 import { IntegrationsController } from "./integrations/integrations.controller";
 import { IntegrationsService } from "./integrations/integrations.service";
 import { MailboxesModule } from "./mailboxes/mailboxes.module";
+import { MailboxesService } from "./mailboxes/mailboxes.service";
+import { MailboxEmailSender } from "./mailboxes/system-sender";
 import { MerchantController } from "./merchant/merchant.controller";
 import { MerchantService } from "./merchant/merchant.service";
 import { NotificationsService } from "./notifications/notifications.service";
@@ -128,7 +130,14 @@ export class EmailSignaturesModule {}
   controllers: [IntegrationsController],
   providers: [
     IntegrationsService,
-    { provide: EMAIL_SENDER, inject: [ENV], useFactory: (env: Env) => new SmtpEmailSender(env.SMTP_URL, env.MAIL_FROM) },
+    {
+      provide: EMAIL_SENDER,
+      inject: [ENV, MailboxesService],
+      useFactory: (env: Env, mailboxes: MailboxesService) => {
+        const smtp = new SmtpEmailSender(env.SMTP_URL, env.MAIL_FROM);
+        return env.SYSTEM_MAILBOX ? new MailboxEmailSender(mailboxes, env.SYSTEM_MAILBOX, env.SYSTEM_MAIL_FROM, smtp) : smtp;
+      },
+    },
     {
       provide: WHATSAPP_SENDER,
       inject: [ENV],

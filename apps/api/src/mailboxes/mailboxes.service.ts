@@ -447,6 +447,22 @@ export class MailboxesService {
     }
   }
 
+  /**
+   * System email (signing links and the like) through the connected mailbox with this address,
+   * whoever connected it, optionally from one of its send-as aliases. Null when it isn't connected.
+   */
+  async sendSystem(address: string, from: string | undefined, mail: Omit<OutgoingMail, "from" | "to" | "inReplyTo"> & { to: string }) {
+    const mb = await this.prisma.mailbox.findFirst({ where: { address: { equals: address, mode: "insensitive" }, status: "active" } });
+    if (!mb) return null;
+    try {
+      const sent = await this.withToken(mb, (token) => this.providers[mb.provider].send(token, { ...mail, from: from ?? mb.address, to: [mail.to] }));
+      return { messageId: sent.providerMessageId ?? "" };
+    } catch (e) {
+      if (e instanceof MailReauthRequired) throw new MailboxUnavailable();
+      throw e;
+    }
+  }
+
   async markReadAtProvider(emailMessageId: string) {
     const m = await this.prisma.emailMessage.findUnique({ where: { id: emailMessageId }, include: { mailbox: true } });
     if (!m || m.mailbox.status !== "active") return;

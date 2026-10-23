@@ -65,6 +65,13 @@ const envSchema = z
 
     SMTP_URL: z.string().optional(),
     MAIL_FROM: z.string().default("Utility Optimizer CRM <crm@utilityoptimizer.com>"),
+    /**
+     * Sends system email (signing links, confirmations, submission packs) through this connected
+     * CRM mailbox (its address) instead of SMTP; SMTP_URL is the fallback while it isn't connected.
+     */
+    SYSTEM_MAILBOX: z.string().email().optional(),
+    /** The From for system email sent through SYSTEM_MAILBOX, e.g. a Gmail "Send mail as" alias. Defaults to the mailbox's address. */
+    SYSTEM_MAIL_FROM: z.string().optional(),
 
     OCR_PROVIDER: z.enum(["manual", "http"]).default("manual"),
     OCR_HTTP_ENDPOINT: z.string().url().optional(),
