@@ -115,6 +115,20 @@ describe("role restrictions on sensitive data (scenario 19)", () => {
     expectStatus(await admin.client.get("/admin/audit-log"), 200);
   });
 
+  it("closing a whole lead batch is for administrators and managers only", async () => {
+    const finance = await userAndClient(t, ["finance"]);
+    const close = { campaign: "Any batch", reason: "Duplicate", expected: 1 };
+    for (const client of [team.sales, team.ops, team.compliance, finance.client]) {
+      expectStatus(await client.get("/lead-batches"), 403);
+      expectStatus(await client.post("/lead-batches/close", close), 403);
+    }
+    const admin = await userAndClient(t, ["administrator"]);
+    expectStatus(await admin.client.get("/lead-batches"), 200);
+    expectStatus(await team.manager.get("/lead-batches"), 200);
+    // Nothing matches this batch: refused rather than reported as closed.
+    expectStatus(await team.manager.post("/lead-batches/close", close), 409);
+  });
+
   it("requires a session, a CSRF token and the web app's origin", async () => {
     const anon = request(t.app.getHttpServer());
     expectStatus(await anon.get("/api/opportunities"), 401);
