@@ -211,6 +211,24 @@ export const closeLeadBatchSchema = z.object({
   reason: text(500).min(1, "Give a reason."),
   expected: z.number().int().min(1),
 });
+/** Assigns several opportunities to one salesperson (or unassigns them), as Assign does one at a time. */
+export const bulkAssignSchema = z.object({
+  ids: z.array(id).min(1, "Choose at least one opportunity.").max(200, "Assign at most 200 opportunities at a time."),
+  ownerId: id.nullable(),
+});
+/** Which leads a purge covers: all of them at New Lead, or one import batch (campaign) and/or service. */
+export const leadPurgeFilterSchema = z.object({
+  campaign: text(200).optional(),
+  serviceType: z.enum(SERVICE_TYPES).optional(),
+});
+/**
+ * Permanently deletes the untouched leads the filter matches. `expected` is the count the
+ * administrator confirmed, and `confirm` must be typed, so a changed set or a slip deletes nothing.
+ */
+export const purgeLeadsSchema = leadPurgeFilterSchema.extend({
+  expected: z.number().int().min(1),
+  confirm: z.literal("DELETE", { errorMap: () => ({ message: "Type DELETE to confirm." }) }),
+});
 export const activateSchema = z.object({ activationDate: isoDate, supplierReference: optText(100) });
 
 export const opportunityListQuerySchema = z.object({
@@ -501,6 +519,8 @@ export type CreateOpportunityInput = z.infer<typeof createOpportunitySchema>;
 export type UpdateOpportunityInput = z.infer<typeof updateOpportunitySchema>;
 export type CustomerInput = z.infer<typeof customerSchema>;
 export type CloseLeadBatchInput = z.infer<typeof closeLeadBatchSchema>;
+export type LeadPurgeFilter = z.infer<typeof leadPurgeFilterSchema>;
+export type PurgeLeadsInput = z.infer<typeof purgeLeadsSchema>;
 export type ContactInput = z.infer<typeof contactSchema>;
 export type SupplySiteInput = z.infer<typeof supplySiteSchema>;
 export type MeterPointInput = z.infer<typeof meterPointSchema>;

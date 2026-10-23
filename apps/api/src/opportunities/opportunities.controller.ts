@@ -6,11 +6,14 @@ import {
   activateSchema,
   approvalSchema,
   assignSchema,
+  bulkAssignSchema,
   closeLeadBatchSchema,
   createOpportunitySchema,
+  leadPurgeFilterSchema,
   markLostSchema,
   moveStageSchema,
   opportunityListQuerySchema,
+  purgeLeadsSchema,
   timelineEntrySchema,
   updateOpportunitySchema,
 } from "@uo/shared";
@@ -88,6 +91,14 @@ export class OpportunitiesController {
     return this.opps.assign(a, id, body.ownerId);
   }
 
+  /** Assigns several opportunities at once; those that can't be (e.g. unassigning a won deal) are listed with the reason. */
+  @Post("opportunities/bulk-assign")
+  @HttpCode(200)
+  @RequireCapability("opportunity.assign")
+  bulkAssign(@CurrentUser() a: Actor, @Body(new ZodPipe(bulkAssignSchema)) body: z.infer<typeof bulkAssignSchema>) {
+    return this.opps.bulkAssign(a, body.ids, body.ownerId);
+  }
+
   @Post("opportunities/:id/approval")
   @HttpCode(204)
   approval(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(approvalSchema)) body: z.infer<typeof approvalSchema>) {
@@ -114,6 +125,21 @@ export class OpportunitiesController {
   @RequireCapability("opportunity.close_batch")
   closeLeadBatch(@CurrentUser() a: Actor, @Body(new ZodPipe(closeLeadBatchSchema)) body: z.infer<typeof closeLeadBatchSchema>) {
     return this.opps.closeLeadBatch(a, body);
+  }
+
+  /** How many leads at New Lead a purge with this filter would delete, how many it keeps (worked on), and the import batches. */
+  @Get("lead-purge")
+  @RequireCapability("opportunity.purge")
+  purgePreview(@CurrentUser() a: Actor, @Query(new ZodPipe(leadPurgeFilterSchema)) q: z.infer<typeof leadPurgeFilterSchema>) {
+    return this.opps.purgePreview(a, q);
+  }
+
+  /** Permanently deletes the untouched leads the filter matches. Administrators only. */
+  @Post("lead-purge")
+  @HttpCode(200)
+  @RequireCapability("opportunity.purge")
+  purgeLeads(@CurrentUser() a: Actor, @Body(new ZodPipe(purgeLeadsSchema)) body: z.infer<typeof purgeLeadsSchema>) {
+    return this.opps.purgeLeads(a, body);
   }
 
   @Post("opportunities/:id/reopen")

@@ -129,6 +129,17 @@ describe("role restrictions on sensitive data (scenario 19)", () => {
     expectStatus(await team.manager.post("/lead-batches/close", close), 409);
   });
 
+  it("permanently deleting leads is for administrators only", async () => {
+    const finance = await userAndClient(t, ["finance"]);
+    const purge = { expected: 1, confirm: "DELETE" };
+    for (const client of [team.sales, team.ops, team.compliance, team.manager, finance.client]) {
+      expectStatus(await client.get("/lead-purge"), 403);
+      expectStatus(await client.post("/lead-purge", purge), 403);
+    }
+    const admin = await userAndClient(t, ["administrator"]);
+    expectStatus(await admin.client.get("/lead-purge"), 200);
+  });
+
   it("requires a session, a CSRF token and the web app's origin", async () => {
     const anon = request(t.app.getHttpServer());
     expectStatus(await anon.get("/api/opportunities"), 401);

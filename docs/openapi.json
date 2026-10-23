@@ -567,6 +567,20 @@
         ]
       }
     },
+    "/api/opportunities/bulk-assign": {
+      "post": {
+        "operationId": "OpportunitiesController_bulkAssign",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "opportunities"
+        ]
+      }
+    },
     "/api/opportunities/{id}/approval": {
       "post": {
         "operationId": "OpportunitiesController_approval",
@@ -630,6 +644,32 @@
     "/api/lead-batches/close": {
       "post": {
         "operationId": "OpportunitiesController_closeLeadBatch",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "opportunities"
+        ]
+      }
+    },
+    "/api/lead-purge": {
+      "get": {
+        "operationId": "OpportunitiesController_purgePreview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "opportunities"
+        ]
+      },
+      "post": {
+        "operationId": "OpportunitiesController_purgeLeads",
         "parameters": [],
         "responses": {
           "200": {
