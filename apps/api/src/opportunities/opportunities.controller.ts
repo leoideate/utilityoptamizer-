@@ -6,6 +6,7 @@ import {
   activateSchema,
   approvalSchema,
   assignSchema,
+  closeLeadBatchSchema,
   createOpportunitySchema,
   markLostSchema,
   moveStageSchema,
@@ -16,7 +17,7 @@ import {
 import { z } from "zod";
 import { AuditService } from "../audit/audit.service";
 import type { Actor } from "../common/actor";
-import { CurrentUser } from "../common/decorators";
+import { CurrentUser, RequireCapability } from "../common/decorators";
 import { NotFound, RuleViolation } from "../common/errors";
 import { PrismaService } from "../common/prisma.service";
 import { ZodPipe } from "../common/zod.pipe";
@@ -98,6 +99,21 @@ export class OpportunitiesController {
   @HttpCode(204)
   lost(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(markLostSchema)) body: { reason: string }) {
     return this.opps.markLost(a, id, body.reason);
+  }
+
+  /** CSV import batches (by campaign) with leads still open at New Lead, counted by service. */
+  @Get("lead-batches")
+  @RequireCapability("opportunity.close_batch")
+  leadBatches(@CurrentUser() a: Actor) {
+    return this.opps.leadBatches(a);
+  }
+
+  /** Marks a batch's open New Lead leads (or one service's) lost with one reason. */
+  @Post("lead-batches/close")
+  @HttpCode(200)
+  @RequireCapability("opportunity.close_batch")
+  closeLeadBatch(@CurrentUser() a: Actor, @Body(new ZodPipe(closeLeadBatchSchema)) body: z.infer<typeof closeLeadBatchSchema>) {
+    return this.opps.closeLeadBatch(a, body);
   }
 
   @Post("opportunities/:id/reopen")

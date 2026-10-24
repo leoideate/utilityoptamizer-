@@ -14,6 +14,8 @@ export const CAPABILITIES = {
   "opportunity.reopen_completed": ["administrator", "manager"],
   "opportunity.submit": ["administrator", "manager", "operations"],
   "opportunity.activate": ["administrator", "manager", "operations"],
+  /** Mark a whole CSV import batch (or one service from it) lost in one go. */
+  "opportunity.close_batch": ["administrator", "manager"],
 
   // Customers
   "customer.read": ["administrator", "manager", "salesperson", "operations", "compliance", "finance"],
