@@ -9,6 +9,8 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { ActivitiesService } from "./activities.service";
 
 const Id = new ParseUUIDPipe({ version: "4" });
+// Zod 4 fills in defaults for absent fields even after .partial(), so updates drop the priority default.
+const activityUpdateSchema = activitySchema.extend({ priority: activitySchema.shape.priority.unwrap() }).partial();
 const listQuery = z.object({
   scope: z.enum(["mine", "team"]).default("mine"),
   status: z.enum(["open", "done", "cancelled"]).optional(),
@@ -37,7 +39,7 @@ export class ActivitiesController {
   }
 
   @Patch("activities/:id")
-  update(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(activitySchema.partial())) body: Partial<z.infer<typeof activitySchema>>) {
+  update(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(activityUpdateSchema)) body: Partial<z.infer<typeof activitySchema>>) {
     return this.activities.update(a, id, body);
   }
 

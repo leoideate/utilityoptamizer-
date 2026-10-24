@@ -42,9 +42,9 @@ const optText = (max = 500) =>
     .optional();
 const optDate = isoDate.nullable().optional().or(z.literal("").transform(() => null));
 const pct = (label: string) =>
-  z.number({ invalid_type_error: `${label} must be a number.` }).min(0, `${label} must be between 0 and 100.`).max(100, `${label} must be between 0 and 100.`);
+  z.number({ error: (iss) => (iss.input === undefined ? undefined : `${label} must be a number.`) }).min(0, `${label} must be between 0 and 100.`).max(100, `${label} must be between 0 and 100.`);
 const optPct = (label: string) => pct(label).nullable().optional();
-const money = (label: string) => z.number({ invalid_type_error: `${label} must be a number.` }).min(0, `${label} can't be negative.`);
+const money = (label: string) => z.number({ error: (iss) => (iss.input === undefined ? undefined : `${label} must be a number.`) }).min(0, `${label} can't be negative.`);
 const optMoney = (label: string) => money(label).nullable().optional();
 const optEmail = z
   .string()
@@ -274,7 +274,7 @@ export const meterReadingSchema = z.object({
   documentId: id.nullable().optional(),
 });
 
-const rate = (label: string) => z.number({ invalid_type_error: `${label} must be a number.` }).min(0, `${label} can't be negative.`).max(1000);
+const rate = (label: string) => z.number({ error: (iss) => (iss.input === undefined ? undefined : `${label} must be a number.`) }).min(0, `${label} can't be negative.`).max(1000);
 export const energyContractSchema = z.object({
   siteId: id.nullable().optional(),
   fuel: z.enum(FUELS),
