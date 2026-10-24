@@ -223,7 +223,7 @@ One sale (new or renewal). Permanent: can't be deleted or archived (database tri
 | expected_revenue | Decimal(14, 2) |  |  |
 | service_type | Enum: electricity, gas, dual_fuel, merchant_services | ✓ |  |
 | sale_type | Enum: new_sale, renewal | ✓ | Default new_sale |
-| lead_source | Enum: manual, social_media, email, website, whatsapp, referral, existing_customer, business_card, csv_import, api, renewal | ✓ | Default manual |
+| lead_source | Enum: manual, social_media, email, website, whatsapp, referral, existing_customer, business_card, csv_import, api, renewal, migration | ✓ | Default manual |
 | lead_source_detail | String |  |  |
 | campaign | String |  |  |
 | next_action | String |  |  |
@@ -245,6 +245,7 @@ One sale (new or renewal). Permanent: can't be deleted or archived (database tri
 | renewal_date | Date |  |  |
 | previous_opportunity_id | UUID |  |  |
 | renewal_source_key | String |  | Identifies the contract(s) a renewal came from. Unique, so renewals can't be duplicated. Unique |
+| import_key | String |  | The master sheet row this was imported from (scripts/migrate-customers.ts). Unique, so re-runs skip it. Unique |
 | first_contact_at | DateTime |  |  |
 | last_contact_at | DateTime |  |  |
 | converted_at | DateTime |  |  |

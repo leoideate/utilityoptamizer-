@@ -31,7 +31,8 @@ function OpportunityWorkspace() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const params = useSearchParams();
-  const [tab, setTab] = useState(params.get("tab") ?? "overview");
+  const chatOn = useUser().features.chat;
+  const [tab, setTab] = useState(() => (params.get("tab") === "chat" && !chatOn ? "overview" : (params.get("tab") ?? "overview")));
   const { data: opp, isLoading, error } = useQuery({ queryKey: ["opportunity", id], queryFn: () => api.get<Workspace>(`/opportunities/${id}`) });
   const refresh = useRefreshOpportunity(id);
 
@@ -207,7 +208,7 @@ function OpportunityWorkspace() {
           { value: "signatures", label: "Signatures" },
           { value: "activities", label: `Tasks (${opp._count.activities})` },
           { value: "timeline", label: "Timeline" },
-          { value: "chat", label: "Team chat" },
+          ...(chatOn ? [{ value: "chat", label: "Team chat" }] : []),
         ]}
       >
         <TabPanel value="overview">
@@ -247,9 +248,11 @@ function OpportunityWorkspace() {
         <TabPanel value="timeline">
           <TimelineTab opp={opp} />
         </TabPanel>
-        <TabPanel value="chat">
-          <TeamChatTab opp={opp} />
-        </TabPanel>
+        {chatOn && (
+          <TabPanel value="chat">
+            <TeamChatTab opp={opp} />
+          </TabPanel>
+        )}
       </Tabs>
 
       <LostDialog id={id} open={dialog === "lost"} onClose={() => setDialog(null)} />

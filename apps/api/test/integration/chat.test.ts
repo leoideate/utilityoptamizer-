@@ -138,3 +138,20 @@ describe("editing, deleting and files", () => {
     expectStatus(await sean.client.get(`/chat/attachments/${file.id}/url`), 404);
   });
 });
+
+// Last: it resets the database for an app started with chat switched off.
+describe("switched off", () => {
+  it("answers 404 on every chat route and tells the web app to hide chat", async () => {
+    await t.close();
+    process.env.CHAT_ENABLED = "false";
+    t = await createTestApp();
+    try {
+      const { client } = await userAndClient(t, ["administrator"], "Aisling Admin");
+      expect(expectStatus(await client.get("/auth/me"), 200).body.user.features).toEqual({ chat: false });
+      expectStatus(await client.get("/chat/channels"), 404);
+      expectStatus(await client.post("/chat/channels", { name: "general" }), 404);
+    } finally {
+      process.env.CHAT_ENABLED = "true";
+    }
+  });
+});

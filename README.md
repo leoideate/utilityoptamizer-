@@ -5,7 +5,7 @@ A CRM for Utility Optimizer Limited covering electricity, gas, dual-fuel and Wor
 - **Customers and opportunities are separate, permanent records.** Linking a customer never hides a deal; won deals stay under **Live / Won** with their salesperson.
 - **The pipeline checks itself.** The 18 stages enforce what each step needs (MPRN/GPRN, documents, signature, approval, Worldpay principals and risk) and tell users exactly what's missing, while keeping lead capture to two fields.
 - **Restricted data is encrypted and logged.** Dates of birth, address history, bank details, compliance notes and identity documents are visible only to the right roles, and every view is audited.
-- **Team chat and click-to-call.** Direct messages, team channels and a private discussion on every deal, with @mentions, files and live updates. The **Call** button dials customers through RingCentral (your phone rings first, then the customer), and calls are logged to the timeline automatically.
+- **Team chat and click-to-call.** Direct messages, team channels and a private discussion on every deal, with @mentions, files and live updates (off unless `CHAT_ENABLED=true`). The **Call** button dials customers through RingCentral (your phone rings first, then the customer), and calls are logged to the timeline automatically.
 - **Automations do the chasing**: lead assignment, first contact, missing information and documents, signatures, supplier and Worldpay follow-ups, activation checks, document expiry, and renewals 120 days before contracts end.
 
 ## Stack

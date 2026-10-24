@@ -76,6 +76,6 @@ export class AuthController {
 
   private describe(a: Actor) {
     const capabilities = (Object.keys(CAPABILITIES) as Capability[]).filter((c) => can(a, c));
-    return { id: a.id, name: a.name, roles: a.roles.filter((r): r is Role => ROLES.includes(r)), capabilities };
+    return { id: a.id, name: a.name, roles: a.roles.filter((r): r is Role => ROLES.includes(r)), capabilities, features: { chat: this.env.CHAT_ENABLED } };
   }
 }

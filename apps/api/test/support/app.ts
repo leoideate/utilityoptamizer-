@@ -29,6 +29,8 @@ process.env.FIELD_ENCRYPTION_KEY = process.env.FIELD_ENCRYPTION_KEY || Buffer.al
 process.env.APP_SECRET = process.env.APP_SECRET || "test-app-secret-test-app-secret-test-app-secret";
 process.env.SMTP_URL = "";
 process.env.LEAD_WEBHOOK_SECRET = "test-lead-secret-test-lead-secret";
+// Chat is off by default; the suites exercise it switched on (chat.test.ts also checks it switched off).
+process.env.CHAT_ENABLED = process.env.CHAT_ENABLED || "true";
 
 // Imported after the environment is prepared.
 /* eslint-disable @typescript-eslint/no-require-imports */

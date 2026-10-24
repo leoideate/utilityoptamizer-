@@ -13,3 +13,4 @@ export * from "./supplier-applications";
 export * from "./flogas";
 export * from "./bord-gais";
 export * from "./application-applies";
+export * from "./migration";

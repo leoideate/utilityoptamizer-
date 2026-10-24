@@ -7,6 +7,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { SERVICE_TYPE_LABELS, STAGES } from "@uo/shared";
 import { OutcomeBadge, ServiceBadge, UserSelect } from "@/components/domain";
+import { BulkAssignBar } from "@/components/bulk-assign-bar";
+import { CloseLeadBatchButton } from "@/components/close-lead-batch";
 import { ImportLeadsButton } from "@/components/import-leads";
 import { Badge, Button, Card, EmptyState, Input, PageHeader, Select, Skeleton } from "@/components/ui/primitives";
 import { api, qs } from "@/lib/api";
@@ -64,6 +66,22 @@ function OpportunitiesList() {
   const { data, isLoading } = useQuery({ queryKey: ["opportunities", query], queryFn: () => api.get<Page<OpportunityRow>>(`/opportunities${query}`), placeholderData: (p) => p });
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
+  // Managers tick opportunities on this page and assign them in one go.
+  const canAssign = can("opportunity.assign");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  useEffect(() => setSelected(new Set()), [query]);
+  const pageIds = data?.items.map((o) => o.id) ?? [];
+  const allTicked = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  const tick = (id: string, on: boolean) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  const tickAll = (on: boolean) => setSelected(on ? new Set(pageIds) : new Set());
+  const nameOf = (id: string) => data?.items.find((o) => o.id === id)?.name ?? "Opportunity";
+
   return (
     <>
       <PageHeader
@@ -71,6 +89,7 @@ function OpportunitiesList() {
         description={VIEWS.find((v) => v.key === view)?.label}
         actions={
           <>
+            {can("opportunity.close_batch") && <CloseLeadBatchButton />}
             {can("opportunity.create") && <ImportLeadsButton />}
             <Button asChild>
               <Link href="/opportunities/new">
@@ -141,6 +160,8 @@ function OpportunitiesList() {
             )}
           </div>
 
+          {canAssign && <BulkAssignBar ids={[...selected]} label={nameOf} onDone={() => setSelected(new Set())} onClear={() => setSelected(new Set())} />}
+
           <Card className="overflow-hidden">
             {isLoading ? (
               <div className="space-y-2 p-4">
@@ -157,8 +178,11 @@ function OpportunitiesList() {
               {/* Phones: one card per opportunity, everything visible without sideways scrolling. */}
               <ul className="divide-y divide-border md:hidden">
                 {data.items.map((o) => (
-                  <li key={o.id}>
-                    <Link href={`/opportunities/${o.id}`} className="block px-4 py-3 active:bg-surface-2">
+                  <li key={o.id} className="flex items-start">
+                    {canAssign && (
+                      <input type="checkbox" className="ml-4 mt-3.5 size-6 shrink-0 accent-[var(--primary)]" checked={selected.has(o.id)} onChange={(e) => tick(o.id, e.target.checked)} aria-label={`Select ${o.name}`} />
+                    )}
+                    <Link href={`/opportunities/${o.id}`} className="block min-w-0 flex-1 px-4 py-3 active:bg-surface-2">
                       <div className="flex items-start justify-between gap-3">
                         <span className="min-w-0 font-medium">{o.name}</span>
                         <span className="tabular shrink-0 text-sm">{money(o.expectedRevenue)}</span>
@@ -180,6 +204,11 @@ function OpportunitiesList() {
                 <table className="w-full min-w-[760px] text-sm">
                   <thead className="bg-surface-2 text-left text-muted">
                     <tr>
+                      {canAssign && (
+                        <th className="w-10 py-2.5 pl-4">
+                          <input type="checkbox" className="size-6 accent-[var(--primary)] lg:size-4" checked={allTicked} onChange={(e) => tickAll(e.target.checked)} aria-label="Select all on this page" />
+                        </th>
+                      )}
                       <th className="px-4 py-2.5 font-medium">Opportunity</th>
                       <th className="px-3 py-2.5 font-medium">Service</th>
                       <th className="px-3 py-2.5 font-medium">Stage</th>
@@ -191,6 +220,11 @@ function OpportunitiesList() {
                   <tbody>
                     {data.items.map((o) => (
                       <tr key={o.id} className="border-t border-border hover:bg-surface-2/60">
+                        {canAssign && (
+                          <td className="py-2.5 pl-4">
+                            <input type="checkbox" className="size-6 accent-[var(--primary)] lg:size-4" checked={selected.has(o.id)} onChange={(e) => tick(o.id, e.target.checked)} aria-label={`Select ${o.name}`} />
+                          </td>
+                        )}
                         <td className="px-4 py-2.5">
                           <Link href={`/opportunities/${o.id}`} className="inline-block py-0.5 font-medium hover:underline">
                             {o.name}

@@ -269,6 +269,8 @@ test("colleagues chat in real time, with mentions in deal discussions", async ({
   const sean = await seanCtx.newPage();
   await signIn(sarah, users.sales);
   await signIn(sean, users.otherSales);
+  const me = await (await sarah.request.get("/api/auth/me")).json();
+  test.skip(!me.user.features.chat, "Chat is turned off for this API (CHAT_ENABLED).");
 
   // Sarah opens a direct message with Sean.
   await sarah.goto("/chat");

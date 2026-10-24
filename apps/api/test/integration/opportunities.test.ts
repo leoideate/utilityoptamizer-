@@ -276,6 +276,49 @@ describe("visibility (scenarios 13–14)", () => {
   });
 });
 
+describe("closing an import batch", () => {
+  it("marks a campaign's leads still at New Lead lost, optionally one service, only as many as the manager confirmed", async () => {
+    const csv = "Company,Service,Campaign\nAlpha Café,Worldpay,Spring list\nAlpha Café,Electricity,Spring list\nBeta Bar,Worldpay,Spring list\nBeta Bar,Electricity,Spring list\nGamma Deli,Gas,Other list\n";
+    expectStatus(await team.ops.upload("/opportunities/import", Buffer.from(csv), "leads.csv", "text/csv"), 201);
+    // A lead someone has started working isn't part of a batch close.
+    const worked = await t.prisma.opportunity.findFirstOrThrow({ where: { companyName: "Beta Bar", serviceType: "electricity" } });
+    expectStatus(await team.ops.post(`/opportunities/${worked.id}/stage`, { stage: "contacted" }), 204);
+
+    // Managers and administrators only.
+    expectStatus(await team.sales.get("/lead-batches"), 403);
+    expectStatus(await team.ops.get("/lead-batches"), 403);
+    expectStatus(await team.ops.post("/lead-batches/close", { campaign: "Spring list", reason: "x", expected: 3 }), 403);
+    const batches = expectStatus(await team.manager.get("/lead-batches"), 200).body.filter((b: { campaign: string }) => b.campaign.endsWith(" list"));
+    expect(batches).toEqual([
+      { campaign: "Other list", total: 1, services: { gas: 1 } },
+      { campaign: "Spring list", total: 3, services: { merchant_services: 2, electricity: 1 } },
+    ]);
+
+    // A count that no longer matches closes nothing.
+    expect(expectStatus(await team.manager.post("/lead-batches/close", { campaign: "Spring list", serviceType: "merchant_services", reason: "Duplicate", expected: 3 }), 409).body.message).toMatch(/^2 lead\(s\) in this batch/);
+    expect(await t.prisma.opportunity.count({ where: { outcome: "lost" } })).toBe(0);
+
+    const reason = "Duplicate: one lead per business";
+    expect(expectStatus(await team.manager.post("/lead-batches/close", { campaign: "Spring list", serviceType: "merchant_services", reason, expected: 2 }), 200).body).toEqual({ closed: 2 });
+    const spring = await t.prisma.opportunity.findMany({ where: { campaign: "Spring list" }, orderBy: { number: "asc" } });
+    expect(spring.map((o) => [o.companyName, o.serviceType, o.outcome, o.lostReason, o.active])).toEqual([
+      ["Alpha Café", "merchant_services", "lost", reason, true],
+      ["Alpha Café", "electricity", "open", null, true],
+      ["Beta Bar", "merchant_services", "lost", reason, true],
+      ["Beta Bar", "electricity", "open", null, true],
+    ]);
+    const lost = spring.filter((o) => o.outcome === "lost").map((o) => o.id);
+    expect(await t.prisma.timelineEntry.count({ where: { opportunityId: { in: lost }, kind: "outcome", body: `Marked lost: ${reason}` } })).toBe(2);
+    const audit = await t.prisma.auditLog.findFirstOrThrow({ where: { action: "opportunity.lost_batch" } });
+    expect(audit.summary).toBe("Marked 2 imported Merchant Services / Worldpay leads lost (Spring list)");
+    expect((audit.data as { ids: string[] }).ids.sort()).toEqual([...lost].sort());
+
+    // What's left of the batch; each closed lead can still be reopened on its own.
+    const after = expectStatus(await team.manager.get("/lead-batches"), 200).body.find((b: { campaign: string }) => b.campaign === "Spring list");
+    expect(after).toEqual({ campaign: "Spring list", total: 1, services: { electricity: 1 } });
+    expectStatus(await team.manager.post(`/opportunities/${lost[0]}/reopen`), 204);
+  });
+});
 
 describe("persistent opportunity notes", () => {
   it("saves, updates and clears notes independently of other details and timeline", async () => {

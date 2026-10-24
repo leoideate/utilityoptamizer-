@@ -13,12 +13,26 @@ interface CustomerRow {
   id: string;
   legalName: string;
   tradingName: string | null;
+  contactName: string | null;
   email: string | null;
   phone: string | null;
-  vatNumber: string | null;
-  createdAt: string;
   _count: { opps: number };
+  /** The latest contract on a deal you can see. */
+  contract: {
+    supplier: string | null;
+    fuel: "electricity" | "gas";
+    meter: string | null;
+    product: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    status: string;
+    salesAgent: string | null;
+  } | null;
 }
+
+/** The master sheet's columns, in its order. */
+const COLUMNS = ["Business name", "Trading name", "Contact person", "Contact number", "Email", "MPRN/GPRN", "Supplier", "Utility type", "Product type", "Contract start", "Expiry date", "Contract status", "Sales agent"];
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export default function CustomersPage() {
   const [q, setQ] = useState("");
@@ -45,7 +59,7 @@ export default function CustomersPage() {
           </Button>
         }
       />
-      <Input className="mb-4 sm:max-w-md" type="search" placeholder="Search name, email, phone, VAT or company number" aria-label="Search customers" value={q} onChange={(e) => setQ(e.target.value)} />
+      <Input className="mb-4 sm:max-w-md" type="search" placeholder="Search name, email, phone, MPRN/GPRN, VAT or company number" aria-label="Search customers" value={q} onChange={(e) => setQ(e.target.value)} />
       <Card className="overflow-hidden">
         {isLoading ? (
           <Skeleton className="m-4 h-48" />
@@ -64,20 +78,25 @@ export default function CustomersPage() {
                     </span>
                   </div>
                   {c.tradingName && <p className="text-xs text-muted">t/a {c.tradingName}</p>}
-                  {(c.email || c.phone) && <p className="mt-0.5 truncate text-xs text-muted">{c.email ?? c.phone}</p>}
+                  {c.contract && (
+                    <p className="mt-0.5 text-xs text-muted">
+                      {[c.contract.supplier, cap(c.contract.fuel), c.contract.meter, c.contract.endDate && `expires ${date(c.contract.endDate)}`].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
+                  {(c.contactName || c.phone || c.email) && <p className="mt-0.5 truncate text-xs text-muted">{[c.contactName, c.phone ?? c.email].filter(Boolean).join(" · ")}</p>}
                 </Link>
               </li>
             ))}
           </ul>
           <div className="hidden overflow-x-auto md:block" tabIndex={0}>
-            <table className="w-full min-w-[640px] text-sm">
+            <table className="w-full min-w-[1500px] text-sm">
               <thead className="bg-surface-2 text-left text-muted">
                 <tr>
-                  <th className="px-4 py-2.5 font-medium">Customer</th>
-                  <th className="px-3 py-2.5 font-medium">Contact</th>
-                  <th className="px-3 py-2.5 font-medium">VAT</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Opportunities</th>
-                  <th className="px-4 py-2.5 font-medium">Since</th>
+                  {COLUMNS.map((h, i) => (
+                    <th key={h} className={i === 0 ? "px-4 py-2.5 font-medium" : "px-3 py-2.5 font-medium"}>
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -87,12 +106,19 @@ export default function CustomersPage() {
                       <Link href={`/customers/${c.id}`} className="inline-block py-0.5 font-medium hover:underline">
                         {c.legalName}
                       </Link>
-                      {c.tradingName && <span className="block text-xs text-muted">t/a {c.tradingName}</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-muted">{c.email ?? c.phone ?? "—"}</td>
-                    <td className="px-3 py-2.5">{c.vatNumber ?? "—"}</td>
-                    <td className="tabular px-3 py-2.5 text-right">{c._count.opps}</td>
-                    <td className="px-4 py-2.5">{date(c.createdAt)}</td>
+                    <td className="px-3 py-2.5">{c.tradingName ?? "—"}</td>
+                    <td className="px-3 py-2.5">{c.contactName ?? "—"}</td>
+                    <td className="tabular px-3 py-2.5">{c.phone ?? "—"}</td>
+                    <td className="px-3 py-2.5 text-muted">{c.email ?? "—"}</td>
+                    <td className="tabular px-3 py-2.5">{c.contract?.meter ?? "—"}</td>
+                    <td className="px-3 py-2.5">{c.contract?.supplier ?? "—"}</td>
+                    <td className="px-3 py-2.5">{c.contract ? cap(c.contract.fuel) : "—"}</td>
+                    <td className="px-3 py-2.5">{c.contract?.product ?? "—"}</td>
+                    <td className="px-3 py-2.5">{date(c.contract?.startDate)}</td>
+                    <td className="px-3 py-2.5">{date(c.contract?.endDate)}</td>
+                    <td className="px-3 py-2.5">{c.contract ? cap(c.contract.status) : "—"}</td>
+                    <td className="px-3 py-2.5">{c.contract?.salesAgent ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>

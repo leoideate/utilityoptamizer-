@@ -24,6 +24,7 @@ export interface OutgoingMail {
   text: string;
   /** HTML version of the same message (e.g. with the sender's email signature). The text stays as the plain-text part. */
   html?: string;
+  replyTo?: string;
   /** Reply in this message's thread (the provider ids of the original). */
   inReplyTo?: { providerMessageId: string; threadId: string | null; internetMessageId: string | null };
 }
@@ -201,6 +202,7 @@ export function buildRfc822(mail: OutgoingMail): string {
     `Subject: ${encodeHeader(mail.subject)}`,
     "MIME-Version: 1.0",
   ];
+  if (mail.replyTo) headers.push(`Reply-To: ${mail.replyTo.replace(/[\r\n,]/g, "")}`);
   if (mail.inReplyTo?.internetMessageId) {
     const ref = mail.inReplyTo.internetMessageId.replace(/[\r\n]/g, "");
     headers.push(`In-Reply-To: ${ref}`, `References: ${ref}`);

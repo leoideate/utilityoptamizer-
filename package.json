@@ -32,6 +32,8 @@
   },
   "overrides": {
     "deepmerge-ts": "8.0.2",
+    "multer": "2.5.0",
+    "body-parser": "2.4.0",
     "postcss": "8.5.30",
     "js-yaml": "4.3.2",
     "@nestjs/swagger": {
