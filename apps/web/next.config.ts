@@ -55,6 +55,10 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Self-contained server bundle for the Docker image (apps/web/Dockerfile).
   output: "standalone",
+  experimental: {
+    // The proxy to the API gives up after 30 seconds by default; a large lead import takes longer.
+    proxyTimeout: 5 * 60_000,
+  },
 };
 
 export default nextConfig;

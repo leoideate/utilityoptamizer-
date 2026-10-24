@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Inbox, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { SERVICE_TYPE_LABELS, STAGES } from "@uo/shared";
+import { SELECTABLE_SERVICE_TYPES, SERVICE_TYPE_LABELS, STAGES } from "@uo/shared";
 import { OutcomeBadge, ServiceBadge, UserSelect } from "@/components/domain";
 import { ImportLeadsButton } from "@/components/import-leads";
 import { Badge, Button, Card, EmptyState, Input, PageHeader, Select, Skeleton } from "@/components/ui/primitives";
@@ -109,9 +109,9 @@ function OpportunitiesList() {
             <Input className="col-span-2 sm:max-w-xs" type="search" placeholder="Search name, company, UO number…" aria-label="Search opportunities" value={search} onChange={(e) => setSearch(e.target.value)} />
             <Select className="sm:w-auto" value={filters.serviceType} onChange={(e) => setParam({ serviceType: e.target.value })} aria-label="Service">
               <option value="">All services</option>
-              {Object.entries(SERVICE_TYPE_LABELS).map(([k, v]) => (
+              {SELECTABLE_SERVICE_TYPES.map((k) => (
                 <option key={k} value={k}>
-                  {v}
+                  {SERVICE_TYPE_LABELS[k]}
                 </option>
               ))}
             </Select>

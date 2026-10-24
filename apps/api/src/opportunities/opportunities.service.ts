@@ -23,7 +23,7 @@ import { CryptoService } from "../common/crypto.service";
 import { Forbidden, RuleViolation, assertRules } from "../common/errors";
 import type { Tx } from "../common/prisma.service";
 import { PrismaService } from "../common/prisma.service";
-import { type Page, dateOnly, defined, isoDay, pageArgs, phoneKey } from "../common/values";
+import { type Page, dateOnly, defined, isoDay, opportunityNumber, pageArgs, phoneKey } from "../common/values";
 import { ActivitiesService } from "../activities/activities.service";
 import { DocumentsService } from "../documents/documents.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -544,7 +544,7 @@ export class OpportunitiesService {
     if (q.supplierId) and.push({ selectedSupplierId: q.supplierId });
     if (q.q) {
       const term = q.q.trim();
-      const n = Number(term.replace(/^UO-?/i, ""));
+      const n = opportunityNumber(term);
       and.push({
         OR: [
           { name: { contains: term, mode: "insensitive" } },
@@ -553,7 +553,7 @@ export class OpportunitiesService {
           { email: { contains: term, mode: "insensitive" } },
           { customer: { legalName: { contains: term, mode: "insensitive" } } },
           { customer: { tradingName: { contains: term, mode: "insensitive" } } },
-          ...(Number.isInteger(n) && n > 0 ? [{ number: n }] : []),
+          ...(n ? [{ number: n }] : []),
         ],
       });
     }

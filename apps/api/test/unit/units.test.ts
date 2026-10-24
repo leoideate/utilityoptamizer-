@@ -145,6 +145,25 @@ describe("CSV lead import parsing", () => {
       ["Shop", "Electricity", ""],
     ]);
   });
+
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { parseIrishAddress, splitContact } = require("../../src/opportunities/lead-intake") as typeof import("../../src/opportunities/lead-intake");
+  it("splits one-line Irish addresses into address fields", () => {
+    expect(parseIrishAddress("157 Drimnagh Road Dublin 12 D12 cx84, Co. Dublin")).toEqual({ kind: "trading", line1: "157 Drimnagh Road", line2: undefined, city: "Dublin 12", county: "Co. Dublin", postcode: "D12 CX84", country: "IE" });
+    expect(parseIrishAddress("183 Kimmage Road Lower Kimmage Dublin 6W D6W NW81, Co. Dublin")).toMatchObject({ line1: "183 Kimmage Road Lower Kimmage", city: "Dublin 6W", postcode: "D6W NW81" });
+    expect(parseIrishAddress("Dundrum Town Centre, Sandyford Rd, Dundrum, Co. Dublin", "Dublin 14")).toMatchObject({ line1: "Dundrum Town Centre", line2: "Sandyford Rd, Dundrum", city: "Dublin 14", postcode: undefined });
+    // The file's Area wins over a mistyped district in the address.
+    expect(parseIrishAddress("55 Decies Road Ballyfermot Dublin 1, Co. Dublin", "Dublin 10")).toMatchObject({ line1: "55 Decies Road Ballyfermot", city: "Dublin 10" });
+    expect(parseIrishAddress("Unit 7 Tower Shopping Centre Clondalkin Co. Dublin D22 Wv81")).toMatchObject({ line1: "Unit 7 Tower Shopping Centre Clondalkin", county: "Co. Dublin", postcode: "D22 WV81" });
+    expect(parseIrishAddress("Dublin 12, Co. Dublin", "Dublin 12")).toMatchObject({ line1: "Dublin 12", city: undefined });
+    expect(parseIrishAddress("  ")).toBeNull();
+  });
+
+  it("separates a contact's role in brackets", () => {
+    expect(splitContact("Paul McDonald (Owner)")).toEqual({ name: "Paul McDonald", role: "Owner" });
+    expect(splitContact("Geoff Lenehan / Maisha Lenehan (Co-owners)")).toEqual({ name: "Geoff Lenehan / Maisha Lenehan", role: "Co-owners" });
+    expect(splitContact("Mary Byrne")).toEqual({ name: "Mary Byrne" });
+  });
 });
 
 describe("BullMQ job ids", () => {
