@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ArrowRight, Download, FileWarning, Plus, RefreshCw, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { LEAD_SOURCE_LABELS, type LeadSource, SERVICE_TYPE_LABELS, type ServiceType, addDays } from "@uo/shared";
+import { LEAD_SOURCE_LABELS, type LeadSource, SELECTABLE_SERVICE_TYPES, SERVICE_TYPE_LABELS, type ServiceType, addDays } from "@uo/shared";
 import { BUCKETS, type Bucket } from "@/components/cases-board";
 import { BarList, UserSelect, useSuppliers } from "@/components/domain";
 import { Button, Card, CardHeader, Input, PageHeader, Select, Skeleton, Stat } from "@/components/ui/primitives";
@@ -114,9 +114,9 @@ export default function HomePage() {
             <span className="mb-1.5 block">Service</span>
             <Select value={filters.serviceType} onChange={(e) => set("serviceType")(e.target.value)}>
               <option value="">All services</option>
-              {Object.entries(SERVICE_TYPE_LABELS).map(([k, v]) => (
+              {SELECTABLE_SERVICE_TYPES.map((k) => (
                 <option key={k} value={k}>
-                  {v}
+                  {SERVICE_TYPE_LABELS[k]}
                 </option>
               ))}
             </Select>

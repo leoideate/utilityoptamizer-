@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Camera, ImageUp, Loader2, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type DragEvent, useEffect, useRef, useState } from "react";
-import { SERVICE_TYPES, SERVICE_TYPE_LABELS, type ServiceType } from "@uo/shared";
+import { SELECTABLE_SERVICE_TYPES, SERVICE_TYPE_LABELS, type ServiceType } from "@uo/shared";
 import { Badge, Button, Card, CardHeader, Field, Input, IssueList, PageHeader, Select } from "@/components/ui/primitives";
 import { type ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/format";
@@ -157,7 +157,7 @@ export default function ScanPage() {
             <Field label="Opportunity for" className="min-w-56 flex-1">
               {(p) => (
                 <Select {...p} value={service} onChange={(e) => setService(e.target.value as ServiceType)}>
-                  {SERVICE_TYPES.map((x) => (
+                  {SELECTABLE_SERVICE_TYPES.map((x) => (
                     <option key={x} value={x}>
                       {SERVICE_TYPE_LABELS[x]}
                     </option>

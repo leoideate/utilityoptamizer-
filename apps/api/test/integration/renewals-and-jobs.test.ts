@@ -185,14 +185,63 @@ describe("stage migration", () => {
 
 describe("lead intake", () => {
   it("imports CSV leads and reports bad rows by line", async () => {
-    const csv = "Company,Contact,Service,Email\nAcme Bakery,Ann Lee,Electricity,ann@acme.ie\nBad Row,,Solar,\nTaste Café,,Worldpay,not-an-email\nPub Ltd,,Dual fuel,\n";
+    const csv = "Company,Contact,Service,Email\nAcme Bakery,Ann Lee,Electricity,ann@acme.ie\nBad Row,,Solar,\nTaste Café,,Worldpay,not-an-email\nPub Ltd,,Gas,\nOld Co,,Dual fuel,\n";
     const res = expectStatus(await team.ops.upload("/opportunities/import", Buffer.from(csv), "leads.csv", "text/csv"), 201).body;
     expect(res.created).toBe(2);
-    expect(res.errors.map((e: { line: number }) => e.line)).toEqual([3, 4]);
+    expect(res.errors.map((e: { line: number }) => e.line)).toEqual([3, 4, 6]);
     expect(res.errors[0].issues[0]).toMatch(/Unknown service "Solar"/);
+    // Dual fuel isn't offered for new leads any more.
+    expect(res.errors[2].issues).toEqual(["Dual fuel isn't offered: import it as an Electricity lead and a Gas lead."]);
     const imported = await t.prisma.opportunity.findMany({ where: { leadSource: "csv_import" } });
-    expect(imported.map((o) => o.serviceType).sort()).toEqual(["dual_fuel", "electricity"]);
+    expect(imported.map((o) => o.serviceType).sort()).toEqual(["electricity", "gas"]);
     expect(imported.every((o) => o.ownerId === null)).toBe(true);
+  });
+
+  it("imports a list of businesses: one lead per chosen service, with a customer, contacts and a supply site", async () => {
+    const csv = [
+      "Business Name,Category,Address,Area,Phone,Owner / Manager Name,Opening/Closing",
+      'Pip\'s Cafe and Deli,Cafe / Deli,"105 Old County Road, Crumlin, Dublin 12, D12 XT71",Dublin 12,01 453 5251,Paul McDonald (Owner),08:00-15:00',
+      'Bibi\'s Cafe,Restaurant / Cafe,"14B Emorville ave South Circular rd Dublin 8 D08 YY66, Co. Dublin",Dublin 8,01 454 7421,Geoff Lenehan / Maisha Lenehan (Co-owners),Not found',
+      // Same phone as Pip's: flagged, never merged.
+      'Pips Again,Cafe,"1 Main St, Dublin 12",Dublin 12,014535251,,',
+    ].join("\n");
+    // Without a Service column the services must be chosen.
+    expect(expectStatus(await team.ops.upload("/opportunities/import", Buffer.from(csv), "leads.csv", "text/csv"), 422).body.issues[0]).toMatch(/choose the services/);
+    expectStatus(await team.ops.upload("/opportunities/import?services=solar", Buffer.from(csv), "leads.csv", "text/csv"), 400);
+    expectStatus(await team.ops.upload("/opportunities/import?services=dual_fuel", Buffer.from(csv), "leads.csv", "text/csv"), 400);
+
+    const res = expectStatus(await team.ops.upload("/opportunities/import?services=merchant_services,electricity", Buffer.from(csv), "leads.csv", "text/csv"), 201).body;
+    expect(res).toMatchObject({ created: 6, customers: 2, errors: [] });
+    expect(res.warnings).toEqual([{ line: 4, issues: [expect.stringMatching(/^Pips Again may already be in the CRM as Pip's Cafe and Deli \(same phone number\)/)] }]);
+
+    const pips = await t.prisma.customer.findFirstOrThrow({ where: { legalName: "Pip's Cafe and Deli" }, include: { addresses: true, contacts: true, opps: true, sites: true } });
+    expect(pips).toMatchObject({ businessType: "Cafe / Deli", phone: "01 453 5251" });
+    expect(pips.addresses).toEqual([expect.objectContaining({ kind: "trading", line1: "105 Old County Road", line2: "Crumlin", city: "Dublin 12", postcode: "D12 XT71" })]);
+    expect(pips.contacts).toEqual([expect.objectContaining({ firstName: "Paul", lastName: "McDonald", jobTitle: "Owner", isPrimary: true })]);
+    expect(pips.opps.map((o) => [o.name, o.serviceType, o.contactRole, o.nextAction]).sort()).toEqual([
+      ["Pip's Cafe and Deli – Electricity", "electricity", "Owner", "Opening hours: 08:00-15:00"],
+      ["Pip's Cafe and Deli – Worldpay", "merchant_services", "Owner", "Opening hours: 08:00-15:00"],
+    ]);
+    // Only the energy lead gets a supply site.
+    expect(pips.sites).toEqual([expect.objectContaining({ line1: "105 Old County Road", serviceType: "electricity", customerSector: "Cafe / Deli", opportunityId: pips.opps.find((o) => o.serviceType === "electricity")!.id })]);
+
+    const bibis = await t.prisma.customer.findFirstOrThrow({ where: { legalName: "Bibi's Cafe" }, include: { contacts: { orderBy: { firstName: "asc" } }, opps: true } });
+    expect(bibis.contacts.map((c) => [c.firstName, c.lastName, c.jobTitle, c.isPrimary])).toEqual([
+      ["Geoff", "Lenehan", "Co-owner", true],
+      ["Maisha", "Lenehan", "Co-owner", false],
+    ]);
+    expect(bibis.opps.every((o) => o.nextAction === null)).toBe(true);
+
+    const again = await t.prisma.opportunity.findMany({ where: { companyName: "Pips Again" } });
+    expect(again.map((o) => o.customerId)).toEqual([null, null]);
+
+    // Importing the same file with the same services again (say, after a lost response) creates nothing.
+    const leads = await t.prisma.opportunity.count();
+    const retry = expectStatus(await team.sales.upload("/opportunities/import?services=electricity,merchant_services", Buffer.from(csv), "leads.csv", "text/csv"), 422).body;
+    expect(retry.issues[0]).toMatch(/^This file was already imported on .+ with the same services/);
+    expect(await t.prisma.opportunity.count()).toBe(leads);
+    // With other services it's a different import.
+    expect(expectStatus(await team.ops.upload("/opportunities/import?services=gas", Buffer.from(csv), "leads.csv", "text/csv"), 201).body.created).toBe(3);
   });
 
   it("accepts signed website leads once and rejects unsigned ones", async () => {
