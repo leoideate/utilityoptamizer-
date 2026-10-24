@@ -101,6 +101,7 @@ enum LeadSource {
   csv_import
   api
   renewal
+  migration
 }
 
 enum ApprovalState {
@@ -646,6 +647,8 @@ model Opportunity {
   renewals              Opportunity[]     @relation("Renewals")
   /// Identifies the contract(s) a renewal came from. Unique, so renewals can't be duplicated.
   renewalSourceKey      String?           @unique @map("renewal_source_key")
+  /// The master sheet row this was imported from (scripts/migrate-customers.ts). Unique, so re-runs skip it.
+  importKey             String?           @unique @map("import_key")
   firstContactAt        DateTime?         @map("first_contact_at")
   lastContactAt         DateTime?         @map("last_contact_at")
   convertedAt           DateTime?         @map("converted_at")

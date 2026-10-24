@@ -22,6 +22,8 @@ npm run lint                               # eslint (flat config at root)
 npm run typecheck
 npm test                                   # shared + API unit + API integration (integration needs docker compose)
 npm run test:e2e                           # Playwright + axe; needs API + web running and the dev seed loaded
+npm run migrate:customers -w @uo/api -- <sheet.xlsx> [--commit]   # one-off import of existing customers (docs/migration.md); dry run without --commit
+npm run migrate:documents -w @uo/api -- <pdf folder> [--commit]   # attaches their signed PDFs
 ```
 
 Single tests:
@@ -64,4 +66,4 @@ Schema changes: edit `apps/api/prisma/schema.prisma` and add a migration folder 
 
 ## Product rules to preserve
 
-Opportunities are permanent (apart from the administrators' purge of untouched leads); creating or linking a customer must not change an opportunity's stage, outcome, owner or active flag. Duplicate customers are flagged (email, phone, CRO, VAT, name and postcode) and never merged automatically (merge is `customer.merge`, managers only). Irish formats: MPRN is 11 digits starting "10", GPRN is 7 digits; exceptions need `formatExceptionReason`. Phone matching normalises +353/+44 and the trunk 0 (`phoneKey`).
+Opportunities are permanent (apart from the administrators' purge of untouched leads). The master sheet migration (`src/migration/`, `packages/shared/src/migration.ts`) is the only other path that writes won deals without the stage gates; it is keyed by `importKey` and audited as `migration.import`. Creating or linking a customer must not change an opportunity's stage, outcome, owner or active flag. Duplicate customers are flagged (email, phone, CRO, VAT, name and postcode) and never merged automatically (merge is `customer.merge`, managers only). Irish formats: MPRN is 11 digits starting "10", GPRN is 7 digits; exceptions need `formatExceptionReason`. Phone matching normalises +353/+44 and the trunk 0 (`phoneKey`).

@@ -13,6 +13,7 @@ import { RetentionService } from "./admin/retention.service";
 import { AuditService } from "./audit/audit.service";
 import { CallsModule } from "./calls/calls.module";
 import { ChatModule } from "./chat/chat.module";
+import { MigrationService } from "./migration/migration.service";
 import { AutomationsService } from "./automations/automations.service";
 import { RenewalsService } from "./automations/renewals.service";
 import { CustomersController } from "./customers/customers.controller";
@@ -91,6 +92,10 @@ export class OpportunitiesModule {}
 
 @Module({ controllers: [CustomersController], providers: [CustomersService], exports: [CustomersService] })
 export class CustomersModule {}
+
+/** The one-off master sheet migration, run by scripts/migrate-*.ts. No routes. */
+@Module({ imports: [DocumentsModule, CustomersModule], providers: [MigrationService], exports: [MigrationService] })
+export class MigrationModule {}
 
 @Module({ controllers: [EnergyController], providers: [EnergyService] })
 export class EnergyModule {}
@@ -192,4 +197,5 @@ export const FEATURE_MODULES = [
   CallsModule,
   ChatModule,
   MailboxesModule,
+  MigrationModule,
 ];
