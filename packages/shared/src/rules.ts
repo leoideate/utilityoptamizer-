@@ -270,6 +270,30 @@ export function stageGateIssues(f: GateFacts, target: StageKey): string[] {
   return [...new Set(issues)];
 }
 
+/**
+ * Where on the opportunity each stageGateIssues message is fixed, so the "can't move yet" list can
+ * link to it. `form` issues name the generated form ("…" in quotes). Keep in step with the messages
+ * above; anything unmatched (the case checklist, workflow steps, the previous supplier's bill check)
+ * is fixed on the Case / Back office tab.
+ * Only pass it messages from a stage move (RuleViolation issues), not other errors.
+ */
+export type GateIssueArea = "details" | "approval" | "supply" | "worldpay" | "documents" | "signatures" | "form" | "case";
+
+const GATE_ISSUE_AREAS: [RegExp, GateIssueArea][] = [
+  [/^Internal approval/, "approval"],
+  [/^(Link or create the customer|Select the supplier)\./, "details"],
+  [/^(Create the Worldpay application|Select the Worldpay product|Answer the underwriting|Compliance must approve|Enter the (estimated annual turnover|percentage of turnover|average transaction value))|^(Deposits|Full payment in advance) are accepted|^Principal |needs principal details/, "worldpay"],
+  [/^"[^"]+" (failed|still needs|was rejected)|^Review the signatures on "/, "form"],
+  [/^The customer must sign/, "signatures"],
+  [/required documents must be received|under Documents|lease|signed rate card/i, "documents"],
+  [/^(Add at least one supply site|Enter an? (MPRN|GPRN)|Add the energy contract details)|is rented: enter the landlord/, "supply"],
+];
+
+export function gateIssueArea(issue: string): { area: GateIssueArea; form?: string } {
+  const area = GATE_ISSUE_AREAS.find(([re]) => re.test(issue))?.[1] ?? "case";
+  return area === "form" ? { area, form: /"([^"]+)"/.exec(issue)?.[1] } : { area };
+}
+
 // ---------------------------------------------------------------------------
 // Workflow cases: what's still needed, and where the case stands
 // ---------------------------------------------------------------------------

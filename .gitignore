@@ -12,3 +12,5 @@ apps/api/storage/
 coverage/
 apps/web/e2e-report/
 apps/web/test-results/
+# Master sheet migration reports (customer details)
+apps/api/migration-out/

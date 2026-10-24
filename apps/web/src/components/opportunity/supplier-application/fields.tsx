@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import type { ApplicationAddress } from "@uo/shared";
 import { Card, CardHeader, Field, Input, IssueList, Select } from "@/components/ui/primitives";
 
@@ -16,28 +16,46 @@ export function Text({ label, value, onChange, error, required, hint, type = "te
   );
 }
 
-/** A non-negative number; anything else typed is ignored, and the server checks again. */
+/**
+ * A non-negative number (whole when `step` is "1"); anything else typed is ignored, and the server
+ * checks again. What's typed is kept as text, so "1.0" on the way to "1.05" isn't turned into 1 (a
+ * number field re-rendered from the parsed value drops the trailing ".0").
+ */
 export function Num({ label, value, onChange, error, required, hint, step = "0.01", disabled }: { label: string; value: number | null; onChange: (v: number | null) => void; error?: string; required?: boolean; hint?: string; step?: string; disabled?: boolean }) {
+  const whole = step === "1";
+  const [text, setText] = useState(value == null ? "" : String(value));
+  // Follow changes made elsewhere (a reset or reload), but not the echo of what's being typed.
+  useEffect(() => {
+    setText((t) => (parseNum(t) === value ? t : value == null ? "" : String(value)));
+  }, [value]);
   return (
     <Field label={label} error={error} required={required} hint={hint}>
       {(p) => (
         <Input
           {...p}
-          type="number"
-          min={0}
-          step={step}
-          inputMode="decimal"
+          type="text"
+          inputMode={whole ? "numeric" : "decimal"}
+          autoComplete="off"
           disabled={disabled}
-          value={value ?? ""}
+          value={text}
           onChange={(e) => {
-            if (e.target.value === "") return onChange(null);
-            const n = Number(e.target.value);
-            if (Number.isFinite(n) && n >= 0) onChange(n);
+            const t = e.target.value.replace(",", ".").trim();
+            if (!(whole ? /^\d*$/ : /^\d*\.?\d*$/).test(t)) return;
+            setText(t);
+            const n = parseNum(t);
+            if (n !== undefined) onChange(n);
           }}
         />
       )}
     </Field>
   );
+}
+
+/** null for blank, undefined while it isn't a number yet ("."). */
+function parseNum(t: string): number | null | undefined {
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isFinite(n) && t !== "." ? n : undefined;
 }
 
 export function YesNo({ label, value, onChange, error, required, hint, disabled }: { label: string; value: boolean | null; onChange: (v: boolean | null) => void; error?: string; required?: boolean; hint?: string; disabled?: boolean }) {

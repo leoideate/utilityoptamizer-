@@ -459,7 +459,7 @@ export class FormsService {
       include: { template: { select: { name: true, documentType: true } }, signatures: { orderBy: { uploadedAt: "asc" }, include: { signingLink: { select: { createdById: true } } } } },
       orderBy: { createdAt: "desc" },
     });
-    const users = await this.userNames([...forms.flatMap((f) => [f.createdById, f.reviewedById]), ...forms.flatMap((f) => f.signatures.map((s) => s.uploadedById))]);
+    const users = await this.userNames([...forms.flatMap((f) => [f.createdById, f.reviewedById, f.signedCopyUploadedById]), ...forms.flatMap((f) => f.signatures.map((s) => s.uploadedById))]);
     return forms.map((f) => ({
       id: f.id,
       name: f.template.name,
@@ -477,6 +477,8 @@ export class FormsService {
       documentItemId: f.documentItemId,
       versionId: f.versionId,
       signedVersionId: f.signedVersionId,
+      /** The signed copy is a scan of the form signed on paper; its uploader can't review it. */
+      signedCopyUpload: f.signedCopyUploadedAt ? { uploadedById: f.signedCopyUploadedById, uploadedBy: users.get(f.signedCopyUploadedById ?? "") ?? null, uploadedAt: f.signedCopyUploadedAt } : null,
       monoVersionId: f.monoVersionId,
       requiredSigners: requiredSigners(f.fields as FormField[]),
       signatures: f.signatures.map((s) => ({
@@ -781,7 +783,7 @@ export class FormsService {
     const version = await this.documents.upload(actor, form.documentItemId, { originalname: `${slug(title)}.pdf`, mimetype: "application/pdf", buffer: Buffer.from(filled.bytes), size: filled.bytes.length });
     const qcPassed = filled.issues.length === 0;
     await this.prisma.$transaction(async (tx) => {
-      await tx.generatedForm.update({ where: { id: formId }, data: { signedVersionId: version.id, status: qcPassed ? "awaiting_review" : "generated", qcPassed, qcIssues: filled.issues } });
+      await tx.generatedForm.update({ where: { id: formId }, data: { signedVersionId: version.id, signedCopyUploadedById: null, signedCopyUploadedAt: null, status: qcPassed ? "awaiting_review" : "generated", qcPassed, qcIssues: filled.issues } });
       await this.audit.timeline(
         actor,
         { opportunityId: opp.id, customerId: opp.customerId, kind: "signature", body: qcPassed ? `"${form.template.name}" signed copy created and sent for review.` : `"${form.template.name}" signed copy failed its quality check.` },
@@ -791,12 +793,36 @@ export class FormsService {
     return { signed: true, qcPassed, qcIssues: filled.issues };
   }
 
+  /**
+   * For a form the customer signed on paper: stores the scanned signed PDF as the form's signed copy
+   * and sends it for review, where someone other than the uploader checks it against the form.
+   */
+  async uploadSignedCopy(actor: Actor, formId: string, file: UploadedFile) {
+    const { form, opp } = await this.loadForm(actor, formId);
+    if (form.status !== "generated" && form.status !== "awaiting_review") throw new RuleViolation([`This form is ${FORM_STATUS_WORD[form.status]}; generate a new one first.`]);
+    if (!form.qcPassed) throw new RuleViolation(["This form failed its quality check. Generate it again before it's signed."]);
+    if (!requiredSigners(form.fields as FormField[]).length) throw new RuleViolation(["This form has no signature boxes, so there's no signed copy to upload."]);
+    if (file.mimetype !== "application/pdf" || !file.originalname.toLowerCase().endsWith(".pdf")) throw new RuleViolation(["Upload the signed form as a PDF."]);
+    const version = await this.documents.upload(actor, form.documentItemId, file);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.generatedForm.update({ where: { id: formId }, data: { signedVersionId: version.id, signedCopyUploadedById: actorRef(actor), signedCopyUploadedAt: new Date(), status: "awaiting_review" } });
+      await this.audit.record(
+        actor,
+        { action: "form.signed_copy_upload", entityType: "generated_form", entityId: formId, summary: `Uploaded the customer-signed ${form.template.name}`, data: { versionId: version.id } },
+        { opportunityId: opp.id, customerId: opp.customerId, kind: "signature", body: `Signed copy of "${form.template.name}" uploaded (signed on paper) and sent for review.` },
+        tx,
+      );
+    });
+    return { versionId: version.id };
+  }
+
   /** A second person checks the signed copy. Approving it counts as the customer's signature for submission. */
   async review(actor: Actor, formId: string, input: z.infer<typeof formReviewSchema>) {
     if (!can(actor, "document.review")) throw new Forbidden("Only reviewers can approve signed forms.");
     const { form, opp } = await this.loadForm(actor, formId);
     if (form.status !== "awaiting_review") throw new RuleViolation(["Only signed forms awaiting review can be reviewed."]);
     if (form.signatures.some((s) => s.uploadedById === actor.id)) throw new RuleViolation(["Someone other than the person who uploaded the signatures must review this form."]);
+    if (form.signedCopyUploadedById === actor.id) throw new RuleViolation(["Someone other than the person who uploaded the signed copy must review this form."]);
     const linkIds = form.signatures.flatMap((s) => (s.signingLinkId ? [s.signingLinkId] : []));
     if (linkIds.length && (await this.prisma.signingLink.count({ where: { id: { in: linkIds }, createdById: actor.id } }))) {
       throw new RuleViolation(["Someone other than the person who sent the signing link must review this form."]);

@@ -84,6 +84,15 @@ export class FormsController {
     return this.forms.addSignature(a, id, new ZodPipe(formSignatureSchema).transform(multipartBools(body)), file);
   }
 
+  /** Uploads the form as the customer signed it on paper (a scanned PDF), for review by someone else. */
+  @Post("forms/:id/signed-copy")
+  @ApiConsumes("multipart/form-data")
+  @UseInterceptors(uploadInterceptor())
+  signedCopy(@CurrentUser() a: Actor, @Param("id", Id) id: string, @UploadedFile() file?: Express.Multer.File) {
+    if (!file) throw new RuleViolation(["Choose the signed PDF."]);
+    return this.forms.uploadSignedCopy(a, id, file);
+  }
+
   @Post("forms/:id/review")
   @HttpCode(204)
   review(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(formReviewSchema)) body: z.infer<typeof formReviewSchema>) {

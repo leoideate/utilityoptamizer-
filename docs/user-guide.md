@@ -67,6 +67,8 @@ Identity documents and bank statements are restricted: you can upload them but o
 
 **Signatures → Request signature**: add the customer (and Utility Optimizer, if needed) as signers. When the customer has signed (in person or by returning a scan), use **Record signature** and attach the signed copy.
 
+A supplier form the customer signed on paper: use **Upload signed PDF** on the form (on the supplier's own tab, such as **Flogas form**, or under **Back office**) and choose the scan. It goes for review, and someone other than the person who uploaded it approves it; an approved copy counts as the customer's signature for submission.
+
 ## What each stage needs
 
 | Before moving to… | You need |
@@ -76,7 +78,7 @@ Identity documents and bank statements are restricted: you can upload them but o
 | Documents Prepared | Customer linked; VAT number if VAT registered; landlord for rented sites; Worldpay: principals for the legal entity, risk answers (deposit/prepayment details if applicable), advertising method if no website. |
 | Submitted *(Operations/manager)* | All of the above, plus an MPRN for every electricity meter and a GPRN for every gas meter, every required document received and approved, the customer's signature, internal approval and (Worldpay) compliance approval. |
 
-Changes of legal entity and renewals add their own requirements (see **Cases** below).
+Changes of legal entity and renewals add their own requirements (see **Cases** below). When a move is blocked, each thing still needed is a link: select it to go to the tab where it's done (internal approval opens **Approval**).
 
 If something's missing, the CRM lists it. The **Overview → Checklist** shows the same list in advance.
 

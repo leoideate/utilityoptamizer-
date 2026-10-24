@@ -202,7 +202,7 @@ export function PricingTab({ view, d, set, err, issues, ro }: TabProps) {
       <TabSummary issues={issues} />
       {view.contract?.readOnly && <p className="text-sm text-muted">The electricity contract is live or ended and kept as history, so its prices can't change here.</p>}
       <Section title="Sector and pricing" description="Prices are saved on the deal's electricity contract.">
-        <Field label="Sector" required error={err("sector")} hint={view.answered.includes("sector") ? undefined : "Suggested from the contract's rates until you choose."}>
+        <Field label="Sector" error={err("sector")} hint={view.answered.includes("sector") ? undefined : "Suggested from the contract's rates until you choose."}>
           {(p) => (
             <Select
               {...p}
@@ -222,7 +222,7 @@ export function PricingTab({ view, d, set, err, issues, ro }: TabProps) {
             </Select>
           )}
         </Field>
-        <Field label="Pricing" required={d.sector !== "lvmd"} error={err("priceType")}>
+        <Field label="Pricing" error={err("priceType")}>
           {(p) => (
             <Select {...p} disabled={locked} value={d.priceType === "fully_fixed" ? "fully_fixed" : (d.priceType ?? "")} onChange={(e) => set({ priceType: (e.target.value || null) as FlogasElectricityData["priceType"] })}>
               <option value="">Choose…</option>
@@ -232,11 +232,11 @@ export function PricingTab({ view, d, set, err, issues, ro }: TabProps) {
             </Select>
           )}
         </Field>
-        {d.sector === "gp_24h" && <Num label="GP 24HR unit day rate (cent per kWh)" required value={d.dayRateCent} onChange={(v) => set({ dayRateCent: v })} error={err("dayRateCent")} disabled={locked} hint="Up to 2 decimal places, e.g. 21.45" />}
+        {d.sector === "gp_24h" && <Num label="GP 24HR unit day rate (cent per kWh)" value={d.dayRateCent} onChange={(v) => set({ dayRateCent: v })} error={err("dayRateCent")} disabled={locked} hint="Up to 2 decimal places, e.g. 21.45" />}
         {d.sector === "gp_night_saver" && (
           <>
-            <Num label="GP Night Saver unit day rate (cent per kWh)" required value={d.dayRateCent} onChange={(v) => set({ dayRateCent: v })} error={err("dayRateCent")} disabled={locked} hint="Up to 2 decimal places" />
-            <Num label="GP Night Saver unit night rate (cent per kWh)" required value={d.nightRateCent} onChange={(v) => set({ nightRateCent: v })} error={err("nightRateCent")} disabled={locked} hint="Up to 2 decimal places" />
+            <Num label="GP Night Saver unit day rate (cent per kWh)" value={d.dayRateCent} onChange={(v) => set({ dayRateCent: v })} error={err("dayRateCent")} disabled={locked} hint="Up to 2 decimal places" />
+            <Num label="GP Night Saver unit night rate (cent per kWh)" value={d.nightRateCent} onChange={(v) => set({ nightRateCent: v })} error={err("nightRateCent")} disabled={locked} hint="Up to 2 decimal places" />
           </>
         )}
         {d.sector === "lvmd" && <p className="text-sm text-muted sm:col-span-2">LVMD prices are as per the LVMD Energy Rates Contract, so no unit rates go on this form.</p>}

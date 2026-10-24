@@ -8,6 +8,7 @@ import { Suspense, useState } from "react";
 import { APPROVAL_LABELS, LEAD_SOURCE_LABELS, STAGES, type StageKey, applicableSupplierApplication, isEnergyService, stageIndex } from "@uo/shared";
 import { ActivitiesTab } from "@/components/opportunity/activities";
 import { CallButton } from "@/components/opportunity/call";
+import { GateIssueList } from "@/components/opportunity/gate-issues";
 import { TeamChatTab } from "@/components/opportunity/team-chat";
 import { useRefreshOpportunity } from "@/components/opportunity/common";
 import { DocumentsTab } from "@/components/opportunity/documents";
@@ -36,7 +37,7 @@ function OpportunityWorkspace() {
   const refresh = useRefreshOpportunity(id);
 
   const [dialog, setDialog] = useState<null | "lost" | "activate" | "approve" | "assign">(null);
-  const [blocked, setBlocked] = useState<{ stage: string; issues: string[] } | null>(null);
+  const [blocked, setBlocked] = useState<{ stage: string; issues: string[]; linked: boolean } | null>(null);
   const can = useCan();
   // The back office does the forms, checks and submission; sales sees the case and its progress.
   const backOffice = can("opportunity.submit");
@@ -47,10 +48,16 @@ function OpportunityWorkspace() {
     onSuccess: refresh,
     onError: (e, stage) => {
       const err = e as ApiError;
-      setBlocked({ stage: STAGES.find((s) => s.key === stage)!.name, issues: err.issues.length ? err.issues : [err.message] });
+      setBlocked({ stage: STAGES.find((s) => s.key === stage)!.name, issues: err.issues.length ? err.issues : [err.message], linked: err.issues.length > 0 });
     },
   });
   const reopen = useMutation({ mutationFn: () => api.post(`/opportunities/${id}/reopen`), onSuccess: refresh });
+  const goTab = (v: string) => {
+    setTab(v);
+    const u = new URL(window.location.href);
+    u.searchParams.set("tab", v);
+    window.history.replaceState(null, "", u.toString());
+  };
 
   if (error instanceof ApiError && error.status === 404) {
     return (
@@ -191,12 +198,7 @@ function OpportunityWorkspace() {
 
       <Tabs
         value={activeTab}
-        onValueChange={(v) => {
-          setTab(v);
-          const u = new URL(window.location.href);
-          u.searchParams.set("tab", v);
-          window.history.replaceState(null, "", u.toString());
-        }}
+        onValueChange={goTab}
         tabs={[
           { value: "overview", label: "Overview" },
           energy ? { value: "energy", label: `Energy (${opp._count.sites} site${opp._count.sites === 1 ? "" : "s"})` } : { value: "worldpay", label: `Worldpay (${opp._count.merchantApps})` },
@@ -257,7 +259,21 @@ function OpportunityWorkspace() {
       <ApprovalDialog opp={opp} open={dialog === "approve"} onClose={() => setDialog(null)} />
       <AssignDialog opp={opp} open={dialog === "assign"} onClose={() => setDialog(null)} />
       <Dialog open={!!blocked} onOpenChange={(o) => !o && setBlocked(null)} title={`Can't move to ${blocked?.stage ?? ""} yet`} footer={<Button onClick={() => setBlocked(null)}>OK</Button>}>
-        {blocked && <IssueList issues={blocked.issues} title="This opportunity still needs:" />}
+        {blocked &&
+          (blocked.linked ? (
+            <GateIssueList
+              issues={blocked.issues}
+              tabs={{ energy, flogas, bordGais }}
+              onGo={(target) => {
+                setBlocked(null);
+                if (target !== "approve") goTab(target);
+                else if (opp.permissions.approve) setDialog("approve");
+                else goTab("overview");
+              }}
+            />
+          ) : (
+            <IssueList issues={blocked.issues} title="This opportunity still needs:" />
+          ))}
       </Dialog>
     </>
   );

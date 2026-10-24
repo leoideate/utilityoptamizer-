@@ -1047,42 +1047,45 @@ model FormTemplate {
 
 /// One filled copy of a template for an opportunity. Never edited; regenerating supersedes it.
 model GeneratedForm {
-  id                   String                      @id @default(uuid()) @db.Uuid
-  opportunityId        String                      @map("opportunity_id") @db.Uuid
-  opportunity          Opportunity                 @relation(fields: [opportunityId], references: [id])
-  templateId           String                      @map("template_id") @db.Uuid
-  template             FormTemplate                @relation(fields: [templateId], references: [id])
-  templateVersion      Int                         @map("template_version")
+  id                     String                      @id @default(uuid()) @db.Uuid
+  opportunityId          String                      @map("opportunity_id") @db.Uuid
+  opportunity            Opportunity                 @relation(fields: [opportunityId], references: [id])
+  templateId             String                      @map("template_id") @db.Uuid
+  template               FormTemplate                @relation(fields: [templateId], references: [id])
+  templateVersion        Int                         @map("template_version")
   /// Field layout used, so the exact copy can be reproduced.
-  fields               Json
+  fields                 Json
   /// Encrypted JSON of the values written (may include an IBAN).
-  valuesEnc            String                      @map("values_enc")
+  valuesEnc              String                      @map("values_enc")
   /// Field ids whose value was typed or changed instead of coming from the CRM.
-  changedFields        Json                        @default("[]") @map("changed_fields")
-  ibanChangeConfirmed  Boolean                     @default(false) @map("iban_change_confirmed")
-  documentItemId       String                      @map("document_item_id") @db.Uuid
+  changedFields          Json                        @default("[]") @map("changed_fields")
+  ibanChangeConfirmed    Boolean                     @default(false) @map("iban_change_confirmed")
+  documentItemId         String                      @map("document_item_id") @db.Uuid
   /// The unsigned generated PDF.
-  versionId            String                      @map("version_id") @db.Uuid
-  /// The PDF with signatures applied, once every required signer has one.
-  signedVersionId      String?                     @map("signed_version_id") @db.Uuid
+  versionId              String                      @map("version_id") @db.Uuid
+  /// The PDF with signatures applied, once every required signer has one, or the uploaded signed copy.
+  signedVersionId        String?                     @map("signed_version_id") @db.Uuid
+  /// Set when signedVersionId is a scan of the form signed on paper (uploaded, not built from signatures).
+  signedCopyUploadedById String?                     @map("signed_copy_uploaded_by_id") @db.Uuid
+  signedCopyUploadedAt   DateTime?                   @map("signed_copy_uploaded_at")
   /// Black and white copy of the signed (or unsigned) PDF, for suppliers that need one.
-  monoVersionId        String?                     @map("mono_version_id") @db.Uuid
+  monoVersionId          String?                     @map("mono_version_id") @db.Uuid
   /// The customer's previous form from the same template (renewals), compared field by field.
-  previousFormId       String?                     @map("previous_form_id") @db.Uuid
+  previousFormId         String?                     @map("previous_form_id") @db.Uuid
   /// Labels of fields whose value differs from the previous form.
-  changedSincePrevious Json                        @default("[]") @map("changed_since_previous")
-  changeReason         String?                     @map("change_reason")
-  status               FormStatus                  @default(generated)
-  qcPassed             Boolean                     @map("qc_passed")
-  qcIssues             Json                        @default("[]") @map("qc_issues")
-  reviewedById         String?                     @map("reviewed_by_id") @db.Uuid
-  reviewedAt           DateTime?                   @map("reviewed_at")
-  reviewNote           String?                     @map("review_note")
-  createdById          String?                     @map("created_by_id") @db.Uuid
-  createdAt            DateTime                    @default(now()) @map("created_at")
-  signatures           FormSignature[]
-  signingLinks         SigningLink[]
-  applicationVersion   SupplierApplicationVersion?
+  changedSincePrevious   Json                        @default("[]") @map("changed_since_previous")
+  changeReason           String?                     @map("change_reason")
+  status                 FormStatus                  @default(generated)
+  qcPassed               Boolean                     @map("qc_passed")
+  qcIssues               Json                        @default("[]") @map("qc_issues")
+  reviewedById           String?                     @map("reviewed_by_id") @db.Uuid
+  reviewedAt             DateTime?                   @map("reviewed_at")
+  reviewNote             String?                     @map("review_note")
+  createdById            String?                     @map("created_by_id") @db.Uuid
+  createdAt              DateTime                    @default(now()) @map("created_at")
+  signatures             FormSignature[]
+  signingLinks           SigningLink[]
+  applicationVersion     SupplierApplicationVersion?
 
   @@index([opportunityId])
   @@map("generated_forms")

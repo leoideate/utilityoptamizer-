@@ -25,6 +25,7 @@ import { useCan, useUser } from "@/lib/session";
 import type { Workspace } from "@/lib/types";
 import { CaseCard } from "./case";
 import { useRefreshOpportunity } from "./common";
+import { type SignedCopyUpload, SignedCopyButton, SignedCopyNote } from "./signed-copy";
 
 interface TemplateOption {
   id: string;
@@ -54,6 +55,7 @@ interface FormRow {
   ibanChangeConfirmed: boolean;
   versionId: string;
   signedVersionId: string | null;
+  signedCopyUpload: SignedCopyUpload | null;
   monoVersionId: string | null;
   requiredSigners: FormSignerRole[];
   signatures: { id: string; role: FormSignerRole; signerName: string; signerCapacity: string | null; authorisation: SignatureAuthorisation; note: string | null; uploadedAt: string; uploadedBy: string | null; uploadedById: string | null; linkSentById: string | null }[];
@@ -435,6 +437,7 @@ function FormsList({ opp }: { opp: Workspace }) {
   const can = useCan();
   const user = useUser();
   const forms = useQuery({ queryKey: ["opportunity", opp.id, "forms"], queryFn: () => api.get<FormRow[]>(`/opportunities/${opp.id}/forms`) });
+  const refresh = useRefreshOpportunity(opp.id);
   const [showOld, setShowOld] = useState(false);
   const [signing, setSigning] = useState<{ form: FormRow; role: FormSignerRole } | null>(null);
   const [sendingLink, setSendingLink] = useState<{ form: FormRow; role: FormSignerRole } | null>(null);
@@ -460,7 +463,7 @@ function FormsList({ opp }: { opp: Workspace }) {
         <ul className="divide-y divide-border">
           {visible.map((f) => {
             const latest = new Map(f.signatures.map((s) => [s.role, s]));
-            const uploadedByMe = f.signatures.some((s) => s.uploadedById === user.id || s.linkSentById === user.id);
+            const uploadedByMe = f.signatures.some((s) => s.uploadedById === user.id || s.linkSentById === user.id) || f.signedCopyUpload?.uploadedById === user.id;
             return (
               <li key={f.id} className="space-y-2 px-5 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -489,8 +492,11 @@ function FormsList({ opp }: { opp: Workspace }) {
                       </Button>
                     )}
                     {opp.permissions.write && f.qcPassed && (f.status === "approved" || (f.status === "generated" && !f.requiredSigners.length)) && <MonoButton opp={opp} form={f} />}
+                    {opp.permissions.write && f.qcPassed && !!f.requiredSigners.length && (f.status === "generated" || f.status === "awaiting_review") && (
+                      <SignedCopyButton formId={f.id} replacing={!!f.signedVersionId} onUploaded={() => (forms.refetch(), refresh())} />
+                    )}
                     {f.status === "awaiting_review" && can("document.review") && (
-                      <Button size="sm" disabled={uploadedByMe} title={uploadedByMe ? "Someone else must review signatures you uploaded or asked for." : undefined} onClick={() => setReviewing(f)}>
+                      <Button size="sm" disabled={uploadedByMe} title={uploadedByMe ? "Someone else must review signatures or a signed copy you uploaded or asked for." : undefined} onClick={() => setReviewing(f)}>
                         <ShieldCheck /> Review
                       </Button>
                     )}
@@ -533,6 +539,7 @@ function FormsList({ opp }: { opp: Workspace }) {
                     })}
                   </div>
                 )}
+                <SignedCopyNote upload={f.signedCopyUpload} />
                 {!!f.requiredSigners.length && f.status !== "superseded" && <SigningLinks opp={opp} form={f} />}
                 {f.reviewedAt && (
                   <p className="text-xs text-muted">

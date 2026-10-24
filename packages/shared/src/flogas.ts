@@ -395,11 +395,8 @@ export function flogasElectricityIssues(d: FlogasElectricityData): FlogasIssue[]
   });
   if (!d.readingDate && d.meters.some((m) => m.day !== null || m.night !== null || m.wattless !== null)) add("readingDate", "Enter the date of the meter reading.");
 
-  // Pricing & contract
-  if (!d.sector) add("sector", "Choose the sector.");
-  if (d.sector && d.sector !== "lvmd" && !d.priceType) add("priceType", "Choose fixed or variable pricing.");
-  if ((d.sector === "gp_24h" || d.sector === "gp_night_saver") && d.dayRateCent === null) add("dayRateCent", d.sector === "gp_24h" ? "Enter the GP 24HR unit day rate." : "Enter the GP Night Saver unit day rate.");
-  if (d.sector === "gp_night_saver" && d.nightRateCent === null) add("nightRateCent", "Enter the GP Night Saver unit night rate.");
+  // Pricing & contract: sector, pricing and rates are optional, so the form can go for signature
+  // without them. Rates that are entered are still checked by flogasSaveSchema.
 
   // Direct debit
   if (d.directDebit) {
