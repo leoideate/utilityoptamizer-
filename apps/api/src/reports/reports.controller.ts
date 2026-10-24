@@ -7,6 +7,7 @@ import type { Actor } from "../common/actor";
 import { actorRef } from "../common/actor";
 import { CurrentUser, RequireCapability } from "../common/decorators";
 import { PrismaService } from "../common/prisma.service";
+import { opportunityNumber } from "../common/values";
 import { ZodPipe } from "../common/zod.pipe";
 import { OpportunityAccess } from "../opportunities/access.service";
 import { type ReportFilter, ReportsService, reportFilterSchema } from "./reports.service";
@@ -65,7 +66,7 @@ export class ReportsController {
   /** Global search across opportunities and customers the user can see. */
   @Get("search")
   async search(@CurrentUser() a: Actor, @Query(new ZodPipe(z.object({ q: z.string().trim().min(2).max(100) }))) { q }: { q: string }) {
-    const n = Number(q.replace(/^UO-?/i, ""));
+    const n = opportunityNumber(q);
     const [opportunities, customers] = await Promise.all([
       this.prisma.opportunity.findMany({
         where: {
@@ -77,7 +78,7 @@ export class ReportsController {
                 { companyName: { contains: q, mode: "insensitive" } },
                 { contactName: { contains: q, mode: "insensitive" } },
                 { email: { contains: q, mode: "insensitive" } },
-                ...(Number.isInteger(n) && n > 0 ? [{ number: n }] : []),
+                ...(n ? [{ number: n }] : []),
                 { sites: { some: { meterPoints: { some: { OR: [{ mprn: q.replace(/\s/g, "") }, { gprn: q.replace(/\s/g, "") }] } } } } },
               ],
             },

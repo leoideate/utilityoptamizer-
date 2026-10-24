@@ -82,23 +82,24 @@ export class CoreModule {}
 })
 export class DocumentsModule {}
 
+@Module({ controllers: [CustomersController], providers: [CustomersService], exports: [CustomersService] })
+export class CustomersModule {}
+
+@Module({ controllers: [EnergyController], providers: [EnergyService], exports: [EnergyService] })
+export class EnergyModule {}
+
 @Module({
-  imports: [DocumentsModule],
+  // The CSV import creates customers and supply sites for the leads it brings in.
+  imports: [DocumentsModule, CustomersModule, EnergyModule],
   controllers: [LeadIntakeController, OpportunitiesController, ActivitiesController],
   providers: [OpportunitiesService, LeadIntakeService],
   exports: [OpportunitiesService],
 })
 export class OpportunitiesModule {}
 
-@Module({ controllers: [CustomersController], providers: [CustomersService], exports: [CustomersService] })
-export class CustomersModule {}
-
 /** The one-off master sheet migration, run by scripts/migrate-*.ts. No routes. */
 @Module({ imports: [DocumentsModule, CustomersModule], providers: [MigrationService], exports: [MigrationService] })
 export class MigrationModule {}
-
-@Module({ controllers: [EnergyController], providers: [EnergyService] })
-export class EnergyModule {}
 
 @Module({ controllers: [MerchantController], providers: [MerchantService] })
 export class MerchantModule {}
