@@ -262,7 +262,7 @@ export const formSignatureSchema = z.object({
   signerCapacity: optText(100),
   authorisation: z.enum(STAFF_SIGNATURE_AUTHORISATIONS),
   note: optText(500),
-  attest: z.literal(true, { errorMap: () => ({ message: "Confirm the signer authorised this signature for this form." }) }),
+  attest: z.literal(true, { error: "Confirm the signer authorised this signature for this form." }),
 });
 
 // --- Online signing ------------------------------------------------------------------
@@ -287,7 +287,7 @@ export const signingLinkSchema = z.object({
 /** The signature image is a small PNG data URL drawn on the signing page (requests are limited to 100 KB). */
 export const publicSignSchema = z.object({
   typedName: z.string().trim().min(1, "Type your full name.").max(200),
-  consent: z.literal(true, { errorMap: () => ({ message: "Tick the box to agree to sign electronically." }) }),
+  consent: z.literal(true, { error: "Tick the box to agree to sign electronically." }),
   signaturePng: z
     .string()
     .max(95_000, "The signature is too large. Clear it and sign again.")
