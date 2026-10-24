@@ -202,6 +202,16 @@ export const moveStageSchema = z.object({ stage: z.enum(STAGE_KEYS) });
 export const assignSchema = z.object({ ownerId: id.nullable() });
 export const approvalSchema = z.object({ decision: z.enum(APPROVAL_STATES), note: optText(1000) });
 export const markLostSchema = z.object({ reason: text(500).min(1, "Give a reason.") });
+/**
+ * Marks the imported leads of one campaign lost: those still open at New Lead, optionally only one
+ * service. `expected` is the count the manager confirmed, so a batch that changed meanwhile isn't closed.
+ */
+export const closeLeadBatchSchema = z.object({
+  campaign: text(200).min(1, "Choose the import batch."),
+  serviceType: z.enum(SERVICE_TYPES).optional(),
+  reason: text(500).min(1, "Give a reason."),
+  expected: z.number().int().min(1),
+});
 export const activateSchema = z.object({ activationDate: isoDate, supplierReference: optText(100) });
 
 export const opportunityListQuerySchema = z.object({
@@ -491,6 +501,7 @@ export const callbackPhoneSchema = z.object({ phone: z.string().trim().max(40).n
 export type CreateOpportunityInput = z.infer<typeof createOpportunitySchema>;
 export type UpdateOpportunityInput = z.infer<typeof updateOpportunitySchema>;
 export type CustomerInput = z.infer<typeof customerSchema>;
+export type CloseLeadBatchInput = z.infer<typeof closeLeadBatchSchema>;
 export type ContactInput = z.infer<typeof contactSchema>;
 export type SupplySiteInput = z.infer<typeof supplySiteSchema>;
 export type MeterPointInput = z.infer<typeof meterPointSchema>;

@@ -621,6 +621,34 @@
         ]
       }
     },
+    "/api/lead-batches": {
+      "get": {
+        "operationId": "OpportunitiesController_leadBatches",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "opportunities"
+        ]
+      }
+    },
+    "/api/lead-batches/close": {
+      "post": {
+        "operationId": "OpportunitiesController_closeLeadBatch",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "opportunities"
+        ]
+      }
+    },
     "/api/opportunities/{id}/reopen": {
       "post": {
         "operationId": "OpportunitiesController_reopen",
