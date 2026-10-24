@@ -91,7 +91,7 @@ enum Outcome {
 
 enum LeadSource {
   manual
-  telephone
+  social_media
   email
   website
   whatsapp
@@ -620,6 +620,8 @@ model Opportunity {
   leadSource            LeadSource        @default(manual) @map("lead_source")
   leadSourceDetail      String?           @map("lead_source_detail")
   campaign              String?
+  /// Persistent opportunity context, separate from timeline entries.
+  notes                 String?
   nextAction            String?           @map("next_action")
   followUpDate          DateTime?         @map("follow_up_date") @db.Date
   expectedCloseDate     DateTime?         @map("expected_close_date") @db.Date

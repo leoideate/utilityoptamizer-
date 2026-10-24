@@ -51,7 +51,7 @@ export type Outcome = (typeof OUTCOMES)[number];
 
 export const LEAD_SOURCES = [
   "manual",
-  "telephone",
+  "social_media",
   "email",
   "website",
   "whatsapp",
@@ -65,7 +65,7 @@ export const LEAD_SOURCES = [
 export type LeadSource = (typeof LEAD_SOURCES)[number];
 export const LEAD_SOURCE_LABELS = labels<LeadSource>({
   manual: "Manual entry",
-  telephone: "Telephone",
+  social_media: "Social Media",
   email: "Email",
   website: "Website",
   whatsapp: "WhatsApp",

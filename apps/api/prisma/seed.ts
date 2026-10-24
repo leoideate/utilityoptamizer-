@@ -81,7 +81,7 @@ async function demo() {
 
   // Lead just captured.
   await prisma.opportunity.create({
-    data: { name: "Doyle Pharmacy – electricity", serviceType: "electricity", leadSource: "telephone", companyName: "Doyle Pharmacy", contactName: "Pat Doyle", phone: "087 555 0199", ownerId: sales1.id, stageId: await stage("new_lead"), probability: 5, expectedRevenue: 1200 },
+    data: { name: "Doyle Pharmacy – electricity", serviceType: "electricity", leadSource: "social_media", companyName: "Doyle Pharmacy", contactName: "Pat Doyle", phone: "087 555 0199", ownerId: sales1.id, stageId: await stage("new_lead"), probability: 5, expectedRevenue: 1200 },
   });
   // Dual fuel in progress with a site and meters.
   const dual = await prisma.opportunity.create({
