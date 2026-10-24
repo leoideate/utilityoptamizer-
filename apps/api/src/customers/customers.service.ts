@@ -8,7 +8,7 @@ import { type Actor, actorRef } from "../common/actor";
 import { CryptoService } from "../common/crypto.service";
 import { Conflict, Forbidden, NotFound, RuleViolation } from "../common/errors";
 import { PrismaService } from "../common/prisma.service";
-import { type Page, dateOnly, defined, pageArgs, phoneKey } from "../common/values";
+import { type Page, dateOnly, defined, isoDay, pageArgs, phoneKey } from "../common/values";
 import { OpportunityAccess } from "../opportunities/access.service";
 
 export interface DuplicateMatch {
@@ -221,15 +221,68 @@ export class CustomersService {
               { vatNumber: { contains: term, mode: "insensitive" } },
               { contacts: { some: { OR: [{ firstName: { contains: term, mode: "insensitive" } }, { lastName: { contains: term, mode: "insensitive" } }, { email: { contains: term, mode: "insensitive" } }] } } },
               ...(phoneKey(term) ? [{ phoneKey: phoneKey(term) }] : []),
+              { sites: { some: { meterPoints: { some: { OR: [{ mprn: term.replace(/\s/g, "") }, { gprn: term.replace(/\s/g, "") }] } } } } },
             ],
           }
         : {}),
     };
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.customer.findMany({ where, orderBy: { legalName: "asc" }, ...pageArgs(q.page, q.pageSize), include: { _count: { select: { opps: true } } } }),
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.customer.findMany({
+        where,
+        orderBy: { legalName: "asc" },
+        ...pageArgs(q.page, q.pageSize),
+        include: { _count: { select: { opps: true } }, contacts: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }], take: 1 } },
+      }),
       this.prisma.customer.count({ where }),
     ]);
+    const latest = await this.latestContracts(actor, rows.map((r) => r.id));
+    const items = rows.map(({ contacts, ...c }) => {
+      const contact = contacts[0];
+      return { ...c, contactName: contact ? [contact.firstName, contact.lastName].filter(Boolean).join(" ") : null, phone: c.phone ?? contact?.phone ?? contact?.mobile ?? null, email: c.email ?? contact?.email ?? null, contract: latest.get(c.id) ?? null };
+    });
     return { items, total, page: q.page, pageSize: q.pageSize };
+  }
+
+  /**
+   * Each customer's most recent contract on an opportunity the actor can see, for the columns the
+   * master sheet has (supplier, MPRN/GPRN, product, dates, status, sales agent).
+   */
+  private async latestContracts(actor: Actor, customerIds: string[]) {
+    if (!customerIds.length) return new Map();
+    const contracts = await this.prisma.energyContract.findMany({
+      where: { opportunity: { AND: [{ customerId: { in: customerIds } }, this.access.visibleWhere(actor)] }, status: { notIn: ["draft", "quoted", "cancelled"] } },
+      orderBy: [{ activationDate: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
+      select: {
+        fuel: true,
+        status: true,
+        pricingPlan: true,
+        termMonths: true,
+        activationDate: true,
+        contractEndDate: true,
+        selectedSupplier: { select: { name: true } },
+        site: { select: { meterPoints: { select: { fuel: true, mprn: true, gprn: true } } } },
+        opportunity: { select: { id: true, customerId: true, owner: { select: { name: true } } } },
+      },
+    });
+    const byCustomer = new Map<string, unknown>();
+    for (const k of contracts) {
+      const id = k.opportunity.customerId!;
+      if (byCustomer.has(id)) continue;
+      const meter = k.site?.meterPoints.find((m) => m.fuel === k.fuel);
+      byCustomer.set(id, {
+        opportunityId: k.opportunity.id,
+        supplier: k.selectedSupplier?.name ?? null,
+        fuel: k.fuel,
+        meter: meter?.mprn ?? meter?.gprn ?? null,
+        product: k.pricingPlan,
+        termMonths: k.termMonths,
+        startDate: isoDay(k.activationDate),
+        endDate: isoDay(k.contractEndDate),
+        status: k.status,
+        salesAgent: k.opportunity.owner?.name ?? null,
+      });
+    }
+    return byCustomer;
   }
 
   /**

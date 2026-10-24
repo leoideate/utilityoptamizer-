@@ -358,7 +358,15 @@
     "/api/opportunities/import": {
       "post": {
         "operationId": "LeadIntakeController_importCsv",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "services",
+            "required": false,
+            "in": "query",
+            "description": "Services for rows without a Service value, comma-separated: electricity, gas, dual_fuel, merchant_services.",
+            "schema": {}
+          }
+        ],
         "responses": {
           "201": {
             "description": ""
@@ -567,6 +575,20 @@
         ]
       }
     },
+    "/api/opportunities/bulk-assign": {
+      "post": {
+        "operationId": "OpportunitiesController_bulkAssign",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "opportunities"
+        ]
+      }
+    },
     "/api/opportunities/{id}/approval": {
       "post": {
         "operationId": "OpportunitiesController_approval",
@@ -605,6 +627,60 @@
         ],
         "responses": {
           "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "opportunities"
+        ]
+      }
+    },
+    "/api/lead-batches": {
+      "get": {
+        "operationId": "OpportunitiesController_leadBatches",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "opportunities"
+        ]
+      }
+    },
+    "/api/lead-batches/close": {
+      "post": {
+        "operationId": "OpportunitiesController_closeLeadBatch",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "opportunities"
+        ]
+      }
+    },
+    "/api/lead-purge": {
+      "get": {
+        "operationId": "OpportunitiesController_purgePreview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "opportunities"
+        ]
+      },
+      "post": {
+        "operationId": "OpportunitiesController_purgeLeads",
+        "parameters": [],
+        "responses": {
+          "200": {
             "description": ""
           }
         },

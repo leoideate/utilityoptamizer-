@@ -28,6 +28,7 @@ export interface OpportunityRow {
 }
 
 export interface Workspace extends Omit<OpportunityRow, "stage"> {
+  notes: string | null;
   stage: { id: string; key: StageKey; name: string };
   customerId: string | null;
   ownerId: string | null;

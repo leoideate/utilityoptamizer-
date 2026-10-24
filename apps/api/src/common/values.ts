@@ -40,3 +40,12 @@ export const phoneKey = (p: string | null | undefined): string | null => {
 export function defined<T extends object>(o: T): Partial<T> {
   return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
 }
+
+/**
+ * A search term as an opportunity number ("UO-000123" or "123"), or null. Longer digit strings
+ * (an MPRN, a phone number) aren't numbers a deal can have, and would overflow the INT4 column.
+ */
+export function opportunityNumber(term: string): number | null {
+  const n = Number(term.trim().replace(/^UO-?/i, ""));
+  return Number.isInteger(n) && n > 0 && n <= 2_147_483_647 ? n : null;
+}

@@ -80,7 +80,7 @@ Open **Environment Groups → uo-crm-shared** and copy `FIELD_ENCRYPTION_KEY` an
 
 - `https://<your address>/api/health` shows `"status":"ok"` with the database, Redis and storage all `ok`.
 - Sign in, create a test opportunity, upload a document and open it: this proves the disk and the document preview work.
-- Email is first used when the CRM sends something, e.g. a signing link or a submission pack. If sending fails, the job appears under **Administration → Integrations → Outbound jobs** with the error. Without `SMTP_URL`, signing links aren't emailed: the CRM shows each link once for you to copy and send yourself.
+- Email is first used when the CRM sends something, e.g. a signing link or a submission pack. If sending fails, the job appears under **Administration → Integrations → Outbound jobs** with the error. To send through a Google Workspace or Microsoft 365 mailbox someone has connected in the CRM instead, set `SYSTEM_MAILBOX` (and optionally `SYSTEM_MAIL_FROM`); see the administrator guide. Without either, signing links aren't emailed: the CRM shows each link once for you to copy and send yourself.
 - In Render, **uo-crm-api → Logs** shows `Workers started` before `API listening on :4000`.
 
 ## 7. Connect the integrations

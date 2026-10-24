@@ -210,6 +210,9 @@ describe("customer linking and won retention (scenarios 10–12)", () => {
     expect(won.items.map((o: { id: string }) => o.id)).toContain(oppId);
     const search = expectStatus(await team.sales.get(`/search?q=UO-${ws.number}`), 200).body;
     expect(search.opportunities.map((o: { id: string }) => o.id)).toContain(oppId);
+    // Long digit strings (an MPRN, a phone number) are searched as text, not as a deal number.
+    expectStatus(await team.sales.get("/search?q=10012345670"), 200);
+    expectStatus(await team.sales.get("/opportunities?q=10012345670"), 200);
     const board = expectStatus(await team.sales.get("/opportunities/board?view=all"), 200).body;
     const liveCol = board.columns.find((c: { stage: { key: string } }) => c.stage.key === "live_won");
     expect(liveCol.cards.map((c: { id: string }) => c.id)).toContain(oppId);
@@ -273,5 +276,82 @@ describe("visibility (scenarios 13–14)", () => {
     expectStatus(await team.sales.post(`/opportunities/${unassigned}/assign`, { ownerId: otherSales.user.id }), 403);
     expectStatus(await team.sales.post(`/opportunities/${unassigned}/assign`, { ownerId: team.salesId }), 204);
     expectStatus(await otherSales.client.get(`/opportunities/${unassigned}`), 404);
+  });
+});
+
+describe("closing an import batch", () => {
+  it("marks a campaign's leads still at New Lead lost, optionally one service, only as many as the manager confirmed", async () => {
+    const csv = "Company,Service,Campaign\nAlpha Café,Worldpay,Spring list\nAlpha Café,Electricity,Spring list\nBeta Bar,Worldpay,Spring list\nBeta Bar,Electricity,Spring list\nGamma Deli,Gas,Other list\n";
+    expectStatus(await team.ops.upload("/opportunities/import", Buffer.from(csv), "leads.csv", "text/csv"), 201);
+    // A lead someone has started working isn't part of a batch close.
+    const worked = await t.prisma.opportunity.findFirstOrThrow({ where: { companyName: "Beta Bar", serviceType: "electricity" } });
+    expectStatus(await team.ops.post(`/opportunities/${worked.id}/stage`, { stage: "contacted" }), 204);
+
+    // Managers and administrators only.
+    expectStatus(await team.sales.get("/lead-batches"), 403);
+    expectStatus(await team.ops.get("/lead-batches"), 403);
+    expectStatus(await team.ops.post("/lead-batches/close", { campaign: "Spring list", reason: "x", expected: 3 }), 403);
+    const batches = expectStatus(await team.manager.get("/lead-batches"), 200).body.filter((b: { campaign: string }) => b.campaign.endsWith(" list"));
+    expect(batches).toEqual([
+      { campaign: "Other list", total: 1, services: { gas: 1 } },
+      { campaign: "Spring list", total: 3, services: { merchant_services: 2, electricity: 1 } },
+    ]);
+
+    // A count that no longer matches closes nothing.
+    expect(expectStatus(await team.manager.post("/lead-batches/close", { campaign: "Spring list", serviceType: "merchant_services", reason: "Duplicate", expected: 3 }), 409).body.message).toMatch(/^2 lead\(s\) in this batch/);
+    expect(await t.prisma.opportunity.count({ where: { outcome: "lost" } })).toBe(0);
+
+    const reason = "Duplicate: one lead per business";
+    expect(expectStatus(await team.manager.post("/lead-batches/close", { campaign: "Spring list", serviceType: "merchant_services", reason, expected: 2 }), 200).body).toEqual({ closed: 2 });
+    const spring = await t.prisma.opportunity.findMany({ where: { campaign: "Spring list" }, orderBy: { number: "asc" } });
+    expect(spring.map((o) => [o.companyName, o.serviceType, o.outcome, o.lostReason, o.active])).toEqual([
+      ["Alpha Café", "merchant_services", "lost", reason, true],
+      ["Alpha Café", "electricity", "open", null, true],
+      ["Beta Bar", "merchant_services", "lost", reason, true],
+      ["Beta Bar", "electricity", "open", null, true],
+    ]);
+    const lost = spring.filter((o) => o.outcome === "lost").map((o) => o.id);
+    expect(await t.prisma.timelineEntry.count({ where: { opportunityId: { in: lost }, kind: "outcome", body: `Marked lost: ${reason}` } })).toBe(2);
+    const audit = await t.prisma.auditLog.findFirstOrThrow({ where: { action: "opportunity.lost_batch" } });
+    expect(audit.summary).toBe("Marked 2 imported Merchant Services / Worldpay leads lost (Spring list)");
+    expect((audit.data as { ids: string[] }).ids.sort()).toEqual([...lost].sort());
+
+    // What's left of the batch; each closed lead can still be reopened on its own.
+    const after = expectStatus(await team.manager.get("/lead-batches"), 200).body.find((b: { campaign: string }) => b.campaign === "Spring list");
+    expect(after).toEqual({ campaign: "Spring list", total: 1, services: { electricity: 1 } });
+    expectStatus(await team.manager.post(`/opportunities/${lost[0]}/reopen`), 204);
+  });
+});
+
+describe("persistent opportunity notes", () => {
+  it("saves, updates and clears notes independently of other details and timeline", async () => {
+    const id = await createOpportunity(team.sales, "electricity");
+    const url = "/opportunities/" + id;
+    const before = expectStatus(await team.sales.get(url), 200).body;
+    const timeline = expectStatus(await team.sales.get(url + "/timeline"), 200).body;
+    expect(before.notes).toBeNull();
+    const notes = "Enjoys golf.\nAsk about the weekend tournament.";
+    expectStatus(await team.sales.patch(url, { notes }), 204);
+    expect(expectStatus(await team.sales.get(url), 200).body).toMatchObject({ notes, name: before.name, serviceType: before.serviceType });
+    expectStatus(await otherSales.client.patch(url, { notes: "unauthorised" }), 404);
+    expectStatus(await team.sales.patch(url, { notes: "x".repeat(10001) }), 400);
+    expectStatus(await team.sales.patch(url, { notes: "Prefers afternoon calls." }), 204);
+    expect(expectStatus(await team.sales.get(url), 200).body.notes).toBe("Prefers afternoon calls.");
+    expectStatus(await team.sales.patch(url, { notes: null }), 204);
+    expect(expectStatus(await team.sales.get(url), 200).body.notes).toBeNull();
+    expect(expectStatus(await team.sales.get(url + "/timeline"), 200).body).toEqual(timeline);
+  });
+});
+
+
+describe("social media lead source", () => {
+  it("creates and updates social media leads and rejects the replaced source", async () => {
+    const res = expectStatus(await team.sales.post("/opportunities", { name: "Social media enquiry", serviceType: "electricity", leadSource: "social_media" }), 201);
+    const url = "/opportunities/" + res.body.id;
+    expect(expectStatus(await team.sales.get(url), 200).body.leadSource).toBe("social_media");
+    expectStatus(await team.sales.patch(url, { leadSource: "email" }), 204);
+    expectStatus(await team.sales.patch(url, { leadSource: "social_media" }), 204);
+    expect(expectStatus(await team.sales.get(url), 200).body.leadSource).toBe("social_media");
+    expectStatus(await team.sales.patch(url, { leadSource: "telephone" }), 400);
   });
 });

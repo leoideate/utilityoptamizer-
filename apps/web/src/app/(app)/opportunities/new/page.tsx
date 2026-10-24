@@ -13,6 +13,7 @@ import {
   PRODUCT_INTEREST_LABELS,
   SALE_TYPES,
   SALE_TYPE_LABELS,
+  SELECTABLE_SERVICE_TYPES,
   SERVICE_TYPES,
   SERVICE_TYPE_LABELS,
   SUPPLY_CHANGES,
@@ -55,7 +56,7 @@ function NewOpportunityForm() {
   const can = useCan();
   const { register, handleSubmit, formState, setValue, watch } = useForm<z.input<typeof schema>, unknown, Values>({
     resolver: zodResolver(schema),
-    defaultValues: { serviceType: "electricity", saleType: "new_sale", productInterest: [], supplyChanges: [], leadSource: "telephone", customerId: params.get("customerId") ?? undefined, companyName: params.get("company") ?? "" },
+    defaultValues: { serviceType: "electricity", saleType: "new_sale", productInterest: [], supplyChanges: [], leadSource: "social_media", customerId: params.get("customerId") ?? undefined, companyName: params.get("company") ?? "" },
   });
   const create = useMutation({
     mutationFn: (v: Values) =>
@@ -85,7 +86,7 @@ function NewOpportunityForm() {
           <Field label="Service">
             {(p) => (
               <Select {...p} {...register("serviceType")}>
-                {SERVICE_TYPES.map((s) => (
+                {SELECTABLE_SERVICE_TYPES.map((s) => (
                   <option key={s} value={s}>
                     {SERVICE_TYPE_LABELS[s]}
                   </option>
@@ -107,7 +108,7 @@ function NewOpportunityForm() {
           <Field label="Lead source">
             {(p) => (
               <Select {...p} {...register("leadSource")}>
-                {LEAD_SOURCES.filter((s) => s !== "renewal").map((s) => (
+                {LEAD_SOURCES.filter((s) => s !== "renewal" && s !== "migration").map((s) => (
                   <option key={s} value={s}>
                     {LEAD_SOURCE_LABELS[s]}
                   </option>
