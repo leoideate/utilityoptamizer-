@@ -213,6 +213,13 @@ function ChannelDialog({ onClose, onOpen }: { onClose: () => void; onOpen: (id: 
 }
 
 export default function Page() {
+  const user = useUser();
+  if (!user.features.chat)
+    return (
+      <EmptyState icon={<BellOff />} title="Chat is turned off">
+        Ask an administrator if your team needs it.
+      </EmptyState>
+    );
   return (
     <Suspense>
       <ChatPage />

@@ -43,6 +43,8 @@ const envSchema = z
     RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).max(100_000).default(300),
     /** Interactive API docs at /api/docs. Default: on in development, off in production. */
     ENABLE_API_DOCS: z.enum(["true", "false", "1", "0"]).optional(),
+    /** Internal chat (channels, direct messages, Team chat on deals). Off unless true: chat routes answer 404 and the web app hides chat. */
+    CHAT_ENABLED: bool,
     COOKIE_SECURE: bool,
 
     STORAGE_DRIVER: z.enum(["s3", "local"]).default("s3"),

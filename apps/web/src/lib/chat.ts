@@ -21,8 +21,8 @@ export interface ChannelList {
   totalUnread: number;
 }
 
-export const useChannels = () => {
+export const useChannels = (enabled = true) => {
   const live = useRealtimeConnected();
-  return useQuery({ queryKey: ["chat", "channels"], queryFn: () => api.get<ChannelList>("/chat/channels"), refetchInterval: live ? false : 30_000 });
+  return useQuery({ queryKey: ["chat", "channels"], queryFn: () => api.get<ChannelList>("/chat/channels"), refetchInterval: live ? false : 30_000, enabled });
 };
 

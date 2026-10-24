@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Module, Param, ParseUUIDPipe, Patch, Post, Query, UploadedFiles, UseInterceptors } from "@nestjs/common";
+import { Body, type CanActivate, Controller, Delete, Get, HttpCode, Inject, Injectable, Module, Param, ParseUUIDPipe, Patch, Post, Query, UploadedFiles, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FilesInterceptor } from "@nestjs/platform-express";
 import { ApiConsumes, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
@@ -7,7 +7,9 @@ import { memoryStorage } from "multer";
 import { z } from "zod";
 import type { Actor } from "../common/actor";
 import { CurrentUser } from "../common/decorators";
+import { NotFound } from "../common/errors";
 import { ZodPipe } from "../common/zod.pipe";
+import { ENV, type Env } from "../config/env";
 import { uploadLimitBytes } from "../documents/documents.controller";
 import { ChatService } from "./chat.service";
 
@@ -22,8 +24,20 @@ const multipartMessage = z.preprocess(
   chatMessageSchema,
 );
 
+/** Chat is switched off unless CHAT_ENABLED is set; its routes then answer as if they didn't exist. */
+@Injectable()
+export class ChatEnabledGuard implements CanActivate {
+  constructor(@Inject(ENV) private readonly env: Env) {}
+
+  canActivate() {
+    if (!this.env.CHAT_ENABLED) throw new NotFound("Chat is turned off.");
+    return true;
+  }
+}
+
 @ApiTags("chat")
 @Controller("chat")
+@UseGuards(ChatEnabledGuard)
 export class ChatController {
   constructor(private readonly chat: ChatService) {}
 
