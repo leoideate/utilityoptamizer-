@@ -210,6 +210,9 @@ describe("customer linking and won retention (scenarios 10–12)", () => {
     expect(won.items.map((o: { id: string }) => o.id)).toContain(oppId);
     const search = expectStatus(await team.sales.get(`/search?q=UO-${ws.number}`), 200).body;
     expect(search.opportunities.map((o: { id: string }) => o.id)).toContain(oppId);
+    // Long digit strings (an MPRN, a phone number) are searched as text, not as a deal number.
+    expectStatus(await team.sales.get("/search?q=10012345670"), 200);
+    expectStatus(await team.sales.get("/opportunities?q=10012345670"), 200);
     const board = expectStatus(await team.sales.get("/opportunities/board?view=all"), 200).body;
     const liveCol = board.columns.find((c: { stage: { key: string } }) => c.stage.key === "live_won");
     expect(liveCol.cards.map((c: { id: string }) => c.id)).toContain(oppId);

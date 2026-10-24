@@ -34,7 +34,13 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
   if (res.status === 204) return undefined as T;
   const text = await res.text();
-  const data = text ? JSON.parse(text) : undefined;
+  // A proxy or gateway failure answers in plain text, not the API's JSON.
+  let data;
+  try {
+    data = text ? JSON.parse(text) : undefined;
+  } catch {
+    if (res.ok) throw new ApiError(res.status, "The server sent a response that couldn't be read.");
+  }
   if (!res.ok) throw new ApiError(res.status, data?.message ?? "Something went wrong.", data?.issues ?? []);
   return data as T;
 }
