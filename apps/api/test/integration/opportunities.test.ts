@@ -275,3 +275,37 @@ describe("visibility (scenarios 13–14)", () => {
     expectStatus(await otherSales.client.get(`/opportunities/${unassigned}`), 404);
   });
 });
+
+
+describe("persistent opportunity notes", () => {
+  it("saves, updates and clears notes independently of other details and timeline", async () => {
+    const id = await createOpportunity(team.sales, "electricity");
+    const url = "/opportunities/" + id;
+    const before = expectStatus(await team.sales.get(url), 200).body;
+    const timeline = expectStatus(await team.sales.get(url + "/timeline"), 200).body;
+    expect(before.notes).toBeNull();
+    const notes = "Enjoys golf.\nAsk about the weekend tournament.";
+    expectStatus(await team.sales.patch(url, { notes }), 204);
+    expect(expectStatus(await team.sales.get(url), 200).body).toMatchObject({ notes, name: before.name, serviceType: before.serviceType });
+    expectStatus(await otherSales.client.patch(url, { notes: "unauthorised" }), 404);
+    expectStatus(await team.sales.patch(url, { notes: "x".repeat(10001) }), 400);
+    expectStatus(await team.sales.patch(url, { notes: "Prefers afternoon calls." }), 204);
+    expect(expectStatus(await team.sales.get(url), 200).body.notes).toBe("Prefers afternoon calls.");
+    expectStatus(await team.sales.patch(url, { notes: null }), 204);
+    expect(expectStatus(await team.sales.get(url), 200).body.notes).toBeNull();
+    expect(expectStatus(await team.sales.get(url + "/timeline"), 200).body).toEqual(timeline);
+  });
+});
+
+
+describe("social media lead source", () => {
+  it("creates and updates social media leads and rejects the replaced source", async () => {
+    const res = expectStatus(await team.sales.post("/opportunities", { name: "Social media enquiry", serviceType: "electricity", leadSource: "social_media" }), 201);
+    const url = "/opportunities/" + res.body.id;
+    expect(expectStatus(await team.sales.get(url), 200).body.leadSource).toBe("social_media");
+    expectStatus(await team.sales.patch(url, { leadSource: "email" }), 204);
+    expectStatus(await team.sales.patch(url, { leadSource: "social_media" }), 204);
+    expect(expectStatus(await team.sales.get(url), 200).body.leadSource).toBe("social_media");
+    expectStatus(await team.sales.patch(url, { leadSource: "telephone" }), 400);
+  });
+});
