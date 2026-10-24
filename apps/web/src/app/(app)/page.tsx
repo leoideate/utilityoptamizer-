@@ -54,7 +54,7 @@ export default function HomePage() {
   return (
     <>
       <PageHeader
-        title={`Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${user.name.split(" ")[0]}`}
+        title={`Good ${new Date().getHours() < 12 ? "Morning" : new Date().getHours() < 18 ? "Afternoon" : "Evening"}, ${user.name.split(" ")[0]}`}
         description={seesAll ? "How the whole business is doing." : "Your pipeline at a glance."}
         actions={
           <>

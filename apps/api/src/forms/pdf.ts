@@ -95,7 +95,7 @@ export interface FillInput {
   title: string;
 }
 
-interface Expectation {
+export interface Expectation {
   page: number;
   /** Hex strings drawn with Tj, lower-cased. */
   text: string[];
@@ -176,7 +176,7 @@ export async function fillPdf(input: FillInput): Promise<{ bytes: Uint8Array; is
  * Adds A4 pages listing who signed online, when, from where and which document they saw.
  * Returns what was written per page, so the release check confirms it survived saving.
  */
-function drawSigningRecord(doc: PDFDocument, font: PDFFont, blocks: { heading: string; lines: string[] }[]): Expectation[] {
+export function drawSigningRecord(doc: PDFDocument, font: PDFFont, blocks: { heading: string; lines: string[] }[]): Expectation[] {
   const [width, height, margin] = [595.28, 841.89, 50];
   const out: Expectation[] = [];
   let page!: PDFPage;
@@ -244,7 +244,7 @@ function removeFields(doc: PDFDocument) {
 }
 
 /** Draws one line, shrinking the font to fit the box. Returns the hex string written, or null on failure. */
-function draw(page: PDFPage, font: PDFFont, text: string, f: FormField, fixedSize: number | undefined, issues: string[]): string | null {
+export function draw(page: PDFPage, font: PDFFont, text: string, f: FormField, fixedSize: number | undefined, issues: string[]): string | null {
   let encoded: string;
   try {
     encoded = font.encodeText(text).toString().toLowerCase();
@@ -289,7 +289,7 @@ function drawComb(page: PDFPage, font: PDFFont, text: string, f: FormField, issu
   });
 }
 
-function safeChar(font: PDFFont, c: string) {
+export function safeChar(font: PDFFont, c: string) {
   try {
     font.encodeText(c);
     return true;
@@ -368,7 +368,7 @@ export async function greyscaleCopy(source: Uint8Array, title: string): Promise<
   return { bytes, issues };
 }
 
-function pageContent(doc: PDFDocument, page: PDFPage): string {
+export function pageContent(doc: PDFDocument, page: PDFPage): string {
   const contents = page.node.Contents();
   const streams: PDFStream[] = [];
   if (contents instanceof PDFArray) {

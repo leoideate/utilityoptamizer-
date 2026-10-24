@@ -1,4 +1,5 @@
 import type { FormDocumentType, FormField } from "@uo/shared";
+import { BGE_LAYOUT, bgeFields, bgeSignatureFields } from "./bord-gais-electricity/layout";
 import { FLOGAS_ELECTRICITY_LAYOUT } from "./flogas-electricity/layout";
 import { flogasLayoutFields } from "./flogas-electricity/render";
 
@@ -23,6 +24,15 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     sha256: FLOGAS_ELECTRICITY_LAYOUT.sha256,
     pageCount: FLOGAS_ELECTRICITY_LAYOUT.pages.length,
     fields: flogasLayoutFields,
+  },
+  {
+    workflow: BGE_LAYOUT.workflow,
+    name: BGE_LAYOUT.name,
+    supplier: BGE_LAYOUT.supplier,
+    documentType: BGE_LAYOUT.documentType,
+    sha256: BGE_LAYOUT.sha256,
+    pageCount: BGE_LAYOUT.pages.length,
+    fields: () => [...bgeFields(), ...bgeSignatureFields(["customer", "account_holder_2"], true)],
   },
 ];
 

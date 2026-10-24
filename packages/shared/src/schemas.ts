@@ -174,6 +174,7 @@ export const createOpportunitySchema = z.object({
 });
 
 export const updateOpportunitySchema = z.object({
+  notes: optText(10000),
   name: text(200).min(1).optional(),
   serviceType: z.enum(SERVICE_TYPES).optional(),
   saleType: z.enum(SALE_TYPES).optional(),

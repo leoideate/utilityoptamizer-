@@ -91,7 +91,7 @@ enum Outcome {
 
 enum LeadSource {
   manual
-  telephone
+  social_media
   email
   website
   whatsapp
@@ -172,6 +172,8 @@ enum LegalEntity {
   limited_company
   plc
   charity_club
+  state_body
+  co_operative
   other
 }
 
@@ -618,6 +620,8 @@ model Opportunity {
   leadSource            LeadSource        @default(manual) @map("lead_source")
   leadSourceDetail      String?           @map("lead_source_detail")
   campaign              String?
+  /// Persistent opportunity context, separate from timeline entries.
+  notes                 String?
   nextAction            String?           @map("next_action")
   followUpDate          DateTime?         @map("follow_up_date") @db.Date
   expectedCloseDate     DateTime?         @map("expected_close_date") @db.Date
@@ -768,6 +772,10 @@ model MeterReading {
   readingType    ReadingType @map("reading_type")
   register       String?
   value          Decimal     @db.Decimal(14, 2)
+  /// The reading exactly as read ("01234.5"), so leading zeroes survive.
+  rawValue       String?     @map("raw_value")
+  /// Which of the meter point's meters it was read from (its serial number), when it has more than one.
+  meterSerial    String?     @map("meter_serial")
   readingDate    DateTime    @map("reading_date") @db.Date
   /// Bill or photo the reading came from.
   documentItemId String?     @map("document_item_id") @db.Uuid

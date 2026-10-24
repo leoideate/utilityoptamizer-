@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, CheckCircle2, Circle, Link2, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -18,14 +18,16 @@ import {
   SUPPLY_CHANGE_LABELS,
   type ServiceType,
   type SupplyChange,
-  flogasElectricityApplies,
+  SUPPLIER_APPLICATION_LABELS,
+  type SupplierApplicationKind,
+  supplierApplicationApplies,
   isEnergyService,
   serviceTypeChoices,
 } from "@uo/shared";
 import { useSuppliers } from "@/components/domain";
 import { CollectCard } from "./collect";
 import { Dialog } from "@/components/ui/overlays";
-import { Button, Card, CardHeader, CheckboxGroup, Field, Input, Select } from "@/components/ui/primitives";
+import { Button, Card, CardHeader, CheckboxGroup, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import { date, dateTime, isoDay, money } from "@/lib/format";
 import type { Page, Workspace } from "@/lib/types";
@@ -46,6 +48,7 @@ export function OverviewTab({ opp, onGoTo }: { opp: Workspace; onGoTo: (tab: str
         <DetailsCard opp={opp} />
       </div>
       <div className="order-1 min-w-0 space-y-6 lg:order-2">
+        <NotesCard key={opp.id} opp={opp} />
         <CustomerCard opp={opp} />
         {opp.serviceType !== "merchant_services" && <CollectCard opp={opp} />}
         <Card>
@@ -93,12 +96,42 @@ export function OverviewTab({ opp, onGoTo }: { opp: Workspace; onGoTo: (tab: str
             <dd>{date(opp.stageEnteredAt)}</dd>
             <dt className="text-muted">Probability</dt>
             <dd>{opp.probability}%</dd>
-            <dt className="text-muted">Expected revenue</dt>
-            <dd>{money(opp.expectedRevenue)}</dd>
+            <dt className="hidden">Expected revenue</dt>
+            <dd className="hidden">{money(opp.expectedRevenue)}</dd>
           </dl>
         </Card>
       </div>
     </div>
+  );
+}
+
+function NotesCard({ opp }: { opp: Workspace }) {
+  const qc = useQueryClient();
+  const { register, handleSubmit, reset, formState } = useForm<{ notes: string }>({ defaultValues: { notes: opp.notes ?? "" } });
+  useEffect(() => reset({ notes: opp.notes ?? "" }), [opp.notes, reset]);
+  const save = useMutation({
+    mutationFn: ({ notes }: { notes: string }) => api.patch(`/opportunities/${opp.id}`, { notes: blankToNull(notes) }),
+    onSuccess: (_data, values) => {
+      reset({ notes: values.notes.trim() });
+      // Refetch on the next visit without resetting unsaved Details edits now.
+      qc.invalidateQueries({ queryKey: ["opportunity", opp.id], refetchType: "none" });
+    },
+  });
+  return (
+    <Card>
+      <form onSubmit={handleSubmit((values) => save.mutate(values))}>
+        <CardHeader title="Notes" actions={opp.permissions.write && (
+          <Button type="submit" size="sm" disabled={!formState.isDirty} loading={save.isPending}>Save notes</Button>
+        )} />
+        <div className="space-y-2 px-5 pb-5">
+          <Field label="What happened?" hint="Add any useful details.">
+            {(p) => <Textarea {...p} {...register("notes", { maxLength: 10000 })} rows={5} maxLength={10000} disabled={!opp.permissions.write || save.isPending} />}
+          </Field>
+          {save.isError && <p role="alert" className="text-sm text-danger">Notes could not be saved. Your changes are still here. Please try again.</p>}
+          {save.isSuccess && !formState.isDirty && <p role="status" className="text-sm text-muted">Notes saved.</p>}
+        </div>
+      </form>
+    </Card>
   );
 }
 
@@ -152,8 +185,9 @@ function toValues(o: Workspace): DetailValues {
 
 function DetailsCard({ opp }: { opp: Workspace }) {
   const refresh = useRefreshOpportunity(opp.id);
-  const suppliers = useSuppliers(opp.serviceType === "merchant_services" ? "merchant" : "energy");
   const { register, handleSubmit, reset, formState, watch, setValue } = useForm<DetailValues>({ defaultValues: toValues(opp) });
+  const serviceType = watch("serviceType");
+  const suppliers = useSuppliers(serviceType === "merchant_services" ? "merchant" : "energy");
   useEffect(() => reset(toValues(opp)), [opp, reset]);
   const save = useMutation({
     mutationFn: (v: DetailValues) =>
@@ -182,12 +216,19 @@ function DetailsCard({ opp }: { opp: Workspace }) {
     onSuccess: refresh,
   });
   const ro = !opp.permissions.write;
-  // Changing product or supplier hides the Flogas form; when it already has a document, say so first.
-  const [hidingFlogas, setHidingFlogas] = useState<DetailValues | null>(null);
-  const flogasDocs = opp.supplierApps.find((a) => a.kind === "flogas_electricity")?._count.versions ?? 0;
-  const applies = (v: Pick<DetailValues, "productInterest" | "serviceType" | "selectedSupplierId">) =>
-    flogasElectricityApplies({ productInterest: v.productInterest, serviceType: v.serviceType as ServiceType, supplierName: suppliers.data?.find((s) => s.id === v.selectedSupplierId)?.name ?? (v.selectedSupplierId === opp.selectedSupplierId ? opp.selectedSupplier?.name : null) });
-  const submit = (v: DetailValues) => (flogasDocs > 0 && applies(toValues(opp)) && !applies(v) ? setHidingFlogas(v) : save.mutate(v));
+  // Changing product or supplier hides a supplier's own form (Flogas, Bord Gáis); when it already has a document, say so first.
+  const [hiding, setHiding] = useState<{ values: DetailValues; kind: SupplierApplicationKind } | null>(null);
+  const applies = (kind: SupplierApplicationKind, v: Pick<DetailValues, "productInterest" | "serviceType" | "selectedSupplierId">) =>
+    supplierApplicationApplies(kind, {
+      productInterest: v.productInterest,
+      serviceType: v.serviceType as ServiceType,
+      supplierName: suppliers.data?.find((s) => s.id === v.selectedSupplierId)?.name ?? (v.selectedSupplierId === opp.selectedSupplierId ? opp.selectedSupplier?.name : null),
+    });
+  const submit = (v: DetailValues) => {
+    const hidden = opp.supplierApps.find((a) => a._count.versions > 0 && applies(a.kind as SupplierApplicationKind, toValues(opp)) && !applies(a.kind as SupplierApplicationKind, v));
+    return hidden ? setHiding({ values: v, kind: hidden.kind as SupplierApplicationKind }) : save.mutate(v);
+  };
+  const supplierName = hiding?.kind === "bord_gais_electricity" ? "Bord Gáis" : "Flogas";
 
   return (
     <Card>
@@ -208,7 +249,14 @@ function DetailsCard({ opp }: { opp: Workspace }) {
         </Field>
         <Field label="Service" hint={opp.outcome === "won" ? "Can't change after activation." : undefined}>
           {(p) => (
-            <Select {...p} disabled={opp.outcome === "won" || ro} {...register("serviceType")}>
+            <Select {...p} disabled={opp.outcome === "won" || ro} {...register("serviceType", {
+              onChange: (event) => {
+                // Energy services share suppliers; switching provider categories clears the old choice.
+                if ((serviceType === "merchant_services") !== (event.target.value === "merchant_services")) {
+                  setValue("selectedSupplierId", "", { shouldDirty: true });
+                }
+              },
+            })}>
               {serviceTypeChoices(opp.serviceType).map((s) => (
                 <option key={s} value={s}>
                   {SERVICE_TYPE_LABELS[s]}
@@ -228,9 +276,9 @@ function DetailsCard({ opp }: { opp: Workspace }) {
             </Select>
           )}
         </Field>
-        <Field label={opp.serviceType === "merchant_services" ? "Selected product provider" : "Selected supplier"}>
+        <Field label={serviceType === "merchant_services" ? "Selected product provider" : "Selected supplier"}>
           {(p) => (
-            <Select {...p} {...register("selectedSupplierId")}>
+            <Select {...p} {...register("selectedSupplierId")} value={watch("selectedSupplierId")}>
               <option value="">Not selected yet</option>
               {suppliers.data?.filter((s) => s.active || s.id === opp.selectedSupplierId).map((s) => (
                 <option key={s.id} value={s.id}>
@@ -266,7 +314,8 @@ function DetailsCard({ opp }: { opp: Workspace }) {
         <Field label="Follow-up date">{(p) => <Input {...p} type="date" {...register("followUpDate")} />}</Field>
         <Field label="Expected closing">{(p) => <Input {...p} type="date" {...register("expectedCloseDate")} />}</Field>
         <Field label="Date of visit">{(p) => <Input {...p} type="date" {...register("visitDate")} />}</Field>
-        <Field label="Expected revenue (€)">{(p) => <Input {...p} inputMode="decimal" {...register("expectedRevenue")} />}</Field>
+        {/* Temporarily hidden; keep these fields mounted to preserve their existing save behavior. */}
+        <Field label="Expected revenue (€)" className="hidden">{(p) => <Input {...p} inputMode="decimal" {...register("expectedRevenue")} />}</Field>
         <Field label="Lead source">
           {(p) => (
             <Select {...p} {...register("leadSource")}>
@@ -278,8 +327,8 @@ function DetailsCard({ opp }: { opp: Workspace }) {
             </Select>
           )}
         </Field>
-        <Field label="Campaign">{(p) => <Input {...p} {...register("campaign")} />}</Field>
-        <Field label="Source details">{(p) => <Input {...p} {...register("leadSourceDetail")} />}</Field>
+        <Field label="Campaign" className="hidden">{(p) => <Input {...p} {...register("campaign")} />}</Field>
+        <Field label="Source details" className="hidden">{(p) => <Input {...p} {...register("leadSourceDetail")} />}</Field>
         <h3 className="pt-2 text-sm font-semibold sm:col-span-2">Captured contact details</h3>
         <Field label="Business name">{(p) => <Input {...p} {...register("companyName")} />}</Field>
         <Field label="Contact name">{(p) => <Input {...p} {...register("contactName")} />}</Field>
@@ -288,22 +337,22 @@ function DetailsCard({ opp }: { opp: Workspace }) {
         <Field label="Phone">{(p) => <Input {...p} type="tel" {...register("phone")} />}</Field>
       </fieldset>
       <Dialog
-        open={!!hidingFlogas}
-        onOpenChange={(o) => !o && setHidingFlogas(null)}
-        title="Hide the Flogas application?"
-        description={`A Flogas electricity document has already been generated. With this change the Flogas form no longer applies: its tab is hidden and nothing more can be generated or sent from it. Everything saved, generated and signed so far is kept.`}
+        open={!!hiding}
+        onOpenChange={(o) => !o && setHiding(null)}
+        title={`Hide the ${supplierName} application?`}
+        description={`A ${hiding ? SUPPLIER_APPLICATION_LABELS[hiding.kind] : ""} document has already been generated. With this change the ${supplierName} form no longer applies: its tab is hidden and nothing more can be generated or sent from it. Everything saved, generated and signed so far is kept.`}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setHidingFlogas(null)}>
+            <Button variant="secondary" onClick={() => setHiding(null)}>
               Cancel
             </Button>
-            <Button loading={save.isPending} onClick={() => (save.mutate(hidingFlogas!), setHidingFlogas(null))}>
+            <Button loading={save.isPending} onClick={() => (save.mutate(hiding!.values), setHiding(null))}>
               Save anyway
             </Button>
           </>
         }
       >
-        <p className="text-sm">Changing back to Electricity with Flogas shows it again.</p>
+        <p className="text-sm">Changing back to Electricity with {supplierName} shows it again.</p>
       </Dialog>
     </Card>
   );
