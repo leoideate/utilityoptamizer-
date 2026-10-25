@@ -228,7 +228,7 @@ export const leadPurgeFilterSchema = z.object({
  */
 export const purgeLeadsSchema = leadPurgeFilterSchema.extend({
   expected: z.number().int().min(1),
-  confirm: z.literal("DELETE", { errorMap: () => ({ message: "Type DELETE to confirm." }) }),
+  confirm: z.literal("DELETE", { error: "Type DELETE to confirm." }),
 });
 export const activateSchema = z.object({ activationDate: isoDate, supplierReference: optText(100) });
 
