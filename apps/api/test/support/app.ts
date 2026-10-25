@@ -55,9 +55,12 @@ export interface TestApp {
   close(): Promise<void>;
 }
 
-export async function createTestApp(): Promise<TestApp> {
+/** `overrides` swaps providers for fakes, e.g. the AI document reader. */
+export async function createTestApp(overrides: { provide: unknown; useValue: unknown }[] = []): Promise<TestApp> {
   const queue = new RecordingJobQueue();
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(JOB_QUEUE).useValue(queue).overrideProvider(REALTIME_BUS).useValue(new LocalRealtimeBus()).compile();
+  let builder = Test.createTestingModule({ imports: [AppModule] }).overrideProvider(JOB_QUEUE).useValue(queue).overrideProvider(REALTIME_BUS).useValue(new LocalRealtimeBus());
+  for (const o of overrides) builder = builder.overrideProvider(o.provide).useValue(o.useValue);
+  const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication({ rawBody: true, logger: process.env.TEST_LOG_ERRORS ? ["error"] : false });
   configureApp(app);
   await app.init();

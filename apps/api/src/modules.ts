@@ -4,9 +4,12 @@
  * services and controllers.
  */
 import { Global, Module } from "@nestjs/common";
-import { ENV, type Env } from "./config/env";
+import { ENV, type Env, ocrProvider } from "./config/env";
 import { ActivitiesController } from "./activities/activities.controller";
 import { ActivitiesService } from "./activities/activities.service";
+import { BillReadingController } from "./ai/bill-reading.controller";
+import { BillReadingService } from "./ai/bill-reading.service";
+import { ClaudeDocumentReader, DOCUMENT_READER, type DocumentReader, UnconfiguredDocumentReader } from "./ai/document-reader";
 import { AdminController } from "./admin/admin.controller";
 import { AdminService } from "./admin/admin.service";
 import { RetentionService } from "./admin/retention.service";
@@ -44,7 +47,7 @@ import { MerchantService } from "./merchant/merchant.service";
 import { NotificationsService } from "./notifications/notifications.service";
 import { OcrController } from "./ocr/ocr.controller";
 import { OcrService } from "./ocr/ocr.service";
-import { HttpOcrProvider, ManualOcrProvider, OCR_PROVIDER } from "./ocr/providers";
+import { AiOcrProvider, HttpOcrProvider, ManualOcrProvider, OCR_PROVIDER } from "./ocr/providers";
 import { OpportunityAccess } from "./opportunities/access.service";
 import { LeadIntakeController, LeadIntakeService } from "./opportunities/lead-intake";
 import { OpportunitiesController } from "./opportunities/opportunities.controller";
@@ -115,15 +118,34 @@ export class SignaturesModule {}
 @Module({ imports: [OpportunitiesModule], controllers: [WorkflowsController], providers: [WorkflowsService] })
 export class WorkflowsModule {}
 
+/** AI document reading (Claude): "Read bill" on energy bills, and the business card reader. */
 @Module({
-  imports: [CustomersModule, OpportunitiesModule],
+  controllers: [BillReadingController],
+  providers: [
+    BillReadingService,
+    {
+      provide: DOCUMENT_READER,
+      inject: [ENV],
+      useFactory: (env: Env) => (env.ANTHROPIC_API_KEY ? ClaudeDocumentReader.create(env.ANTHROPIC_API_KEY, env.AI_MODEL) : new UnconfiguredDocumentReader()),
+    },
+  ],
+  exports: [DOCUMENT_READER],
+})
+export class AiModule {}
+
+@Module({
+  imports: [CustomersModule, OpportunitiesModule, AiModule],
   controllers: [OcrController],
   providers: [
     OcrService,
     {
       provide: OCR_PROVIDER,
-      inject: [ENV],
-      useFactory: (env: Env) => (env.OCR_PROVIDER === "http" ? new HttpOcrProvider(env.OCR_HTTP_ENDPOINT!, env.OCR_HTTP_API_KEY) : new ManualOcrProvider()),
+      inject: [ENV, DOCUMENT_READER],
+      useFactory: (env: Env, reader: DocumentReader) => {
+        const provider = ocrProvider(env);
+        if (provider === "http") return new HttpOcrProvider(env.OCR_HTTP_ENDPOINT!, env.OCR_HTTP_API_KEY);
+        return provider === "claude" ? new AiOcrProvider(reader) : new ManualOcrProvider();
+      },
     },
   ],
 })
@@ -193,6 +215,7 @@ export const FEATURE_MODULES = [
   FormsModule,
   SupplierApplicationsModule,
   WorkflowsModule,
+  AiModule,
   OcrModule,
   IntegrationsModule,
   ReportsModule,
