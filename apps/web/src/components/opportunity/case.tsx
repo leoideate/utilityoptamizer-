@@ -37,6 +37,7 @@ import { type ApiError, api } from "@/lib/api";
 import { cn, date, dateTime, ref, todayIso } from "@/lib/format";
 import type { Workspace } from "@/lib/types";
 import { useRefreshOpportunity } from "./common";
+import { SUBMISSIONS_SECTION } from "./gate-issues";
 
 interface Response {
   id: string;
@@ -592,7 +593,7 @@ function SubmissionsSection({ opp, c }: { opp: Workspace; c: CaseOverview }) {
   const latest = c.submissions[0];
   const open = opp.outcome === "open";
   return (
-    <section className="space-y-2 border-t border-border pt-4">
+    <section id={SUBMISSIONS_SECTION} className="scroll-mt-24 space-y-2 border-t border-border pt-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-medium">Sent to the external party</h3>
         <div className="flex flex-wrap gap-2">
