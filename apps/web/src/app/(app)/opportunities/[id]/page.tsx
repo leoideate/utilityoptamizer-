@@ -1,14 +1,14 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Check, ChevronDown, CircleSlash, PartyPopper, RotateCcw, ShieldCheck, UserPlus } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, CircleSlash, PartyPopper, RotateCcw, ShieldCheck, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { APPROVAL_LABELS, LEAD_SOURCE_LABELS, STAGES, type StageKey, applicableSupplierApplication, isEnergyService, stageIndex } from "@uo/shared";
 import { ActivitiesTab } from "@/components/opportunity/activities";
 import { CallButton } from "@/components/opportunity/call";
-import { GateIssueList } from "@/components/opportunity/gate-issues";
+import { GateIssueList, gateIssueTarget, scrollToSection, splitTarget } from "@/components/opportunity/gate-issues";
 import { TeamChatTab } from "@/components/opportunity/team-chat";
 import { useRefreshOpportunity } from "@/components/opportunity/common";
 import { DocumentsTab } from "@/components/opportunity/documents";
@@ -57,8 +57,14 @@ function OpportunityWorkspace() {
     setTab(v);
     const u = new URL(window.location.href);
     u.searchParams.set("tab", v);
+    u.hash = "";
     window.history.replaceState(null, "", u.toString());
   };
+  // A link from a blocked move on the Pipeline board can name a section ("…?tab=forms#case-submissions").
+  const loaded = !!opp;
+  useEffect(() => {
+    if (loaded && window.location.hash) scrollToSection(window.location.hash.slice(1));
+  }, [loaded]);
 
   if (error instanceof ApiError && error.status === 404) {
     return (
@@ -86,6 +92,15 @@ function OpportunityWorkspace() {
   const application = applicableSupplierApplication({ productInterest: opp.productInterest, serviceType: opp.serviceType, supplierName: opp.selectedSupplier?.name });
   const flogas = application === "flogas_electricity";
   const bordGais = application === "bord_gais_electricity";
+  const gateTabs = { energy, flogas, bordGais };
+  /** Where a blocked move's issue is fixed: its tab (and section), or the Approval dialog. */
+  const goTo = (target: string) => {
+    setBlocked(null);
+    if (target === "approve") return opp.permissions.approve ? setDialog("approve") : goTab("overview");
+    const { tab: to, section } = splitTarget(target);
+    goTab(to);
+    if (section) scrollToSection(section);
+  };
   const activeTab = (tab === "flogas" && !flogas) || (tab === "bord-gais" && !bordGais) ? "overview" : tab;
   const open = opp.outcome === "open";
   const current = opp.stage.key;
@@ -261,19 +276,28 @@ function OpportunityWorkspace() {
       <ActivateDialog id={id} open={dialog === "activate"} onClose={() => setDialog(null)} />
       <ApprovalDialog opp={opp} open={dialog === "approve"} onClose={() => setDialog(null)} />
       <AssignDialog opp={opp} open={dialog === "assign"} onClose={() => setDialog(null)} />
-      <Dialog open={!!blocked} onOpenChange={(o) => !o && setBlocked(null)} title={`Can't move to ${blocked?.stage ?? ""} yet`} footer={<Button onClick={() => setBlocked(null)}>OK</Button>}>
+      <Dialog
+        open={!!blocked}
+        onOpenChange={(o) => !o && setBlocked(null)}
+        title={`Can't move to ${blocked?.stage ?? ""} yet`}
+        footer={
+          blocked?.linked ? (
+            <>
+              <Button variant="secondary" onClick={() => setBlocked(null)}>
+                Close
+              </Button>
+              <Button onClick={() => goTo(gateIssueTarget(blocked.issues[0], gateTabs))}>
+                Take me there <ArrowRight />
+              </Button>
+            </>
+          ) : (
+            <Button onClick={() => setBlocked(null)}>OK</Button>
+          )
+        }
+      >
         {blocked &&
           (blocked.linked ? (
-            <GateIssueList
-              issues={blocked.issues}
-              tabs={{ energy, flogas, bordGais }}
-              onGo={(target) => {
-                setBlocked(null);
-                if (target !== "approve") goTab(target);
-                else if (opp.permissions.approve) setDialog("approve");
-                else goTab("overview");
-              }}
-            />
+            <GateIssueList issues={blocked.issues} tabs={gateTabs} onGo={goTo} />
           ) : (
             <IssueList issues={blocked.issues} title="This opportunity still needs:" />
           ))}

@@ -1,13 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { ArrowRight, MoreHorizontal, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SELECTABLE_SERVICE_TYPES, SERVICE_TYPE_LABELS, STAGES, type ServiceType, type StageKey } from "@uo/shared";
 import { ServiceBadge } from "@/components/domain";
-import { GateIssueList } from "@/components/opportunity/gate-issues";
+import { GateIssueList, gateIssueTarget } from "@/components/opportunity/gate-issues";
 import { Dialog, Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from "@/components/ui/overlays";
 import { Badge, Button, IssueList, PageHeader, Select, Skeleton } from "@/components/ui/primitives";
 import { type ApiError, api, qs } from "@/lib/api";
@@ -52,6 +52,11 @@ export default function PipelinePage() {
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["board"] }),
   });
+
+  // Cards don't carry the supplier; an issue naming a supplier's form means the deal has its tab.
+  const blockedTabs = blocked && { energy: blocked.serviceType !== "merchant_services", flogas: blocked.issues.some((i) => /"Flogas/i.test(i)), bordGais: blocked.issues.some((i) => /"Bo(a)?rd G[aá]is/i.test(i)) };
+  /** Opens the deal where a blocked move's issue is fixed (the Approval dialog's issue opens its Overview). */
+  const goTo = (target: string) => blocked && router.push(`/opportunities/${blocked.id}?tab=${target === "approve" ? "overview" : target}`);
 
   const drop = (stage: StageKey) => {
     if (!dragging || !data) return;
@@ -158,15 +163,29 @@ export default function PipelinePage() {
           </ol>
         </div>
       )}
-      <Dialog open={!!blocked} onOpenChange={(o) => !o && setBlocked(null)} title={`Can't move to ${blocked?.stage ?? ""}`} description={blocked?.name} footer={<Button onClick={() => setBlocked(null)}>OK</Button>}>
+      <Dialog
+        open={!!blocked}
+        onOpenChange={(o) => !o && setBlocked(null)}
+        title={`Can't move to ${blocked?.stage ?? ""}`}
+        description={blocked?.name}
+        footer={
+          blocked?.linked ? (
+            <>
+              <Button variant="secondary" onClick={() => setBlocked(null)}>
+                Close
+              </Button>
+              <Button onClick={() => goTo(gateIssueTarget(blocked.issues[0], blockedTabs!))}>
+                Take me there <ArrowRight />
+              </Button>
+            </>
+          ) : (
+            <Button onClick={() => setBlocked(null)}>OK</Button>
+          )
+        }
+      >
         {blocked &&
           (blocked.linked ? (
-            <GateIssueList
-              issues={blocked.issues}
-              // Cards don't carry the supplier; an issue naming a supplier's form means the deal has its tab.
-              tabs={{ energy: blocked.serviceType !== "merchant_services", flogas: blocked.issues.some((i) => /"Flogas/i.test(i)), bordGais: blocked.issues.some((i) => /"Bo(a)?rd G[aá]is/i.test(i)) }}
-              onGo={(target) => router.push(`/opportunities/${blocked.id}?tab=${target === "approve" ? "overview" : target}`)}
-            />
+            <GateIssueList issues={blocked.issues} tabs={blockedTabs!} onGo={goTo} />
           ) : (
             <IssueList issues={blocked.issues} title="This opportunity still needs:" />
           ))}

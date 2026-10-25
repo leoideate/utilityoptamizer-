@@ -13,6 +13,7 @@ export interface GateTabs {
 /**
  * The opportunity tab where a "can't move yet" issue is fixed (see gateIssueArea), or "approve" for
  * internal approval, which is the Approval dialog. Supplier forms open their own tab when it's there.
+ * A section on the tab follows a "#" ("forms#case-submissions"); see splitTarget and scrollToSection.
  */
 export function gateIssueTarget(issue: string, t: GateTabs): string {
   const { area, form } = gateIssueArea(issue);
@@ -36,8 +37,28 @@ export function gateIssueTarget(issue: string, t: GateTabs): string {
       if (t.bordGais && form && /^bo(a)?rd g[aá]is/i.test(form)) return "bord-gais";
       return "forms";
     default:
-      return "forms";
+      // Recording a submission or the supplier's response happens in the case's submissions section.
+      return /external party|confirmed effective date/i.test(issue) ? `forms#${SUBMISSIONS_SECTION}` : "forms";
   }
+}
+
+/** The id of the case's "Sent to the external party" section (components/opportunity/case.tsx). */
+export const SUBMISSIONS_SECTION = "case-submissions";
+
+export function splitTarget(target: string): { tab: string; section: string | null } {
+  const [tab, section] = target.split("#");
+  return { tab, section: section || null };
+}
+
+/** Scrolls to a section once its tab has rendered it (tabs load their data first), for up to 5 seconds. */
+export function scrollToSection(id: string) {
+  const started = Date.now();
+  const tick = () => {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ block: "start" });
+    else if (Date.now() - started < 5000) setTimeout(tick, 100);
+  };
+  tick();
 }
 
 /** The issues blocking a stage move, each a link to where it's fixed. */
