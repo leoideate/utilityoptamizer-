@@ -1,7 +1,7 @@
 import { CryptoService } from "../../src/common/crypto.service";
 import { redact } from "../../src/common/redact";
 import { phoneKey } from "../../src/common/values";
-import { loadEnv } from "../../src/config/env";
+import { loadEnv, ocrProvider } from "../../src/config/env";
 import { sniffMatches } from "../../src/documents/documents.service";
 import { bullJobId } from "../../src/jobs/queue";
 import { parseCardText } from "../../src/ocr/card-parser";
@@ -131,6 +131,13 @@ describe("configuration", () => {
     expect(() => loadEnv({ ...base, STORAGE_DRIVER: "s3" })).toThrow(/S3 credentials are required/);
     expect(() => loadEnv({ ...base, NODE_ENV: "production" })).toThrow(/COOKIE_SECURE must be true/);
     expect(() => loadEnv({ ...base, OCR_PROVIDER: "http" })).toThrow(/OCR_HTTP_ENDPOINT is required/);
+    expect(() => loadEnv({ ...base, OCR_PROVIDER: "claude" })).toThrow(/ANTHROPIC_API_KEY is required/);
+  });
+  it("reads business cards with Claude once the Anthropic key is set, unless OCR_PROVIDER says otherwise", () => {
+    expect(ocrProvider(loadEnv(base))).toBe("manual");
+    expect(ocrProvider(loadEnv({ ...base, ANTHROPIC_API_KEY: "sk-ant-test" }))).toBe("claude");
+    expect(ocrProvider(loadEnv({ ...base, ANTHROPIC_API_KEY: "sk-ant-test", OCR_PROVIDER: "manual" }))).toBe("manual");
+    expect(loadEnv(base).AI_MODEL).toBe("claude-haiku-5-5");
   });
 });
 

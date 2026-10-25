@@ -1,3 +1,4 @@
+import type { DocumentReader } from "../ai/document-reader";
 import type { CardFields } from "./card-parser";
 
 export interface OcrResult {
@@ -54,5 +55,18 @@ export class HttpOcrProvider implements OcrProvider {
     if (typeof body.text !== "string") throw new Error("OCR provider response has no text");
     const confidence = typeof body.confidence === "number" && body.confidence >= 0 && body.confidence <= 1 ? body.confidence : null;
     return { text: body.text, confidence, fields: body.fields };
+  }
+}
+
+/** Reads the card with the AI document reader, which returns the fields directly. */
+export class AiOcrProvider implements OcrProvider {
+  readonly name = "claude";
+  readonly automatic = true;
+  constructor(private readonly reader: DocumentReader) {}
+
+  async recognise(image: Buffer, mimeType: string): Promise<OcrResult> {
+    const fields = await this.reader.readCard(image, mimeType);
+    const text = Object.values(fields).filter(Boolean).join("\n");
+    return { text, confidence: null, fields };
   }
 }

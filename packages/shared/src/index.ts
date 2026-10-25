@@ -14,3 +14,4 @@ export * from "./flogas";
 export * from "./bord-gais";
 export * from "./application-applies";
 export * from "./migration";
+export * from "./bill-reading";

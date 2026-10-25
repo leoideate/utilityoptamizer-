@@ -1,15 +1,16 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CheckCircle2, Clock, Eye, FileText, Lock, Plus, Send, ShieldAlert, Upload, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Eye, FileText, Lock, Plus, Send, ShieldAlert, Sparkles, Upload, XCircle } from "lucide-react";
 import { type DragEvent, useRef, useState } from "react";
 import { DOCUMENT_TYPES, type DocumentType } from "@uo/shared";
 import { Dialog } from "@/components/ui/overlays";
 import { Badge, Button, Card, CardHeader, Checkbox, EmptyState, Field, Input, IssueList, Select, Skeleton, Textarea } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api";
 import { cn, date, dateTime } from "@/lib/format";
-import { useCan } from "@/lib/session";
+import { useCan, useUser } from "@/lib/session";
 import type { Workspace } from "@/lib/types";
+import { BillReadingDialog } from "./bill-reading";
 import { useRefreshOpportunity } from "./common";
 
 interface Version {
@@ -161,6 +162,8 @@ function DocumentRow({
   canReview: boolean;
 }) {
   const input = useRef<HTMLInputElement>(null);
+  const aiReading = useUser().features.aiReading;
+  const [readingBill, setReadingBill] = useState(false);
   const [over, setOver] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
   const [error, setError] = useState<string[]>([]);
@@ -222,6 +225,11 @@ function DocumentRow({
               {item.versions.length} versions
             </Button>
           )}
+          {aiReading && item.documentType === "energy_bill" && latest && latest.scanStatus !== "infected" && opp.permissions.write && opp.outcome !== "won" && (
+            <Button size="sm" variant="secondary" onClick={() => setReadingBill(true)}>
+              <Sparkles /> Read bill
+            </Button>
+          )}
           {canReview && item.received && item.approval === "pending" && (
             <Button size="sm" variant="secondary" onClick={onReview}>
               Review
@@ -240,6 +248,7 @@ function DocumentRow({
           )}
         </div>
       </div>
+      {readingBill && latest && <BillReadingDialog opp={opp} versionId={latest.id} onClose={() => setReadingBill(false)} />}
       {showVersions && (
         <ul className="ml-7 mt-2 space-y-1 border-l border-border pl-3 text-xs">
           {item.versions.map((v) => (

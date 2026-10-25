@@ -75,9 +75,17 @@ const envSchema = z
     /** The From for system email sent through SYSTEM_MAILBOX, e.g. a Gmail "Send mail as" alias. Defaults to the mailbox's address. */
     SYSTEM_MAIL_FROM: z.string().optional(),
 
-    OCR_PROVIDER: z.enum(["manual", "http"]).default("manual"),
+    /** Business card reading. Unset: "claude" when ANTHROPIC_API_KEY is set, otherwise "manual". */
+    OCR_PROVIDER: z.enum(["manual", "http", "claude"]).optional(),
     OCR_HTTP_ENDPOINT: z.string().url().optional(),
     OCR_HTTP_API_KEY: z.string().optional(),
+
+    /**
+     * AI document reading with Claude (energy bills, and business cards unless OCR_PROVIDER says
+     * otherwise). Off when unset. Files are sent to Anthropic, so it is listed as a data processor.
+     */
+    ANTHROPIC_API_KEY: z.string().optional(),
+    AI_MODEL: z.string().default("claude-haiku-5-5"),
 
     SIGNATURE_PROVIDER: z.enum(["manual", "webhook"]).default("manual"),
     SIGNATURE_WEBHOOK_SECRET: z.string().optional(),
@@ -150,6 +158,9 @@ const envSchema = z
     if (e.OCR_PROVIDER === "http" && !e.OCR_HTTP_ENDPOINT) {
       ctx.addIssue({ code: "custom", path: ["OCR_HTTP_ENDPOINT"], message: "OCR_HTTP_ENDPOINT is required when OCR_PROVIDER=http." });
     }
+    if (e.OCR_PROVIDER === "claude" && !e.ANTHROPIC_API_KEY) {
+      ctx.addIssue({ code: "custom", path: ["ANTHROPIC_API_KEY"], message: "ANTHROPIC_API_KEY is required when OCR_PROVIDER=claude." });
+    }
     if (e.SIGNATURE_PROVIDER === "webhook" && !e.SIGNATURE_WEBHOOK_SECRET) {
       ctx.addIssue({ code: "custom", path: ["SIGNATURE_WEBHOOK_SECRET"], message: "SIGNATURE_WEBHOOK_SECRET is required when SIGNATURE_PROVIDER=webhook." });
     }
@@ -184,3 +195,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
 }
 
 export const ENV = Symbol("ENV");
+
+/** The business card reader in use: OCR_PROVIDER, or Claude when only the Anthropic key is set. */
+export const ocrProvider = (env: Env) => env.OCR_PROVIDER ?? (env.ANTHROPIC_API_KEY ? "claude" : "manual");

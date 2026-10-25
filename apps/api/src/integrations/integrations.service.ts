@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { DOCUMENT_TYPES, SERVICE_TYPE_LABELS, can, withSignature } from "@uo/shared";
-import { ENV, type Env } from "../config/env";
+import { ENV, type Env, ocrProvider } from "../config/env";
 import { AuditService } from "../audit/audit.service";
 import { type Actor, SYSTEM, actorRef } from "../common/actor";
 import { Forbidden, RuleViolation } from "../common/errors";
@@ -49,7 +49,7 @@ export class IntegrationsService {
       mailbox: mailbox ? { address: mailbox.address, provider: mailbox.provider } : null,
       whatsapp: this.whatsapp.configured,
       storage: this.env.STORAGE_DRIVER,
-      ocr: this.env.OCR_PROVIDER,
+      ocr: ocrProvider(this.env),
       signatures: this.env.SIGNATURE_PROVIDER,
       virusScan: this.env.VIRUS_SCAN_DRIVER,
     };

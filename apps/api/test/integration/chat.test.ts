@@ -147,7 +147,7 @@ describe("switched off", () => {
     t = await createTestApp();
     try {
       const { client } = await userAndClient(t, ["administrator"], "Aisling Admin");
-      expect(expectStatus(await client.get("/auth/me"), 200).body.user.features).toEqual({ chat: false });
+      expect(expectStatus(await client.get("/auth/me"), 200).body.user.features).toMatchObject({ chat: false });
       expectStatus(await client.get("/chat/channels"), 404);
       expectStatus(await client.post("/chat/channels", { name: "general" }), 404);
     } finally {
