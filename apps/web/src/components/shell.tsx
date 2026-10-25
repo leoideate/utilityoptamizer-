@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, Building2, CalendarCheck, ClipboardList, FileSignature, MessagesSquare, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Mail, Menu as MenuIcon, ScanLine, Search, Settings } from "lucide-react";
+import { Bell, BookOpen, Building2, CalendarCheck, ClipboardList, FileSignature, MessagesSquare, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Mail, Menu as MenuIcon, ScanLine, Search, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -27,6 +27,7 @@ const NAV: { href: string; label: string; icon: typeof LayoutDashboard; capabili
   { href: "/inbox", label: "Email", icon: Mail },
   { href: "/chat", label: "Chat", icon: MessagesSquare, feature: "chat" },
   { href: "/forms", label: "Supplier forms", icon: FileSignature, capability: "form.template_manage" },
+  { href: "/help", label: "Help & guide", icon: BookOpen },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

@@ -363,7 +363,7 @@
             "name": "services",
             "required": false,
             "in": "query",
-            "description": "Services for rows without a Service value, comma-separated: electricity, gas, dual_fuel, merchant_services.",
+            "description": "Services for rows without a Service value, comma-separated: electricity, gas, merchant_services.",
             "schema": {}
           }
         ],
@@ -3960,6 +3960,20 @@
         },
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/api/help/guide": {
+      "get": {
+        "operationId": "HelpController_guide",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "help"
         ]
       }
     },

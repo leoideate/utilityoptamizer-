@@ -112,6 +112,7 @@ test("main screens adapt from 320px to 1920px", async ({ browser }) => {
     ["supplier-forms", "/forms"],
     ...(templateHref ? ([["form-template", templateHref]] as [string, string][]) : []),
     ["account", "/account"],
+    ["help", "/help"],
   ];
 
   const report: string[] = [];
