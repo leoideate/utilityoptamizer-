@@ -12,6 +12,8 @@ Generated from `packages/shared/src/permissions.ts`, the single source of truth 
 | `opportunity.reopen_completed` | Reopen a Live / Won opportunity | ✓ | ✓ |  |  |  |  |
 | `opportunity.submit` | Move to Submitted and later stages; send submission packs; record Worldpay approval | ✓ | ✓ |  | ✓ |  |  |
 | `opportunity.activate` | Record activation (moves to Live / Won) | ✓ | ✓ |  | ✓ |  |  |
+| `opportunity.close_batch` |  | ✓ | ✓ |  |  |  |  |
+| `opportunity.purge` |  | ✓ |  |  |  |  |  |
 | `customer.read` | View customers | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `customer.write` | Create and edit customers and contacts | ✓ | ✓ | ✓ | ✓ | ✓ |  |
 | `customer.merge` | Merge duplicate customers | ✓ | ✓ |  |  |  |  |

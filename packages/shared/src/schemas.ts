@@ -42,9 +42,9 @@ const optText = (max = 500) =>
     .optional();
 const optDate = isoDate.nullable().optional().or(z.literal("").transform(() => null));
 const pct = (label: string) =>
-  z.number({ invalid_type_error: `${label} must be a number.` }).min(0, `${label} must be between 0 and 100.`).max(100, `${label} must be between 0 and 100.`);
+  z.number({ error: (iss) => (iss.input === undefined ? undefined : `${label} must be a number.`) }).min(0, `${label} must be between 0 and 100.`).max(100, `${label} must be between 0 and 100.`);
 const optPct = (label: string) => pct(label).nullable().optional();
-const money = (label: string) => z.number({ invalid_type_error: `${label} must be a number.` }).min(0, `${label} can't be negative.`);
+const money = (label: string) => z.number({ error: (iss) => (iss.input === undefined ? undefined : `${label} must be a number.`) }).min(0, `${label} can't be negative.`);
 const optMoney = (label: string) => money(label).nullable().optional();
 const optEmail = z
   .string()
@@ -202,6 +202,34 @@ export const moveStageSchema = z.object({ stage: z.enum(STAGE_KEYS) });
 export const assignSchema = z.object({ ownerId: id.nullable() });
 export const approvalSchema = z.object({ decision: z.enum(APPROVAL_STATES), note: optText(1000) });
 export const markLostSchema = z.object({ reason: text(500).min(1, "Give a reason.") });
+/**
+ * Marks the imported leads of one campaign lost: those still open at New Lead, optionally only one
+ * service. `expected` is the count the manager confirmed, so a batch that changed meanwhile isn't closed.
+ */
+export const closeLeadBatchSchema = z.object({
+  campaign: text(200).min(1, "Choose the import batch."),
+  serviceType: z.enum(SERVICE_TYPES).optional(),
+  reason: text(500).min(1, "Give a reason."),
+  expected: z.number().int().min(1),
+});
+/** Assigns several opportunities to one salesperson (or unassigns them), as Assign does one at a time. */
+export const bulkAssignSchema = z.object({
+  ids: z.array(id).min(1, "Choose at least one opportunity.").max(200, "Assign at most 200 opportunities at a time."),
+  ownerId: id.nullable(),
+});
+/** Which leads a purge covers: all of them at New Lead, or one import batch (campaign) and/or service. */
+export const leadPurgeFilterSchema = z.object({
+  campaign: text(200).optional(),
+  serviceType: z.enum(SERVICE_TYPES).optional(),
+});
+/**
+ * Permanently deletes the untouched leads the filter matches. `expected` is the count the
+ * administrator confirmed, and `confirm` must be typed, so a changed set or a slip deletes nothing.
+ */
+export const purgeLeadsSchema = leadPurgeFilterSchema.extend({
+  expected: z.number().int().min(1),
+  confirm: z.literal("DELETE", { error: "Type DELETE to confirm." }),
+});
 export const activateSchema = z.object({ activationDate: isoDate, supplierReference: optText(100) });
 
 export const opportunityListQuerySchema = z.object({
@@ -275,7 +303,7 @@ export const meterReadingSchema = z.object({
   documentId: id.nullable().optional(),
 });
 
-const rate = (label: string) => z.number({ invalid_type_error: `${label} must be a number.` }).min(0, `${label} can't be negative.`).max(1000);
+const rate = (label: string) => z.number({ error: (iss) => (iss.input === undefined ? undefined : `${label} must be a number.`) }).min(0, `${label} can't be negative.`).max(1000);
 export const energyContractSchema = z.object({
   siteId: id.nullable().optional(),
   fuel: z.enum(FUELS),
@@ -491,6 +519,9 @@ export const callbackPhoneSchema = z.object({ phone: z.string().trim().max(40).n
 export type CreateOpportunityInput = z.infer<typeof createOpportunitySchema>;
 export type UpdateOpportunityInput = z.infer<typeof updateOpportunitySchema>;
 export type CustomerInput = z.infer<typeof customerSchema>;
+export type CloseLeadBatchInput = z.infer<typeof closeLeadBatchSchema>;
+export type LeadPurgeFilter = z.infer<typeof leadPurgeFilterSchema>;
+export type PurgeLeadsInput = z.infer<typeof purgeLeadsSchema>;
 export type ContactInput = z.infer<typeof contactSchema>;
 export type SupplySiteInput = z.infer<typeof supplySiteSchema>;
 export type MeterPointInput = z.infer<typeof meterPointSchema>;

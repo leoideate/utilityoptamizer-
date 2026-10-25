@@ -13,6 +13,7 @@ import { RetentionService } from "./admin/retention.service";
 import { AuditService } from "./audit/audit.service";
 import { CallsModule } from "./calls/calls.module";
 import { ChatModule } from "./chat/chat.module";
+import { MigrationService } from "./migration/migration.service";
 import { AutomationsService } from "./automations/automations.service";
 import { RenewalsService } from "./automations/renewals.service";
 import { CustomersController } from "./customers/customers.controller";
@@ -35,6 +36,8 @@ import {
 import { IntegrationsController } from "./integrations/integrations.controller";
 import { IntegrationsService } from "./integrations/integrations.service";
 import { MailboxesModule } from "./mailboxes/mailboxes.module";
+import { MailboxesService } from "./mailboxes/mailboxes.service";
+import { MailboxEmailSender } from "./mailboxes/system-sender";
 import { MerchantController } from "./merchant/merchant.controller";
 import { MerchantService } from "./merchant/merchant.service";
 import { NotificationsService } from "./notifications/notifications.service";
@@ -79,19 +82,24 @@ export class CoreModule {}
 })
 export class DocumentsModule {}
 
+@Module({ controllers: [CustomersController], providers: [CustomersService], exports: [CustomersService] })
+export class CustomersModule {}
+
+@Module({ controllers: [EnergyController], providers: [EnergyService], exports: [EnergyService] })
+export class EnergyModule {}
+
 @Module({
-  imports: [DocumentsModule],
+  // The CSV import creates customers and supply sites for the leads it brings in.
+  imports: [DocumentsModule, CustomersModule, EnergyModule],
   controllers: [LeadIntakeController, OpportunitiesController, ActivitiesController],
   providers: [OpportunitiesService, LeadIntakeService],
   exports: [OpportunitiesService],
 })
 export class OpportunitiesModule {}
 
-@Module({ controllers: [CustomersController], providers: [CustomersService], exports: [CustomersService] })
-export class CustomersModule {}
-
-@Module({ controllers: [EnergyController], providers: [EnergyService] })
-export class EnergyModule {}
+/** The one-off master sheet migration, run by scripts/migrate-*.ts. No routes. */
+@Module({ imports: [DocumentsModule, CustomersModule], providers: [MigrationService], exports: [MigrationService] })
+export class MigrationModule {}
 
 @Module({ controllers: [MerchantController], providers: [MerchantService] })
 export class MerchantModule {}
@@ -128,7 +136,14 @@ export class EmailSignaturesModule {}
   controllers: [IntegrationsController],
   providers: [
     IntegrationsService,
-    { provide: EMAIL_SENDER, inject: [ENV], useFactory: (env: Env) => new SmtpEmailSender(env.SMTP_URL, env.MAIL_FROM) },
+    {
+      provide: EMAIL_SENDER,
+      inject: [ENV, MailboxesService],
+      useFactory: (env: Env, mailboxes: MailboxesService) => {
+        const smtp = new SmtpEmailSender(env.SMTP_URL, env.MAIL_FROM);
+        return env.SYSTEM_MAILBOX ? new MailboxEmailSender(mailboxes, env.SYSTEM_MAILBOX, env.SYSTEM_MAIL_FROM, smtp) : smtp;
+      },
+    },
     {
       provide: WHATSAPP_SENDER,
       inject: [ENV],
@@ -183,4 +198,5 @@ export const FEATURE_MODULES = [
   CallsModule,
   ChatModule,
   MailboxesModule,
+  MigrationModule,
 ];

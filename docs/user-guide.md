@@ -30,6 +30,8 @@ Press **Call** on an opportunity and choose the number. With RingCentral connect
 
 ## Chat with colleagues
 
+Chat only appears if your administrator has switched it on.
+
 **Chat** in the menu shows team channels, direct messages and deal discussions, with a badge for unread messages. Type `@` to mention someone (they get a notification), press **Enter** to send and **Shift+Enter** for a new line, and attach files with the paperclip or by dragging them in. Every opportunity has a **Team chat** tab for internal discussion about that deal; customers never see it. Don't put dates of birth, bank details or ID numbers in chat: they belong in the restricted parts of the record.
 
 ## Customers
@@ -84,7 +86,7 @@ If something's missing, the CRM lists it. The **Overview → Checklist** shows t
 
 ## One CRM for sales and the back office
 
-Everyone works in the same interface. The menu shows every screen your role allows: Home, **Scan business card** (the card becomes a lead), leads and deals, pipeline, cases, customers, tasks, email and chat, plus **Supplier forms** and **Administration** for those who manage them.
+Everyone works in the same interface. The menu shows every screen your role allows: Home, **Scan business card** (the card becomes a lead), leads and deals, pipeline, cases, customers, tasks, email and chat (when switched on), plus **Supplier forms** and **Administration** for those who manage them.
 
 - **Home** shows your figures and what needs attention. If you complete deals after the sale (Operations, managers, administrators), it starts with the **Work queue**: every deal handed over at Supplier selected, by where it stands. Click a figure, or **Open work queue**, to see those deals under **Cases**.
 - On a deal's Overview, **Collect from the customer** takes a photo of the current bill and the meter reading straight from your phone and lists any other documents still needed.

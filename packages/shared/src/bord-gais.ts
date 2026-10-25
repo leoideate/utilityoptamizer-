@@ -110,8 +110,8 @@ const optText = (max: number) =>
 const optDate = isoDate.nullable().optional().or(z.literal("").transform(() => null));
 const optEmail = z.string().trim().toLowerCase().email("Enter a valid email address.").nullable().optional().or(z.literal("").transform(() => null));
 const twoDecimals = (v: number) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6;
-const rate = z.number({ invalid_type_error: "Rates must be numbers." }).min(0, "Rates can't be negative.").max(1000, "That rate looks too high: enter cent.").refine(twoDecimals, "Use at most 2 decimal places.").nullable();
-const percent = z.number({ invalid_type_error: "Discounts must be numbers." }).min(0, "Discounts can't be negative.").max(100, "Discounts are a percentage up to 100.").refine(twoDecimals, "Use at most 2 decimal places.").nullable();
+const rate = z.number({ error: (iss) => (iss.input === undefined ? undefined : "Rates must be numbers.") }).min(0, "Rates can't be negative.").max(1000, "That rate looks too high: enter cent.").refine(twoDecimals, "Use at most 2 decimal places.").nullable();
+const percent = z.number({ error: (iss) => (iss.input === undefined ? undefined : "Discounts must be numbers.") }).min(0, "Discounts can't be negative.").max(100, "Discounts are a percentage up to 100.").refine(twoDecimals, "Use at most 2 decimal places.").nullable();
 /** Drafts may hold a half-typed reading; the format is checked before sending. */
 const readingText = z
   .string()
@@ -131,8 +131,8 @@ export const bordGaisAnswersSchema = z
     billingSource: z.enum(BORD_GAIS_BILLING_SOURCES),
     confirmationEndDate: optDate,
     /** Rate cells the contract has no column for: row → column → cent. */
-    rates: z.record(z.enum(BORD_GAIS_RATE_ROWS), z.record(z.enum(BORD_GAIS_RATE_COLUMNS), rate)),
-    discounts: z.record(z.enum(BORD_GAIS_DISCOUNT_CELLS), percent),
+    rates: z.partialRecord(z.enum(BORD_GAIS_RATE_ROWS), z.partialRecord(z.enum(BORD_GAIS_RATE_COLUMNS), rate)),
+    discounts: z.partialRecord(z.enum(BORD_GAIS_DISCOUNT_CELLS), percent),
     /** "I would like to receive this": broader marketing is opt-in on the form. */
     broaderMarketing: z.boolean().nullable(),
     signatoryName: optText(200),
@@ -197,7 +197,7 @@ export const bordGaisSaveSchema = z.object({
     .partial()
     .optional(),
   /** The whole rate table as shown: the server writes the contract's row to the contract and the rest to the application. */
-  rates: z.record(z.enum(BORD_GAIS_RATE_ROWS), z.record(z.enum(BORD_GAIS_RATE_COLUMNS), rate)).optional(),
+  rates: z.partialRecord(z.enum(BORD_GAIS_RATE_ROWS), z.partialRecord(z.enum(BORD_GAIS_RATE_COLUMNS), rate)).optional(),
   bank: z
     .object({
       accountName: z.string().trim().min(1, "Enter the account holder's name.").max(200),

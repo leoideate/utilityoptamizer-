@@ -24,6 +24,14 @@ export const SERVICE_TYPE_LABELS = labels<ServiceType>({
   dual_fuel: "Dual Fuel",
   merchant_services: "Merchant Services / Worldpay",
 });
+/**
+ * The services people choose from for new work. Dual fuel isn't offered any more (electricity and
+ * gas are separate deals); deals that already have it keep it, and renewals of them stay dual fuel.
+ */
+export const SELECTABLE_SERVICE_TYPES = ["electricity", "gas", "merchant_services"] as const satisfies readonly ServiceType[];
+/** The services to offer when editing a deal: the selectable ones, plus the deal's own if it's no longer offered. */
+export const serviceTypeChoices = (current?: ServiceType | null): readonly ServiceType[] =>
+  current && !(SELECTABLE_SERVICE_TYPES as readonly ServiceType[]).includes(current) ? [...SELECTABLE_SERVICE_TYPES, current] : SELECTABLE_SERVICE_TYPES;
 export const isEnergyService = (s: ServiceType) => s !== "merchant_services";
 export const needsElectricity = (s: ServiceType) => s === "electricity" || s === "dual_fuel";
 export const needsGas = (s: ServiceType) => s === "gas" || s === "dual_fuel";
@@ -61,6 +69,7 @@ export const LEAD_SOURCES = [
   "csv_import",
   "api",
   "renewal",
+  "migration",
 ] as const;
 export type LeadSource = (typeof LEAD_SOURCES)[number];
 export const LEAD_SOURCE_LABELS = labels<LeadSource>({
@@ -75,6 +84,7 @@ export const LEAD_SOURCE_LABELS = labels<LeadSource>({
   csv_import: "CSV import",
   api: "API",
   renewal: "Renewal",
+  migration: "Master sheet import",
 });
 
 export const APPROVAL_STATES = ["not_requested", "pending", "approved", "rejected"] as const;

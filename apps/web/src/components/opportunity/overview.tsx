@@ -13,7 +13,6 @@ import {
   type ProductInterest,
   SALE_TYPES,
   SALE_TYPE_LABELS,
-  SERVICE_TYPES,
   SERVICE_TYPE_LABELS,
   SUPPLY_CHANGES,
   SUPPLY_CHANGE_LABELS,
@@ -23,6 +22,7 @@ import {
   type SupplierApplicationKind,
   supplierApplicationApplies,
   isEnergyService,
+  serviceTypeChoices,
 } from "@uo/shared";
 import { useSuppliers } from "@/components/domain";
 import { CollectCard } from "./collect";
@@ -257,7 +257,7 @@ function DetailsCard({ opp }: { opp: Workspace }) {
                 }
               },
             })}>
-              {SERVICE_TYPES.map((s) => (
+              {serviceTypeChoices(opp.serviceType).map((s) => (
                 <option key={s} value={s}>
                   {SERVICE_TYPE_LABELS[s]}
                 </option>

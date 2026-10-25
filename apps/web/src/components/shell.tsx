@@ -15,8 +15,8 @@ import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "./ui/ov
 import { Logo } from "./brand";
 import { Button } from "./ui/primitives";
 
-/** One menu for everyone; an item with a capability shows only to users who have it (the API enforces it either way). */
-const NAV: { href: string; label: string; icon: typeof LayoutDashboard; capability?: Capability }[] = [
+/** One menu for everyone; an item with a capability shows only to users who have it, one with a feature only while it's switched on (the API enforces both). */
+const NAV: { href: string; label: string; icon: typeof LayoutDashboard; capability?: Capability; feature?: "chat" }[] = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/scan", label: "Scan business card", icon: ScanLine, capability: "opportunity.create" },
   { href: "/opportunities", label: "Leads and deals", icon: ListChecks },
@@ -25,7 +25,7 @@ const NAV: { href: string; label: string; icon: typeof LayoutDashboard; capabili
   { href: "/customers", label: "Customers", icon: Building2 },
   { href: "/activities", label: "My tasks", icon: CalendarCheck },
   { href: "/inbox", label: "Email", icon: Mail },
-  { href: "/chat", label: "Chat", icon: MessagesSquare },
+  { href: "/chat", label: "Chat", icon: MessagesSquare, feature: "chat" },
   { href: "/forms", label: "Supplier forms", icon: FileSignature, capability: "form.template_manage" },
 ];
 
@@ -34,14 +34,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const isAdmin = user.capabilities.some((c) => c.startsWith("admin."));
-  const unread = useChannels().data?.totalUnread ?? 0;
+  const unread = useChannels(user.features.chat).data?.totalUnread ?? 0;
   const unreadEmail = useUnreadEmail().data ?? 0;
   useEffect(() => setOpen(false), [pathname]);
 
   const nav = (
     <nav aria-label="Main" className="flex flex-col gap-0.5 px-3 py-2">
       {[
-        ...NAV.filter((i) => !i.capability || user.capabilities.includes(i.capability)),
+        ...NAV.filter((i) => (!i.capability || user.capabilities.includes(i.capability)) && (!i.feature || user.features[i.feature])),
         ...(isAdmin ? [{ href: "/admin", label: "Administration", icon: Settings }] : []),
       ].map(({ href, label, icon: Icon }) => {
         const active = href === "/" ? pathname === "/" : pathname.startsWith(href);

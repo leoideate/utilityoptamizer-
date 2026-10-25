@@ -5,7 +5,7 @@ import { MoreHorizontal, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { SERVICE_TYPE_LABELS, STAGES, type ServiceType, type StageKey } from "@uo/shared";
+import { SELECTABLE_SERVICE_TYPES, SERVICE_TYPE_LABELS, STAGES, type ServiceType, type StageKey } from "@uo/shared";
 import { ServiceBadge } from "@/components/domain";
 import { GateIssueList } from "@/components/opportunity/gate-issues";
 import { Dialog, Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from "@/components/ui/overlays";
@@ -79,9 +79,9 @@ export default function PipelinePage() {
             </Select>
             <Select className="w-auto" value={service} onChange={(e) => setService(e.target.value)} aria-label="Service">
               <option value="">All services</option>
-              {Object.entries(SERVICE_TYPE_LABELS).map(([k, v]) => (
+              {SELECTABLE_SERVICE_TYPES.map((k) => (
                 <option key={k} value={k}>
-                  {v}
+                  {SERVICE_TYPE_LABELS[k]}
                 </option>
               ))}
             </Select>

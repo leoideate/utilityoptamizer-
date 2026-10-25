@@ -43,6 +43,8 @@ const envSchema = z
     RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).max(100_000).default(300),
     /** Interactive API docs at /api/docs. Default: on in development, off in production. */
     ENABLE_API_DOCS: z.enum(["true", "false", "1", "0"]).optional(),
+    /** Internal chat (channels, direct messages, Team chat on deals). Off unless true: chat routes answer 404 and the web app hides chat. */
+    CHAT_ENABLED: bool,
     COOKIE_SECURE: bool,
 
     STORAGE_DRIVER: z.enum(["s3", "local"]).default("s3"),
@@ -65,6 +67,13 @@ const envSchema = z
 
     SMTP_URL: z.string().optional(),
     MAIL_FROM: z.string().default("Utility Optimizer CRM <crm@utilityoptimizer.com>"),
+    /**
+     * Sends system email (signing links, confirmations, submission packs) through this connected
+     * CRM mailbox (its address) instead of SMTP; SMTP_URL is the fallback while it isn't connected.
+     */
+    SYSTEM_MAILBOX: z.string().email().optional(),
+    /** The From for system email sent through SYSTEM_MAILBOX, e.g. a Gmail "Send mail as" alias. Defaults to the mailbox's address. */
+    SYSTEM_MAIL_FROM: z.string().optional(),
 
     OCR_PROVIDER: z.enum(["manual", "http"]).default("manual"),
     OCR_HTTP_ENDPOINT: z.string().url().optional(),

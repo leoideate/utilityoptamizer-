@@ -19,6 +19,9 @@ export interface MockMail {
   inReplyTo?: string;
   /** The HTML part of a multipart message sent through Gmail. */
   sentHtml?: string;
+  /** The From and Reply-To headers of a message sent through Gmail (Gmail sends as an alias when it's one of the account's). */
+  fromHeader?: string;
+  replyTo?: string;
 }
 
 /**
@@ -276,6 +279,8 @@ export class MockMailProvider {
       m.sentHtml = part("text/html");
       m.to = h.get("to")!.split(",").map((s) => s.trim().toLowerCase());
       m.inReplyTo = h.get("in-reply-to");
+      m.fromHeader = h.get("from");
+      m.replyTo = h.get("reply-to");
       return this.json(res, 200, { id: m.id, threadId: m.threadId });
     }
     const modify = p.match(/^\/messages\/([^/]+)\/modify$/);
