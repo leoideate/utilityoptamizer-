@@ -1,4 +1,5 @@
 import type { ApplicationStatus, FormSignerRole, FormStatus, SignatureAuthorisation, SigningLinkStatus } from "@uo/shared";
+import type { SignedCopyUpload } from "../signed-copy";
 
 /** One generated version of a supplier application, as the API describes it. */
 export interface ApplicationVersion {
@@ -13,6 +14,8 @@ export interface ApplicationVersion {
   qcPassed: boolean;
   versionId: string;
   signedVersionId: string | null;
+  /** The signed copy is a scan of the form signed on paper. */
+  signedCopyUpload: SignedCopyUpload | null;
   sensitive: boolean;
   requiredSigners: FormSignerRole[];
   reviewedAt: string | null;

@@ -90,13 +90,13 @@ runs on the server before a version is generated, and again before it is sent. R
 - an actual requirement, the MPRN (11 digits starting 10, unless the meter has a recorded format
   exception) and a valid MCC length, no repeated MPRNs, at most 12 meter rows, a reading date
   when readings are given;
-- the sector, fixed or variable pricing and the unit rates that sector needs (none for LVMD);
 - the VAT exemption number when VAT exempt;
 - the signatory's name and position;
 - with direct debit: the debtor name, the debtor address and an IBAN; a second account holder
   needs a name and email.
 
-Rates are entered in cent per kWh to two decimals (the CRM stores euro to four decimals) and
+The sector, pricing and unit rates are optional: the form can be generated and signed without
+them, and the boxes are left blank. Rates are entered in cent per kWh to two decimals (the CRM stores euro to four decimals) and
 can't be negative. Text that would not fit its box fails generation with a message naming the
 field, and nothing is stored.
 

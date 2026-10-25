@@ -2090,6 +2090,29 @@
         ]
       }
     },
+    "/api/forms/{id}/signed-copy": {
+      "post": {
+        "operationId": "FormsController_signedCopy",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "forms"
+        ]
+      }
+    },
     "/api/forms/{id}/review": {
       "post": {
         "operationId": "FormsController_review",

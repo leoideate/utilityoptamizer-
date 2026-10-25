@@ -160,6 +160,33 @@ describe("filling, signing and reviewing a supplier form", () => {
     expect(res.body.message).toMatch(/Someone other than the person who uploaded/);
   });
 
+  it("takes a scan of the form signed on paper, reviewed by someone else, as the customer's signature", async () => {
+    const oppId = await createOpportunity(team.manager, "electricity");
+    const tpl = await createTemplate("Signed on paper");
+    const form = expectStatus(await team.manager.post(`/opportunities/${oppId}/forms`, { templateId: tpl.id, values: {} }), 201).body;
+    const uploadCopy = (c: Team["sales"], file: Buffer, filename = "signed.pdf", contentType = "application/pdf") =>
+      c.agent.post(`/api/forms/${form.id}/signed-copy`).set("Origin", "http://localhost:3000").set("X-CSRF-Token", c.csrf).attach("file", file, { filename, contentType });
+
+    expectStatus(await uploadCopy(team.manager, png(), "signed.png", "image/png"), 422);
+    expectStatus(await uploadCopy(team.manager, pdf("signed on paper")), 201);
+    const row = expectStatus(await team.manager.get(`/opportunities/${oppId}/forms`), 200).body.find((f: { id: string }) => f.id === form.id);
+    expect(row).toMatchObject({ status: "awaiting_review", signedCopyUpload: { uploadedBy: "Michael Manager" } });
+    expect(row.signedVersionId).toBeTruthy();
+
+    // The uploader can't approve it; someone else can, and it then counts as the customer's signature.
+    expect(expectStatus(await team.manager.post(`/forms/${form.id}/review`, { decision: "approved" }), 422).body.message).toMatch(/uploaded the signed copy/);
+    expectStatus(await team.ops.post(`/forms/${form.id}/review`, { decision: "approved" }), 204);
+    const blocked = expectStatus(await team.manager.post(`/opportunities/${oppId}/stage`, { stage: "submitted" }), 422).body.issues as string[];
+    expect(blocked).not.toContain("The customer must sign before submission.");
+    expect(blocked.some((i) => i.includes("Signed on paper"))).toBe(false);
+
+    // An approved form can't take another signed copy.
+    expectStatus(await uploadCopy(team.manager, pdf("again")), 422);
+    expect(await t.prisma.auditLog.count({ where: { action: "form.signed_copy_upload", entityId: form.id } })).toBe(1);
+    const timeline = (await t.prisma.timelineEntry.findMany({ where: { opportunityId: oppId } })).map((e) => e.body);
+    expect(timeline).toContain('Signed copy of "Signed on paper" uploaded (signed on paper) and sent for review.');
+  });
+
   it("fails the quality check when a value can't be printed, and blocks signing and submission", async () => {
     const { oppId } = await readyEnergy(t, team);
     const tpl = await createTemplate("Quality check");

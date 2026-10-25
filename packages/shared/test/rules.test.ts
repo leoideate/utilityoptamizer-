@@ -1,4 +1,4 @@
-import { type GateFacts, STAGE_KEYS, stageGateIssues, missingInformation } from "../src";
+import { type GateFacts, STAGE_KEYS, gateIssueArea, stageGateIssues, missingInformation } from "../src";
 
 function facts(overrides: Partial<GateFacts> = {}): GateFacts {
   return {
@@ -195,5 +195,43 @@ describe("stage gates", () => {
   it("reports missing information for reminders", () => {
     expect(missingInformation(facts({ serviceType: "dual_fuel" }))).toEqual(["supply site", "MPRN", "GPRN"]);
     expect(missingInformation(facts({ serviceType: "merchant_services" }))).toEqual(["Worldpay application"]);
+  });
+});
+
+describe("where each gate issue is fixed", () => {
+  it("points every Submitted issue for an energy deal at its tab", () => {
+    const f = readyEnergy("dual_fuel");
+    const issues = stageGateIssues(
+      {
+        ...f,
+        internalApproval: "pending",
+        sites: [{ label: "Main St", occupancyType: "rented", hasLandlord: false, meterPoints: [{ fuel: "electricity", mprn: null, gprn: null }] }],
+        contracts: [],
+        documents: [{ documentType: "letter_of_authority", required: true, received: false, approval: "pending" }],
+        signatures: [],
+        supplyChanges: ["change_of_supplier"],
+        forms: [{ name: "Flogas electricity", status: "awaiting_review", qcPassed: true, documentType: "application_form" }],
+      },
+      "submitted",
+    );
+    expect(issues.map((i) => [i, gateIssueArea(i)])).toEqual([
+      ["Main St is rented: enter the landlord's details.", { area: "supply" }],
+      ["Enter an MPRN for every electricity meter.", { area: "supply" }],
+      ["Enter a GPRN for every gas meter.", { area: "supply" }],
+      ["Add the energy contract details.", { area: "supply" }],
+      [expect.stringMatching(/^These required documents/), { area: "documents" }],
+      ["The customer must sign before submission.", { area: "signatures" }],
+      ["Check the previous supplier's bill (readable, and the customer, MPRN/GPRN and supplier match).", { area: "case" }],
+      ['Review the signatures on "Flogas electricity".', { area: "form", form: "Flogas electricity" }],
+      ["Internal approval must be granted before submission.", { area: "approval" }],
+    ]);
+  });
+
+  it("sends Worldpay, customer and case issues to their places", () => {
+    expect(gateIssueArea("Compliance must approve the Worldpay risk review before submission.")).toEqual({ area: "worldpay" });
+    expect(gateIssueArea("Principal Aoife Byrne is missing date of birth.")).toEqual({ area: "worldpay" });
+    expect(gateIssueArea("Link or create the customer.")).toEqual({ area: "details" });
+    expect(gateIssueArea("Upload the lease agreement under Documents: a signed lease is needed before submission.")).toEqual({ area: "documents" });
+    expect(gateIssueArea("Record the external party's acceptance and reference: a sent submission is not an accepted one.")).toEqual({ area: "case" });
   });
 });

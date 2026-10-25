@@ -130,7 +130,6 @@ describe("Flogas electricity: validation", () => {
       ["contactName", "customer"],
       ["email", "customer"],
       ["requirements", "supply"],
-      ["sector", "pricing"],
       ["signatoryName", "documents"],
       ["signatoryPosition", "documents"],
     ]);
@@ -147,11 +146,10 @@ describe("Flogas electricity: validation", () => {
     expect(paths(complete({ email: "not-an-email" }))).toEqual(["email"]);
   });
 
-  it("needs the rates the chosen sector uses, and none for LVMD", () => {
-    expect(paths(complete({ sector: "gp_24h", dayRateCent: null }))).toEqual(["dayRateCent"]);
-    expect(paths(complete({ sector: "gp_night_saver", nightRateCent: null }))).toEqual(["nightRateCent"]);
-    expect(paths(complete({ sector: "lvmd", dayRateCent: null, priceType: null }))).toEqual([]);
-    expect(paths(complete({ priceType: null }))).toEqual(["priceType"]);
+  it("doesn't require the sector, pricing or rates before signing", () => {
+    expect(paths(complete({ sector: null, priceType: null, dayRateCent: null, nightRateCent: null }))).toEqual([]);
+    expect(paths(complete({ sector: "gp_24h", dayRateCent: null }))).toEqual([]);
+    expect(paths(complete({ sector: "gp_night_saver", dayRateCent: null, nightRateCent: null }))).toEqual([]);
   });
 
   it("checks every meter row", () => {

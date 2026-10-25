@@ -88,7 +88,7 @@ export class ApplicationDocuments {
     const current = versions.find((v) => v.form.status !== "superseded") ?? null;
     const stale = !!current && current.dataSha256 !== hash;
     const items = await this.prisma.documentItem.findMany({ where: { id: { in: versions.map((v) => v.form.documentItemId) } }, select: { id: true, sensitive: true } });
-    const users = await this.userNames(versions.flatMap((v) => [v.createdById, v.form.reviewedById, ...v.form.signatures.map((s) => s.uploadedById)]));
+    const users = await this.userNames(versions.flatMap((v) => [v.createdById, v.form.reviewedById, v.form.signedCopyUploadedById, ...v.form.signatures.map((s) => s.uploadedById)]));
     return {
       status: applicationStatus({ form: current?.form ?? null, stale, links: current ? current.form.signingLinks.map((l) => ({ role: l.role, status: signingLinkStatus(l) })) : [] }),
       stale,
@@ -105,6 +105,7 @@ export class ApplicationDocuments {
         qcPassed: v.form.qcPassed,
         versionId: v.form.versionId,
         signedVersionId: v.form.signedVersionId,
+        signedCopyUpload: v.form.signedCopyUploadedAt ? { uploadedById: v.form.signedCopyUploadedById, uploadedBy: users.get(v.form.signedCopyUploadedById ?? "") ?? null, uploadedAt: v.form.signedCopyUploadedAt } : null,
         sensitive: items.find((i) => i.id === v.form.documentItemId)?.sensitive ?? false,
         requiredSigners: requiredSigners(v.form.fields as never),
         reviewedAt: v.form.reviewedAt,

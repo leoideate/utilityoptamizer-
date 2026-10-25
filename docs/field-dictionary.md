@@ -556,7 +556,9 @@ One filled copy of a template for an opportunity. Never edited; regenerating sup
 | iban_change_confirmed | Boolean | ✓ | Default false |
 | document_item_id | UUID | ✓ |  |
 | version_id | UUID | ✓ | The unsigned generated PDF |
-| signed_version_id | UUID |  | The PDF with signatures applied, once every required signer has one |
+| signed_version_id | UUID |  | The PDF with signatures applied, once every required signer has one, or the uploaded signed copy |
+| signed_copy_uploaded_by_id | UUID |  | Set when signedVersionId is a scan of the form signed on paper (uploaded, not built from signatures) |
+| signed_copy_uploaded_at | DateTime |  |  |
 | mono_version_id | UUID |  | Black and white copy of the signed (or unsigned) PDF, for suppliers that need one |
 | previous_form_id | UUID |  | The customer's previous form from the same template (renewals), compared field by field |
 | changed_since_previous | Json | ✓ | Labels of fields whose value differs from the previous form. Default "[]" |

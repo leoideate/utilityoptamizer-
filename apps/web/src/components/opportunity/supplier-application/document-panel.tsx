@@ -9,6 +9,7 @@ import { Badge, Button, Card, CardHeader, Field, Input, IssueList, Skeleton, typ
 import { type ApiError, api } from "@/lib/api";
 import { date, dateTime } from "@/lib/format";
 import { useUser } from "@/lib/session";
+import { SignedCopyButton, SignedCopyNote } from "../signed-copy";
 import type { ApplicationVersion, ApplicationViewBase } from "./types";
 
 const LINK_TONE: Record<SigningLinkStatus, Tone> = { sent: "info", opened: "warning", signed: "success", declined: "danger", expired: "neutral", revoked: "neutral" };
@@ -136,7 +137,7 @@ function CurrentVersion({ base, version: v, view, signerDefaults, refresh }: { b
   });
   const restricted = v.sensitive && !view.permissions.readSensitive;
   const signable = view.permissions.write && (v.status === "generated" || v.status === "awaiting_review") && !view.stale;
-  const involved = v.signatures.some((s) => s.uploadedById === user.id) || v.links.some((l) => l.sentById === user.id);
+  const involved = v.signatures.some((s) => s.uploadedById === user.id) || v.links.some((l) => l.sentById === user.id) || v.signedCopyUpload?.uploadedById === user.id;
   const latest = (role: FormSignerRole) => v.links.find((l) => l.role === role);
   const signed = (role: FormSignerRole) => v.signatures.find((s) => s.role === role);
 
@@ -158,7 +159,9 @@ function CurrentVersion({ base, version: v, view, signerDefaults, refresh }: { b
             <Download /> Signed PDF
           </Button>
         )}
+        {signable && v.qcPassed && <SignedCopyButton formId={v.formId} replacing={!!v.signedVersionId} onUploaded={refresh} />}
       </div>
+      <SignedCopyNote upload={v.signedCopyUpload} />
       {restricted && <p className="text-xs text-muted">This PDF contains bank details, so only Finance, Compliance or an administrator can open it. Use “Preview draft” to see the form with the bank details masked.</p>}
 
       <div className="space-y-2">
@@ -218,7 +221,7 @@ function CurrentVersion({ base, version: v, view, signerDefaults, refresh }: { b
         <div className="space-y-2 rounded-lg border border-border p-3">
           <p className="text-sm font-medium">Review the signed copy</p>
           {involved ? (
-            <p className="text-sm text-muted">Someone other than the person who sent the links or uploaded signatures must review it.</p>
+            <p className="text-sm text-muted">Someone other than the person who sent the links, uploaded signatures or uploaded the signed copy must review it.</p>
           ) : (
             <>
               <IssueList issues={reviewIssues} title="Please check:" />
