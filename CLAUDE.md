@@ -63,6 +63,7 @@ Schema changes: edit `apps/api/prisma/schema.prisma` and add a migration folder 
 - **NestJS DI needs value imports**: ESLint's `consistent-type-imports` is off for `apps/api` because constructor-injected classes must not be `import type`.
 - **Responsive rules** (enforced by `apps/web/e2e/responsive.spec.ts` at 320/375/768/1024/1280/1920px): no page-level horizontal scroll; wide tables live in an `overflow-x-auto` wrapper with `tabIndex={0}`, and lists people use on phones (opportunities, customers) render as cards below `md`; grid and flex children that hold tables need `min-w-0` (`Card` has it); text ≥ 12px (no `text-[10px]`/`text-[11px]`); touch targets ≥ 24px; hover-only controls must also show where there's no hover (`[@media(hover:hover)]:opacity-0`). Screenshots and a report land in `apps/web/e2e-report/responsive/`.
 - **Next.js page files** may only export the page component; put shared constants in `src/lib` or `src/components`.
+- **The team guide** (menu: Help & guide, `/help`) is `apps/api/assets/crm-guide.html`, a self-contained page with its screenshots embedded, served to signed-in users by `GET /api/help/guide` with its own strict CSP (no external loads) and framed by the web app. Replace the file to update it.
 
 ## Product rules to preserve
 

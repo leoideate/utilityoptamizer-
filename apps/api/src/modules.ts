@@ -23,6 +23,7 @@ import { DocumentsService } from "./documents/documents.service";
 import { EnergyController } from "./energy/energy.controller";
 import { EnergyService } from "./energy/energy.service";
 import { HealthController } from "./health/health.controller";
+import { HelpController } from "./help/help.controller";
 import {
   DisabledWhatsApp,
   EMAIL_SENDER,
@@ -178,6 +179,9 @@ export class AutomationsModule {}
 @Module({ controllers: [HealthController] })
 export class HealthModule {}
 
+@Module({ controllers: [HelpController] })
+export class HelpModule {}
+
 export const FEATURE_MODULES = [
   CoreModule,
   DocumentsModule,
@@ -195,6 +199,7 @@ export const FEATURE_MODULES = [
   AdminModule,
   AutomationsModule,
   HealthModule,
+  HelpModule,
   CallsModule,
   ChatModule,
   MailboxesModule,
