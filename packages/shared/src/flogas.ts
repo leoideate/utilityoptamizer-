@@ -94,7 +94,7 @@ const twoDecimals = (v: number) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-
 /** Cent per kWh, as printed on the form; stored in euro to four decimals. */
 const centRate = (label: string) =>
   z
-    .number({ invalid_type_error: `${label} must be a number.` })
+    .number({ error: (iss) => (iss.input === undefined ? undefined : `${label} must be a number.`) })
     .min(0, `${label} can't be negative.`)
     .max(1000, `${label} looks too high: enter cent per kWh.`)
     .refine(twoDecimals, `${label}: use at most 2 decimal places.`)
@@ -102,7 +102,7 @@ const centRate = (label: string) =>
     .optional();
 const reading = (label: string) =>
   z
-    .number({ invalid_type_error: `${label} must be a number.` })
+    .number({ error: (iss) => (iss.input === undefined ? undefined : `${label} must be a number.`) })
     .min(0, `${label} can't be negative.`)
     .max(999_999_999, `${label} is too large.`)
     .refine(twoDecimals, `${label}: use at most 2 decimal places.`)

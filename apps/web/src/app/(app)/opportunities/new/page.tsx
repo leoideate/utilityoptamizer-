@@ -54,7 +54,7 @@ function NewOpportunityForm() {
   const router = useRouter();
   const params = useSearchParams();
   const can = useCan();
-  const { register, handleSubmit, formState, setValue, watch } = useForm<Values>({
+  const { register, handleSubmit, formState, setValue, watch } = useForm<z.input<typeof schema>, unknown, Values>({
     resolver: zodResolver(schema),
     defaultValues: { serviceType: "electricity", saleType: "new_sale", productInterest: [], supplyChanges: [], leadSource: "social_media", customerId: params.get("customerId") ?? undefined, companyName: params.get("company") ?? "" },
   });
