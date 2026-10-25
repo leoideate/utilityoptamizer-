@@ -5,6 +5,7 @@ import { Plus, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CAPABILITIES, DEFAULT_WORKFLOW_REMINDERS, RENEWAL_ROUTES, RENEWAL_ROUTE_LABELS, ROLES, ROLE_LABELS, type RenewalRoute, type Role, type WorkflowReminders } from "@uo/shared";
 import { CompanySignatureCard } from "@/components/account/company-signature-card";
+import { DeleteLeadsCard } from "@/components/delete-leads";
 import type { Supplier } from "@/components/domain";
 import { Dialog, TabPanel, Tabs } from "@/components/ui/overlays";
 import { Badge, Button, Card, CardHeader, Checkbox, Field, Input, IssueList, PageHeader, Select, Skeleton } from "@/components/ui/primitives";
@@ -38,7 +39,10 @@ export default function AdminPage() {
           <IntegrationsAdmin />
         </TabPanel>
         <TabPanel value="retention">
-          <RetentionAdmin />
+          <div className="space-y-6">
+            <RetentionAdmin />
+            {can("opportunity.purge") && <DeleteLeadsCard />}
+          </div>
         </TabPanel>
         <TabPanel value="audit">
           <AuditAdmin />
@@ -510,7 +514,7 @@ function RetentionAdmin() {
   if (!v) return <Skeleton className="h-48" />;
   return (
     <Card>
-      <CardHeader title="Retention policy" description="Applied weekly. Opportunities, customers and timelines are never deleted." />
+      <CardHeader title="Retention policy" description="Applied weekly. The policy never deletes opportunities, customers or timelines." />
       <div className="space-y-4 p-5">
         {Object.keys(labels).map((k) => (
           <Field key={k} label={labels[k]}>

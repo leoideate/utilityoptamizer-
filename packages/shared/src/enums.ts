@@ -69,6 +69,7 @@ export const LEAD_SOURCES = [
   "csv_import",
   "api",
   "renewal",
+  "migration",
 ] as const;
 export type LeadSource = (typeof LEAD_SOURCES)[number];
 export const LEAD_SOURCE_LABELS = labels<LeadSource>({
@@ -83,6 +84,7 @@ export const LEAD_SOURCE_LABELS = labels<LeadSource>({
   csv_import: "CSV import",
   api: "API",
   renewal: "Renewal",
+  migration: "Master sheet import",
 });
 
 export const APPROVAL_STATES = ["not_requested", "pending", "approved", "rejected"] as const;

@@ -108,7 +108,7 @@ function NewOpportunityForm() {
           <Field label="Lead source">
             {(p) => (
               <Select {...p} {...register("leadSource")}>
-                {LEAD_SOURCES.filter((s) => s !== "renewal").map((s) => (
+                {LEAD_SOURCES.filter((s) => s !== "renewal" && s !== "migration").map((s) => (
                   <option key={s} value={s}>
                     {LEAD_SOURCE_LABELS[s]}
                   </option>

@@ -3,7 +3,9 @@ import { Prisma } from "@prisma/client";
 import {
   type CloseLeadBatchInput,
   type CreateOpportunityInput,
+  type LeadPurgeFilter,
   type OpportunityListQuery,
+  type PurgeLeadsInput,
   SERVICE_TYPE_LABELS,
   type ServiceType,
   type StageKey,
@@ -23,7 +25,7 @@ import {
 import { AuditService } from "../audit/audit.service";
 import { type Actor, actorRef } from "../common/actor";
 import { CryptoService } from "../common/crypto.service";
-import { Conflict, Forbidden, RuleViolation, assertRules } from "../common/errors";
+import { Conflict, Forbidden, NotFound, RuleViolation, assertRules } from "../common/errors";
 import type { Tx } from "../common/prisma.service";
 import { PrismaService } from "../common/prisma.service";
 import { type Page, dateOnly, defined, isoDay, opportunityNumber, pageArgs, phoneKey } from "../common/values";
@@ -366,6 +368,127 @@ export class OpportunitiesService {
         return { closed: ids.length };
       },
       // One entry per lead: a batch of hundreds takes longer than the default five seconds.
+      { timeout: 60_000 },
+    );
+  }
+
+  /** Several opportunities to one salesperson, each exactly as `assign` does it; refusals are reported per opportunity. */
+  async bulkAssign(actor: Actor, ids: string[], ownerId: string | null) {
+    if (!can(actor, "opportunity.assign")) throw new Forbidden("Only a manager can assign opportunities.");
+    let assigned = 0;
+    const skipped: { id: string; reason: string }[] = [];
+    for (const id of new Set(ids)) {
+      try {
+        await this.assign(actor, id, ownerId);
+        assigned++;
+      } catch (e) {
+        if (e instanceof RuleViolation) skipped.push({ id, reason: e.issues.join(" ") });
+        else if (e instanceof NotFound) skipped.push({ id, reason: e.message });
+        else throw e;
+      }
+    }
+    return { assigned, skipped };
+  }
+
+  /** Leads at New Lead (open or lost) that a purge looks at; `purgeable` then drops the ones somebody worked on. */
+  private purgeWhere(filter: LeadPurgeFilter): Prisma.OpportunityWhereInput {
+    return {
+      stage: { key: "new_lead" },
+      outcome: { not: "won" },
+      ...(filter.campaign ? { campaign: filter.campaign } : {}),
+      ...(filter.serviceType ? { serviceType: filter.serviceType } : {}),
+    };
+  }
+
+  /**
+   * Splits the leads a filter matches into those that can be deleted and those kept because
+   * somebody worked on them: anything beyond the lead itself (sites, quotes, contracts, uploaded
+   * documents, forms, signatures, cases, applications, commissions, renewals) or anything elsewhere
+   * that points at it (calls, emails, deal chat, outbound jobs, card scans, occupancies).
+   */
+  private async purgeable(db: Tx | PrismaService, filter: LeadPurgeFilter) {
+    const where = this.purgeWhere(filter);
+    const untouched = await db.opportunity.findMany({
+      where: {
+        ...where,
+        previousOpportunityId: null,
+        renewals: { none: {} },
+        sites: { none: {} },
+        contracts: { none: {} },
+        quotes: { none: {} },
+        merchantApps: { none: {} },
+        documents: { none: { versions: { some: {} } } },
+        signatures: { none: {} },
+        commissions: { none: {} },
+        generatedForms: { none: {} },
+        billChecks: { none: {} },
+        workflowCase: { is: null },
+        supplierApps: { none: {} },
+        leaseChecks: { none: {} },
+        termsChecks: { none: {} },
+        submissions: { none: {} },
+      },
+      select: { id: true, number: true },
+    });
+    const ids = untouched.map((o) => o.id);
+    const linked = ids.length
+      ? await Promise.all([
+          db.callLog.findMany({ where: { opportunityId: { in: ids } }, select: { opportunityId: true } }),
+          db.emailMessage.findMany({ where: { opportunityId: { in: ids } }, select: { opportunityId: true } }),
+          db.chatChannel.findMany({ where: { opportunityId: { in: ids } }, select: { opportunityId: true } }),
+          db.integrationJob.findMany({ where: { opportunityId: { in: ids } }, select: { opportunityId: true } }),
+          db.businessCardScan.findMany({ where: { opportunityId: { in: ids } }, select: { opportunityId: true } }),
+          db.supplyOccupancy.findMany({ where: { opportunityId: { in: ids } }, select: { opportunityId: true } }),
+        ])
+      : [];
+    const worked = new Set(linked.flat().map((r) => r.opportunityId));
+    const leads = untouched.filter((o) => !worked.has(o.id));
+    const matched = await db.opportunity.count({ where });
+    return { leads, kept: matched - leads.length };
+  }
+
+  /** What a purge with this filter would delete and keep, and the import batches to choose from. */
+  async purgePreview(actor: Actor, filter: LeadPurgeFilter) {
+    if (!can(actor, "opportunity.purge")) throw new Forbidden();
+    const { leads, kept } = await this.purgeable(this.prisma, filter);
+    const batches = await this.prisma.opportunity.groupBy({ by: ["campaign"], where: { ...this.purgeWhere({}), campaign: { not: null } }, orderBy: { campaign: "asc" } });
+    return { deletable: leads.length, kept, campaigns: batches.map((b) => b.campaign!) };
+  }
+
+  /**
+   * Permanently deletes untouched leads with their own bookkeeping (stage history, tasks, empty
+   * checklist items, timeline). The opportunity and timeline triggers allow it only with
+   * uo.allow_purge set for this transaction; one audit entry records what went.
+   */
+  async purgeLeads(actor: Actor, input: PurgeLeadsInput) {
+    if (!can(actor, "opportunity.purge")) throw new Forbidden();
+    const filter = { campaign: input.campaign, serviceType: input.serviceType };
+    return this.prisma.$transaction(
+      async (tx) => {
+        const { leads } = await this.purgeable(tx, filter);
+        if (leads.length !== input.expected) {
+          throw new Conflict(`${leads.length} lead(s) can be deleted now, not ${input.expected}: the leads changed since you looked. Check the numbers and try again.`);
+        }
+        const ids = leads.map((o) => o.id);
+        await tx.$executeRaw`SELECT set_config('uo.allow_purge', 'on', true)`;
+        await tx.activity.deleteMany({ where: { opportunityId: { in: ids } } });
+        await tx.documentItem.deleteMany({ where: { opportunityId: { in: ids } } });
+        await tx.stageHistory.deleteMany({ where: { opportunityId: { in: ids } } });
+        await tx.timelineEntry.deleteMany({ where: { opportunityId: { in: ids } } });
+        await tx.opportunity.deleteMany({ where: { id: { in: ids } } });
+        const which = [input.serviceType && SERVICE_TYPE_LABELS[input.serviceType], input.campaign && `from ${input.campaign}`].filter(Boolean).join(" ");
+        await this.audit.log(
+          actor,
+          {
+            action: "opportunity.purge",
+            entityType: "opportunity",
+            summary: `Permanently deleted ${ids.length} untouched lead${ids.length === 1 ? "" : "s"}${which ? ` (${which})` : ""}`,
+            data: { campaign: input.campaign ?? null, serviceType: input.serviceType ?? null, numbers: leads.map((o) => o.number) },
+          },
+          tx,
+        );
+        return { deleted: ids.length };
+      },
       { timeout: 60_000 },
     );
   }

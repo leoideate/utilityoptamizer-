@@ -16,6 +16,8 @@ export const CAPABILITIES = {
   "opportunity.activate": ["administrator", "manager", "operations"],
   /** Mark a whole CSV import batch (or one service from it) lost in one go. */
   "opportunity.close_batch": ["administrator", "manager"],
+  /** Permanently delete leads still at New Lead that nobody has worked on (no forms, documents, calls or emails). */
+  "opportunity.purge": ["administrator"],
 
   // Customers
   "customer.read": ["administrator", "manager", "salesperson", "operations", "compliance", "finance"],
