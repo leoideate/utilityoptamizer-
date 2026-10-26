@@ -515,6 +515,7 @@ export const callOutcomeSchema = z.object({
   notes: optText(5000),
 });
 export const callbackPhoneSchema = z.object({ phone: z.string().trim().max(40).nullable() });
+export const morningSummarySchema = z.object({ enabled: z.boolean() });
 
 export type CreateOpportunityInput = z.infer<typeof createOpportunitySchema>;
 export type UpdateOpportunityInput = z.infer<typeof updateOpportunitySchema>;

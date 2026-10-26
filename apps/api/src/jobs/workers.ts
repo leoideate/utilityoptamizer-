@@ -3,6 +3,7 @@ import { Logger } from "@nestjs/common";
 import { type Job, Queue, Worker } from "bullmq";
 import { ENV, type Env } from "../config/env";
 import { RetentionService } from "../admin/retention.service";
+import { AttentionService } from "../attention/attention.service";
 import { AutomationsService } from "../automations/automations.service";
 import { CallsService } from "../calls/calls.service";
 import { RingCentralEventsService } from "../calls/ringcentral-events";
@@ -20,6 +21,8 @@ export async function registerSchedules(env: Env) {
   const q = new Queue(QUEUES.automations, { connection: redisConnection(env.REDIS_URL) });
   // Daily automations at 07:00 Irish time, before the team starts.
   await q.upsertJobScheduler("daily-automations", { pattern: "0 7 * * *", tz: TZ }, { name: "daily", data: {} });
+  // The morning summary ("Needs your attention") at 07:30, after the automations have created today's tasks.
+  await q.upsertJobScheduler("morning-summary", { pattern: "30 7 * * *", tz: TZ }, { name: "morning-summary", data: {} });
   // Lead assignment and first-contact checks every 15 minutes during the day.
   await q.upsertJobScheduler("lead-assignment", { pattern: "*/15 7-20 * * *", tz: TZ }, { name: "leads", data: {} });
   await q.upsertJobScheduler("hourly", { pattern: "5 * * * *", tz: TZ }, { name: "hourly", data: {} });
@@ -42,6 +45,7 @@ export async function startWorkers(app: INestApplicationContext): Promise<() => 
   const env = app.get<Env>(ENV);
   const connection = redisConnection(env.REDIS_URL);
   const automations = app.get(AutomationsService);
+  const attention = app.get(AttentionService);
   const documents = app.get(DocumentsService);
   const integrations = app.get(IntegrationsService);
   const retention = app.get(RetentionService);
@@ -59,6 +63,8 @@ export async function startWorkers(app: INestApplicationContext): Promise<() => 
         switch (job.name) {
           case "daily":
             return automations.runAll();
+          case "morning-summary":
+            return attention.morningSummary();
           case "leads":
             return { assigned: await automations.assignNewLeads(), firstContact: await automations.firstContactReminders(new Date()), unanswered: await automations.unansweredMessages(new Date()) };
           case "hourly":

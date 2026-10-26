@@ -21,6 +21,7 @@ Generated from `apps/api/prisma/schema.prisma` (`node scripts/gen-field-dictiona
 | last_login_at | DateTime |  |  |
 | callback_phone | String |  | The user's own phone (E.164). Click-to-call rings this number first, then connects the customer |
 | ringcentral_extension_id | String |  | The RingCentral extension this user answers and makes calls on (matched by email), for call-log sync. Unique |
+| morning_summary | Boolean | ✓ | false = no morning summary notification ("Needs your attention"), switched on the Account page. Default true |
 | created_at | DateTime | ✓ | Default now() |
 | updated_at | DateTime | ✓ |  |
 
@@ -887,6 +888,16 @@ Append-only security/audit log (trigger-protected). Never contains sensitive val
 | link | String |  |  |
 | read_at | DateTime |  |  |
 | created_at | DateTime | ✓ | Default now() |
+
+## AttentionDigest
+
+One morning summary per user per Irish day: the unique key makes the job safe to run twice.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| user_id | UUID | ✓ |  |
+| day | Date | ✓ |  |
 
 ## business_card_scans
 
