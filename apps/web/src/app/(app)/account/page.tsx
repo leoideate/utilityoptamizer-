@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { SignatureCard } from "@/components/account/signature-card";
-import { Badge, Button, Card, CardHeader, Field, Input, IssueList, PageHeader } from "@/components/ui/primitives";
+import { Badge, Button, Card, CardHeader, Checkbox, Field, Input, IssueList, PageHeader } from "@/components/ui/primitives";
 import { type ApiError, api } from "@/lib/api";
 import { PROVIDER_LABELS, useMailboxes } from "@/lib/email";
 import { relative } from "@/lib/format";
@@ -40,6 +40,7 @@ export default function AccountPage() {
         <MailboxCard />
       </Suspense>
       <PhoneCard />
+      <MorningSummaryCard />
       <SignatureCard />
       <Card>
         <CardHeader title="Two-factor authentication" description="Adds a 6-digit code from an authenticator app (Microsoft Authenticator, Google Authenticator…) when you sign in." />
@@ -114,6 +115,24 @@ function PhoneCard() {
         <div className="w-full">
           <IssueList issues={issues} title="Please check:" />
         </div>
+      </div>
+    </Card>
+  );
+}
+
+/** The 07:30 notification listing stuck deals, overdue tasks, follow-ups and renewals due. */
+function MorningSummaryCard() {
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ["morning-summary"], queryFn: () => api.get<{ enabled: boolean }>("/attention/morning-summary") });
+  const save = useMutation({
+    mutationFn: (enabled: boolean) => api.put<{ enabled: boolean }>("/attention/morning-summary", { enabled }),
+    onSuccess: (r) => qc.setQueryData(["morning-summary"], r),
+  });
+  return (
+    <Card>
+      <CardHeader title="Morning summary" description="A notification at 7:30 each morning when deals are stuck, tasks are overdue, or follow-ups or renewals are due. The same list is on Home." />
+      <div className="p-5 pt-2">
+        {data && <Checkbox label="Send me the morning summary" checked={data.enabled} disabled={save.isPending} onChange={(e) => save.mutate(e.target.checked)} />}
       </div>
     </Card>
   );

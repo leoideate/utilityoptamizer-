@@ -344,15 +344,18 @@ model User {
   callbackPhone          String?    @map("callback_phone")
   /// The RingCentral extension this user answers and makes calls on (matched by email), for call-log sync.
   ringcentralExtensionId String?    @unique @map("ringcentral_extension_id")
+  /// false = no morning summary notification ("Needs your attention"), switched on the Account page.
+  morningSummary         Boolean    @default(true) @map("morning_summary")
   createdAt              DateTime   @default(now()) @map("created_at")
   updatedAt              DateTime   @updatedAt @map("updated_at")
 
-  sessions       Session[]
-  ownedOpps      Opportunity[]   @relation("OppOwner")
-  activities     Activity[]      @relation("ActivityOwner")
-  notifications  Notification[]
-  mailboxes      Mailbox[]
-  emailSignature EmailSignature?
+  sessions         Session[]
+  ownedOpps        Opportunity[]     @relation("OppOwner")
+  activities       Activity[]        @relation("ActivityOwner")
+  notifications    Notification[]
+  mailboxes        Mailbox[]
+  emailSignature   EmailSignature?
+  attentionDigests AttentionDigest[]
 
   @@map("users")
 }
@@ -1478,6 +1481,20 @@ model Notification {
 
   @@index([userId, readAt])
   @@map("notifications")
+}
+
+/// One morning summary per user per Irish day: the unique key makes the job safe to run twice.
+model AttentionDigest {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  day       DateTime @db.Date
+  /// The counts that were sent: { stuck, overdueTasks, followUps, renewals }.
+  counts    Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, day])
+  @@map("attention_digests")
 }
 
 // ---------------------------------------------------------------------------

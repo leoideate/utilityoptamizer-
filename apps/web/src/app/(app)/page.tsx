@@ -7,6 +7,7 @@ import { useState } from "react";
 import { LEAD_SOURCE_LABELS, type LeadSource, SELECTABLE_SERVICE_TYPES, SERVICE_TYPE_LABELS, type ServiceType, addDays } from "@uo/shared";
 import { BUCKETS, type Bucket } from "@/components/cases-board";
 import { BarList, UserSelect, useSuppliers } from "@/components/domain";
+import { NeedsAttention } from "@/components/needs-attention";
 import { Button, Card, CardHeader, Input, PageHeader, Select, Skeleton, Stat } from "@/components/ui/primitives";
 import { api, qs } from "@/lib/api";
 import { money, moneyCompact, num, pct, todayIso } from "@/lib/format";
@@ -85,6 +86,8 @@ export default function HomePage() {
           </>
         }
       />
+
+      <NeedsAttention />
 
       {can("opportunity.submit") && <WorkQueue />}
 

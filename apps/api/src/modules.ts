@@ -10,6 +10,8 @@ import { ActivitiesController } from "./activities/activities.controller";
 import { ActivitiesService } from "./activities/activities.service";
 import { BillReadingController } from "./ai/bill-reading.controller";
 import { AssistantController } from "./assistant/assistant.controller";
+import { AttentionController } from "./attention/attention.controller";
+import { AttentionService } from "./attention/attention.service";
 import { ASSISTANT_MODEL, AssistantService } from "./assistant/assistant.service";
 import { AssistantTools } from "./assistant/tools";
 import { BillReadingService } from "./ai/bill-reading.service";
@@ -219,6 +221,10 @@ export class AdminModule {}
 @Module({ providers: [AutomationsService, RenewalsService], exports: [AutomationsService, RenewalsService] })
 export class AutomationsModule {}
 
+/** "Needs your attention" on Home and the 07:30 morning summary. Rule-based (no AI). */
+@Module({ imports: [OpportunitiesModule], controllers: [AttentionController], providers: [AttentionService], exports: [AttentionService] })
+export class AttentionModule {}
+
 @Module({ controllers: [HealthController] })
 export class HealthModule {}
 
@@ -243,6 +249,7 @@ export const FEATURE_MODULES = [
   ReportsModule,
   AdminModule,
   AutomationsModule,
+  AttentionModule,
   HealthModule,
   HelpModule,
   CallsModule,
