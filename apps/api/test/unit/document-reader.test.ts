@@ -136,6 +136,19 @@ describe("the Claude document reader", () => {
 });
 
 describe("cleaning a bill reading", () => {
+  it("dates readings the bill prints without a date at the end of the billing period", () => {
+    const r = cleanBill({
+      ...blank,
+      periodEnd: "2025-05-26",
+      readings: [
+        { register: null, value: "46976", readingDate: null, readingType: "actual" },
+        { register: null, value: "47810", readingDate: "2025-05-20", readingType: "actual" },
+      ],
+    });
+    expect(r.readings.map((x) => x.readingDate)).toEqual(["2025-05-26", "2025-05-20"]);
+    expect(cleanBill({ ...blank, readings: [{ register: null, value: "1", readingDate: null, readingType: "actual" }] }).readings[0].readingDate).toBeNull();
+  });
+
   it("drops values that aren't well formed rather than passing them on", () => {
     const r = cleanBill({
       ...blank,
