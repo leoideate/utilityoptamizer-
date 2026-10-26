@@ -9,6 +9,7 @@ import { ENV, type Env, ocrProvider } from "./config/env";
 import { ActivitiesController } from "./activities/activities.controller";
 import { ActivitiesService } from "./activities/activities.service";
 import { BillReadingController } from "./ai/bill-reading.controller";
+import { AssistantActions } from "./assistant/actions";
 import { AssistantController } from "./assistant/assistant.controller";
 import { AttentionController } from "./attention/attention.controller";
 import { AttentionService } from "./attention/attention.service";
@@ -139,23 +140,6 @@ export class WorkflowsModule {}
 })
 export class AiModule {}
 
-/** "Ask the CRM": a read-only assistant that looks things up with the asker's own access. */
-@Module({
-  imports: [OpportunitiesModule, DocumentsModule, EnergyModule],
-  controllers: [AssistantController],
-  providers: [
-    AssistantService,
-    AssistantTools,
-    {
-      provide: ASSISTANT_MODEL,
-      inject: [ENV],
-      // Without the key the routes 404 (AssistantEnabledGuard), so the client is never called.
-      useFactory: (env: Env) => new Anthropic({ apiKey: env.ANTHROPIC_API_KEY ?? "unset", timeout: 60_000, maxRetries: 2 }).messages,
-    },
-  ],
-})
-export class AssistantModule {}
-
 @Module({
   imports: [CustomersModule, OpportunitiesModule, AiModule],
   controllers: [OcrController],
@@ -200,6 +184,28 @@ export class EmailSignaturesModule {}
   exports: [IntegrationsService],
 })
 export class IntegrationsModule {}
+
+/**
+ * "Ask the CRM": looks things up with the asker's own access and prepares changes the user
+ * confirms (tasks, follow-ups, deal details, stages, notes, emails). After IntegrationsModule:
+ * a confirmed email is sent through it.
+ */
+@Module({
+  imports: [OpportunitiesModule, DocumentsModule, EnergyModule, IntegrationsModule],
+  controllers: [AssistantController],
+  providers: [
+    AssistantService,
+    AssistantTools,
+    AssistantActions,
+    {
+      provide: ASSISTANT_MODEL,
+      inject: [ENV],
+      // Without the key the routes 404 (AssistantEnabledGuard), so the client is never called.
+      useFactory: (env: Env) => new Anthropic({ apiKey: env.ANTHROPIC_API_KEY ?? "unset", timeout: 60_000, maxRetries: 2 }).messages,
+    },
+  ],
+})
+export class AssistantModule {}
 
 // After IntegrationsModule: online signing emails links through it.
 @Module({ imports: [DocumentsModule, IntegrationsModule], controllers: [FormsController, SigningController], providers: [FormsService, SigningService], exports: [FormsService, SigningService] })
