@@ -11,7 +11,7 @@ export interface SessionUser {
   roles: Role[];
   capabilities: Capability[];
   /** Features switched on for this installation; chat is off unless the API sets CHAT_ENABLED. */
-  features: { chat: boolean; aiReading: boolean };
+  features: { chat: boolean; aiReading: boolean; assistant: boolean };
 }
 
 const SessionContext = createContext<SessionUser | null>(null);

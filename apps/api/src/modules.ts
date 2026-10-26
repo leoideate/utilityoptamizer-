@@ -3,11 +3,15 @@
  * job queue, opportunity access/stages, activities) are global; feature modules own their
  * services and controllers.
  */
+import Anthropic from "@anthropic-ai/sdk";
 import { Global, Module } from "@nestjs/common";
 import { ENV, type Env, ocrProvider } from "./config/env";
 import { ActivitiesController } from "./activities/activities.controller";
 import { ActivitiesService } from "./activities/activities.service";
 import { BillReadingController } from "./ai/bill-reading.controller";
+import { AssistantController } from "./assistant/assistant.controller";
+import { ASSISTANT_MODEL, AssistantService } from "./assistant/assistant.service";
+import { AssistantTools } from "./assistant/tools";
 import { BillReadingService } from "./ai/bill-reading.service";
 import { ClaudeDocumentReader, DOCUMENT_READER, type DocumentReader, UnconfiguredDocumentReader } from "./ai/document-reader";
 import { AdminController } from "./admin/admin.controller";
@@ -133,6 +137,23 @@ export class WorkflowsModule {}
 })
 export class AiModule {}
 
+/** "Ask the CRM": a read-only assistant that looks things up with the asker's own access. */
+@Module({
+  imports: [OpportunitiesModule, DocumentsModule, EnergyModule],
+  controllers: [AssistantController],
+  providers: [
+    AssistantService,
+    AssistantTools,
+    {
+      provide: ASSISTANT_MODEL,
+      inject: [ENV],
+      // Without the key the routes 404 (AssistantEnabledGuard), so the client is never called.
+      useFactory: (env: Env) => new Anthropic({ apiKey: env.ANTHROPIC_API_KEY ?? "unset", timeout: 60_000, maxRetries: 2 }).messages,
+    },
+  ],
+})
+export class AssistantModule {}
+
 @Module({
   imports: [CustomersModule, OpportunitiesModule, AiModule],
   controllers: [OcrController],
@@ -216,6 +237,7 @@ export const FEATURE_MODULES = [
   SupplierApplicationsModule,
   WorkflowsModule,
   AiModule,
+  AssistantModule,
   OcrModule,
   IntegrationsModule,
   ReportsModule,

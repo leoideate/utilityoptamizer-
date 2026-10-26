@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CAPABILITIES, DEFAULT_WORKFLOW_REMINDERS, RENEWAL_ROUTES, RENEWAL_ROUTE_LABELS, ROLES, ROLE_LABELS, type RenewalRoute, type Role, type WorkflowReminders } from "@uo/shared";
+import { AssistantFeedbackReview } from "@/components/assistant/feedback-review";
 import { CompanySignatureCard } from "@/components/account/company-signature-card";
 import { DeleteLeadsCard } from "@/components/delete-leads";
 import type { Supplier } from "@/components/domain";
@@ -11,17 +12,19 @@ import { Dialog, TabPanel, Tabs } from "@/components/ui/overlays";
 import { Badge, Button, Card, CardHeader, Checkbox, Field, Input, IssueList, PageHeader, Select, Skeleton } from "@/components/ui/primitives";
 import { type ApiError, api, qs } from "@/lib/api";
 import { dateTime, relative } from "@/lib/format";
-import { useCan } from "@/lib/session";
+import { useCan, useUser } from "@/lib/session";
 import type { Page } from "@/lib/types";
 
 export default function AdminPage() {
   const can = useCan();
+  const assistantOn = useUser().features.assistant;
   const tabs = [
     can("admin.users") && { value: "users", label: "Users & roles" },
     can("admin.pipeline") && { value: "suppliers", label: "Suppliers & pipeline" },
     can("admin.integrations") && { value: "integrations", label: "Integrations" },
     can("admin.retention") && { value: "retention", label: "Data retention" },
     can("admin.audit") && { value: "audit", label: "Audit log" },
+    assistantOn && can("assistant.review") && { value: "assistant", label: "Assistant feedback" },
     { value: "security", label: "Security matrix" },
   ].filter(Boolean) as { value: string; label: string }[];
   const [tab, setTab] = useState(tabs[0]?.value ?? "security");
@@ -46,6 +49,9 @@ export default function AdminPage() {
         </TabPanel>
         <TabPanel value="audit">
           <AuditAdmin />
+        </TabPanel>
+        <TabPanel value="assistant">
+          <AssistantFeedbackReview />
         </TabPanel>
         <TabPanel value="security">
           <SecurityMatrix />
