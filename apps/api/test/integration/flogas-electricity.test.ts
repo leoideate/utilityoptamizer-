@@ -1,4 +1,5 @@
 import request from "supertest";
+import { type BillReading, flogasFillSave, flogasFillSuggestions } from "@uo/shared";
 import { PDFDocument } from "pdf-lib";
 import { CryptoService } from "../../src/common/crypto.service";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../src/storage/storage";
@@ -408,5 +409,45 @@ describe("Flogas electricity: other suppliers are unchanged", () => {
     expect(v.applies).toBe(false);
     expect(v.versions).toHaveLength(1);
     expectStatus(await team.sales.post(`${base(oppId)}/versions/${v.versions[0].formId}/send`, { role: "customer", signerName: "M", email: "m@x.ie" }), 422);
+  });
+});
+
+describe("Flogas electricity: fill from bill", () => {
+  it("saves the ticked bill values through the form's own save, onto the deal's meter", async () => {
+    const { oppId, meterId } = await flogasDeal();
+    const reading = {
+      readable: true,
+      customerName: null,
+      supplyAddress: null,
+      fuel: "electricity",
+      mprn: "10012345678",
+      gprn: null,
+      meterNumber: null,
+      supplierName: "Electric Ireland",
+      accountNumber: "EI-1",
+      billDate: null,
+      periodStart: null,
+      periodEnd: null,
+      tariffName: null,
+      dayRate: null,
+      nightRate: null,
+      gasRate: null,
+      standingChargePerDay: null,
+      usageKwh: null,
+      annualConsumptionKwh: null,
+      mic: null,
+      readings: [
+        { register: "Day", value: "13001", readingDate: "2026-10-20", readingType: "actual" },
+        { register: "Night", value: "7002", readingDate: "2026-10-20", readingType: "actual" },
+      ],
+      notes: null,
+    } satisfies BillReading;
+    const before = expectStatus(await team.sales.get(base(oppId)), 200).body.data;
+    const keys = flogasFillSuggestions(reading, before).map((s) => s.key);
+    expect(keys).toEqual(["reading:0", "reading:1", "readingDate"]);
+    const after = expectStatus(await team.sales.put(base(oppId), flogasFillSave(reading, before, new Set(keys))), 200).body.data;
+    expect(after.meters[0]).toMatchObject({ id: meterId, mprn: "10012345678", day: 13001, night: 7002 });
+    expect(after.readingDate).toBe("2026-10-20");
+    expect(flogasFillSuggestions(reading, after)).toEqual([]);
   });
 });

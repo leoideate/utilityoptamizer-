@@ -1,14 +1,16 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Save, ShieldCheck, UserPlus } from "lucide-react";
+import { CheckCircle2, Save, ShieldCheck, Sparkles, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { FLOGAS_STATUS_LABELS, FLOGAS_TAB_LABELS, type FlogasElectricityData, type FlogasStatus, type FlogasTab, flogasElectricityIssues } from "@uo/shared";
+import { FLOGAS_STATUS_LABELS, FLOGAS_TAB_LABELS, type FlogasElectricityData, type FlogasStatus, type FlogasTab, flogasElectricityIssues, flogasFillSave, flogasFillSuggestions } from "@uo/shared";
 import { TabPanel, Tabs } from "@/components/ui/overlays";
 import { Badge, Button, Card, CardHeader, IssueList, Skeleton, type Tone } from "@/components/ui/primitives";
 import { type ApiError, api } from "@/lib/api";
+import { useUser } from "@/lib/session";
 import type { Workspace } from "@/lib/types";
 import { useRefreshOpportunity } from "../common";
+import { BILL_FILLABLE, FillFromBillDialog } from "../supplier-application/fill-from-bill";
 import { type BankEdit, type FlogasView, forValidation, isEmptyPayload, savePayload } from "./draft";
 import { DocumentsTab } from "./flogas-documents";
 import { CustomerTab, DebitTab, PricingTab, SupplyTab, TAB_ORDER } from "./flogas-fields";
@@ -35,6 +37,8 @@ export function FlogasTab({ opp }: { opp: Workspace }) {
   const [showErrors, setShowErrors] = useState(false);
   const [saveIssues, setSaveIssues] = useState<string[]>([]);
   const [validated, setValidated] = useState(false);
+  const [filling, setFilling] = useState(false);
+  const aiReading = useUser().features.aiReading;
 
   const dirty = !!base && !!draft && !isEmptyPayload(savePayload(base, draft, bank, confirmIban));
   useEffect(() => {
@@ -100,6 +104,23 @@ export function FlogasTab({ opp }: { opp: Workspace }) {
 
   return (
     <div className="space-y-4">
+      {filling && (
+        <FillFromBillDialog<typeof v.data, FlogasView>
+          opportunityId={opp.id}
+          endpoint={`/opportunities/${opp.id}/flogas-electricity`}
+          data={v.data}
+          suggest={flogasFillSuggestions}
+          saveFor={flogasFillSave}
+          stillNeeded={v.issues.filter((i) => !BILL_FILLABLE.test(i.path)).map((i) => i.message)}
+          onSaved={(saved) => {
+            qc.setQueryData(key, saved);
+            setBase(saved.data);
+            setDraft(saved.data);
+            refreshOpp();
+          }}
+          onClose={() => setFilling(false)}
+        />
+      )}
       <Card>
         <CardHeader
           title="Flogas Electricity Form"
@@ -111,6 +132,11 @@ export function FlogasTab({ opp }: { opp: Workspace }) {
               <Button size="sm" variant="secondary" onClick={validate}>
                 <ShieldCheck /> Validate application
               </Button>
+              {!ro && aiReading && (
+                <Button size="sm" variant="secondary" disabled={dirty} title={dirty ? "Save or undo your changes first" : undefined} onClick={() => setFilling(true)}>
+                  <Sparkles /> Fill from bill
+                </Button>
+              )}
               {!ro && (
                 <Button size="sm" disabled={!dirty} loading={save.isPending} onClick={() => save.mutate()}>
                   <Save /> Save draft

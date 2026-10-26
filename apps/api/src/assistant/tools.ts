@@ -10,6 +10,8 @@ import { DocumentsService } from "../documents/documents.service";
 import { EnergyService } from "../energy/energy.service";
 import { OpportunityAccess } from "../opportunities/access.service";
 import { OpportunitiesService } from "../opportunities/opportunities.service";
+import { BordGaisElectricityService } from "../supplier-applications/bord-gais-electricity/bord-gais-electricity.service";
+import { FlogasElectricityService } from "../supplier-applications/flogas-electricity/flogas-electricity.service";
 import { PROPOSAL_DESCRIPTIONS, PROPOSAL_INPUTS, proposalTool } from "./actions";
 
 /** The longest tool result passed to the model; longer ones are cut. */
@@ -31,6 +33,7 @@ export const TOOL_INPUTS = {
     search: z.string().trim().max(100).optional().describe("Customer, company, contact or deal number."),
   }),
   energy_details: z.object({ deal: dealRef }),
+  application_issues: z.object({ deal: dealRef }),
 } as const;
 export type ToolName = keyof typeof TOOL_INPUTS;
 
@@ -42,6 +45,8 @@ const DESCRIPTIONS: Record<ToolName, string> = {
   find_deals:
     "Deals the user can see, newest activity first (25 at most), with how long each has been at its stage. Views: my_open (the user's open deals), missing_documents, unsigned, awaiting_customer, awaiting_supplier, renewals_due, compliance_queries, unassigned, all.",
   energy_details: "A deal's supply sites, meters (MPRN/GPRN) and energy contracts with current and chosen suppliers.",
+  application_issues:
+    "The supplier's own application form for a deal (Flogas or Bord Gáis electricity), if one applies, and what it still needs before it can go for signature, with links. Its Fill from bill button fills meter and address details from the uploaded bill.",
 };
 
 const schema = (s: z.ZodType) => z.toJSONSchema(s, { io: "input" }) as { type: "object"; [k: string]: unknown };
@@ -79,6 +84,8 @@ export class AssistantTools {
     private readonly documents: DocumentsService,
     private readonly activities: ActivitiesService,
     private readonly energy: EnergyService,
+    private readonly flogas: FlogasElectricityService,
+    private readonly bordGais: BordGaisElectricityService,
   ) {}
 
   /**
@@ -163,6 +170,15 @@ export class AssistantTools {
             link: `/opportunities/${o.id}`,
           })),
         };
+      }
+      case "application_issues": {
+        const id = await this.dealId(actor, input.deal as string);
+        const forms = [
+          { form: "Flogas electricity", tab: "flogas", r: await this.flogas.outstanding(actor, id) },
+          { form: "Bord Gáis electricity", tab: "bord-gais", r: await this.bordGais.outstanding(actor, id) },
+        ].filter((f) => f.r.applies);
+        if (!forms.length) return { form: null, note: "No supplier application form applies: those are for Electricity deals with Flogas or Bord Gáis Energy selected. Other suppliers use the Forms tab." };
+        return forms.map((f) => ({ form: f.form, ready: f.r.issues.length === 0, link: `/opportunities/${id}?tab=${f.tab}`, stillNeeded: f.r.issues.map((i) => i.message) }));
       }
       case "energy_details": {
         const id = await this.dealId(actor, input.deal as string);

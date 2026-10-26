@@ -15,5 +15,6 @@ export * from "./bord-gais";
 export * from "./application-applies";
 export * from "./migration";
 export * from "./bill-reading";
+export * from "./bill-fill";
 export * from "./attention";
 export * from "./assistant-actions";

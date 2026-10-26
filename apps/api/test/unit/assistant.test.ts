@@ -26,6 +26,7 @@ describe("the CRM assistant", () => {
       "list_tasks",
       "find_deals",
       "energy_details",
+      "application_issues",
       "propose_create_task",
       "propose_complete_task",
       "propose_reschedule_task",

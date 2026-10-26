@@ -279,6 +279,13 @@ export class BordGaisElectricityService {
 
   // --- Reading ------------------------------------------------------------------------
 
+  /** Whether the application applies and what still stops it going for signature; messages only, no values (for the assistant). */
+  async outstanding(actor: Actor, opportunityId: string) {
+    await this.access.readable(actor, opportunityId);
+    const ctx = await this.context(opportunityId);
+    return { applies: this.applies(ctx), issues: bordGaisElectricityIssues(this.assemble(ctx, true)).map((i) => ({ tab: i.tab, message: i.message })) };
+  }
+
   async view(actor: Actor, opportunityId: string) {
     await this.access.readable(actor, opportunityId);
     const ctx = await this.context(opportunityId);

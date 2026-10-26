@@ -140,6 +140,7 @@ export class WorkflowsModule {}
 })
 export class AiModule {}
 
+
 @Module({
   imports: [CustomersModule, OpportunitiesModule, AiModule],
   controllers: [OcrController],
@@ -185,13 +186,25 @@ export class EmailSignaturesModule {}
 })
 export class IntegrationsModule {}
 
+// After IntegrationsModule: online signing emails links through it.
+@Module({ imports: [DocumentsModule, IntegrationsModule], controllers: [FormsController, SigningController], providers: [FormsService, SigningService], exports: [FormsService, SigningService] })
+export class FormsModule {}
+
+@Module({
+  imports: [FormsModule, DocumentsModule],
+  controllers: [FlogasElectricityController, BordGaisElectricityController],
+  providers: [ApplicationDocuments, FlogasElectricityService, BordGaisElectricityService],
+  exports: [FlogasElectricityService, BordGaisElectricityService],
+})
+export class SupplierApplicationsModule {}
+
 /**
  * "Ask the CRM": looks things up with the asker's own access and prepares changes the user
- * confirms (tasks, follow-ups, deal details, stages, notes, emails). After IntegrationsModule:
- * a confirmed email is sent through it.
+ * confirms (tasks, follow-ups, deal details, stages, notes, emails). After IntegrationsModule
+ * (a confirmed email is sent through it) and SupplierApplicationsModule (what a supplier form needs).
  */
 @Module({
-  imports: [OpportunitiesModule, DocumentsModule, EnergyModule, IntegrationsModule],
+  imports: [OpportunitiesModule, DocumentsModule, EnergyModule, IntegrationsModule, SupplierApplicationsModule],
   controllers: [AssistantController],
   providers: [
     AssistantService,
@@ -206,17 +219,6 @@ export class IntegrationsModule {}
   ],
 })
 export class AssistantModule {}
-
-// After IntegrationsModule: online signing emails links through it.
-@Module({ imports: [DocumentsModule, IntegrationsModule], controllers: [FormsController, SigningController], providers: [FormsService, SigningService], exports: [FormsService, SigningService] })
-export class FormsModule {}
-
-@Module({
-  imports: [FormsModule, DocumentsModule],
-  controllers: [FlogasElectricityController, BordGaisElectricityController],
-  providers: [ApplicationDocuments, FlogasElectricityService, BordGaisElectricityService],
-})
-export class SupplierApplicationsModule {}
 
 @Module({ controllers: [ReportsController], providers: [ReportsService] })
 export class ReportsModule {}
