@@ -78,3 +78,9 @@ docs/           Documentation
 infra/          Local service configuration used by docker-compose.yml
 scripts/        Doc generators (security matrix, field dictionary)
 ```
+
+## Credits
+
+Architected and built by **Leoideate**, with AI-assisted development in Claude Code.
+
+The CRM's AI features (Read bill, Fill from bill, business card reading and "Ask the CRM") use Claude, a model by Anthropic, which acts as a data processor for them. See [docs/ai-assistant.md](docs/ai-assistant.md) for what is sent and the safeguards.
