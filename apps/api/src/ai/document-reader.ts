@@ -122,11 +122,11 @@ const BILL_INSTRUCTIONS = `This is a customer's energy bill (electricity or gas)
 - Dates as YYYY-MM-DD. periodStart and periodEnd: the billing period.
 - dayRate, nightRate, gasRate: unit rates in euro per kWh excluding VAT (14.52 cent is 0.1452). standingChargePerDay: euro per day excluding VAT; if the bill only shows it for the period, divide by the days in the period and say so in notes.
 - usageKwh: kWh used in this billing period. annualConsumptionKwh: only if the bill states an annual figure.
-- readings: each meter reading printed, with its register (Day, Night, 24hr...) and whether it is actual, estimated, customer or smart.
+- readings: each meter reading printed, with its register (Day, Night, 24hr...; an empty string for a single gas register), its date if printed (otherwise an empty string), and whether it is actual, estimated, customer or smart.
 - Never include bank account numbers, IBANs, BICs, card numbers or direct debit references anywhere, including notes.
 - Numbers (rates, standing charge, kWh, MIC) as plain numbers without units or currency, e.g. "0.1452" or "14500"; an empty string when not shown. fuel: "unknown" if it isn't clear.
 - readable: false if this isn't an energy bill or you can't read it.
-- notes: one or two short sentences on anything a person should double-check (unclear digits, more than one meter, missing pages); otherwise an empty string.`;
+- notes: one or two short sentences, in plain words for the CRM user, on anything they should double-check on the bill (unclear digits, more than one meter, missing pages, a charge you couldn't place); otherwise an empty string. Don't mention fields, schemas, formats or these instructions.`;
 
 const CARD_INSTRUCTIONS = `This is a photo of a business card. Extract the contact's details as printed.
 - phone is a landline or office number, mobile a mobile number (Irish mobiles start 08 or +353 8; UK mobiles 07 or +44 7).
@@ -159,7 +159,8 @@ export function cleanBill(r: BillReading): BillReading {
     usageKwh: amount(r.usageKwh, 1e9),
     annualConsumptionKwh: amount(r.annualConsumptionKwh, 1e9),
     mic: amount(r.mic, 100_000),
-    readings: r.readings.filter((x) => /^\d+(\.\d+)?$/.test(x.value.trim())).map((x) => ({ ...x, value: x.value.trim(), readingDate: day(x.readingDate) })),
+    // Bills often print readings without their own date; they were taken at the end of the billing period.
+    readings: r.readings.filter((x) => /^\d+(\.\d+)?$/.test(x.value.trim())).map((x) => ({ ...x, value: x.value.trim(), readingDate: day(x.readingDate) ?? day(r.periodEnd) })),
     notes: text(r.notes),
   };
 }
