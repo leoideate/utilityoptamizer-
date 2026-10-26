@@ -38,6 +38,7 @@ Generated from `packages/shared/src/permissions.ts`, the single source of truth 
 | `admin.pipeline` | Rename pipeline stages, run the stage check, manage suppliers | ✓ |  |  |  |  |  |
 | `admin.integrations` | Integration settings, outbound job queue and retries, signature templates | ✓ |  |  |  |  |  |
 | `admin.audit` | Read the audit log | ✓ |  |  |  |  |  |
+| `admin.import` |  | ✓ |  |  |  |  |  |
 | `admin.retention` | Configure and run data retention | ✓ |  |  |  |  |  |
 
 ## Row-level rules

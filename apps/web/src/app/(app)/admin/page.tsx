@@ -7,6 +7,7 @@ import { CAPABILITIES, DEFAULT_WORKFLOW_REMINDERS, RENEWAL_ROUTES, RENEWAL_ROUTE
 import { AssistantFeedbackReview } from "@/components/assistant/feedback-review";
 import { CompanySignatureCard } from "@/components/account/company-signature-card";
 import { DeleteLeadsCard } from "@/components/delete-leads";
+import { ImportCustomers } from "@/components/import-customers";
 import type { Supplier } from "@/components/domain";
 import { Dialog, TabPanel, Tabs } from "@/components/ui/overlays";
 import { Badge, Button, Card, CardHeader, Checkbox, Field, Input, IssueList, PageHeader, Select, Skeleton } from "@/components/ui/primitives";
@@ -24,6 +25,7 @@ export default function AdminPage() {
     can("admin.integrations") && { value: "integrations", label: "Integrations" },
     can("admin.retention") && { value: "retention", label: "Data retention" },
     can("admin.audit") && { value: "audit", label: "Audit log" },
+    can("admin.import") && { value: "import", label: "Import customers" },
     assistantOn && can("assistant.review") && { value: "assistant", label: "Assistant feedback" },
     { value: "security", label: "Security matrix" },
   ].filter(Boolean) as { value: string; label: string }[];
@@ -52,6 +54,9 @@ export default function AdminPage() {
         </TabPanel>
         <TabPanel value="assistant">
           <AssistantFeedbackReview />
+        </TabPanel>
+        <TabPanel value="import">
+          <ImportCustomers />
         </TabPanel>
         <TabPanel value="security">
           <SecurityMatrix />

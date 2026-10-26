@@ -24,6 +24,8 @@ import { AuditService } from "./audit/audit.service";
 import { CallsModule } from "./calls/calls.module";
 import { ChatModule } from "./chat/chat.module";
 import { MigrationService } from "./migration/migration.service";
+import { ImportRunsController } from "./migration/import-runs.controller";
+import { ImportRunsService } from "./migration/import-runs.service";
 import { AutomationsService } from "./automations/automations.service";
 import { RenewalsService } from "./automations/renewals.service";
 import { CustomersController } from "./customers/customers.controller";
@@ -109,7 +111,7 @@ export class EnergyModule {}
 export class OpportunitiesModule {}
 
 /** The one-off master sheet migration, run by scripts/migrate-*.ts. No routes. */
-@Module({ imports: [DocumentsModule, CustomersModule], providers: [MigrationService], exports: [MigrationService] })
+@Module({ imports: [DocumentsModule, CustomersModule], controllers: [ImportRunsController], providers: [MigrationService, ImportRunsService], exports: [MigrationService] })
 export class MigrationModule {}
 
 @Module({ controllers: [MerchantController], providers: [MerchantService] })

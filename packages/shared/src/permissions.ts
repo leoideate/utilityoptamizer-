@@ -64,6 +64,8 @@ export const CAPABILITIES = {
   "admin.pipeline": ["administrator"],
   "admin.integrations": ["administrator"],
   "admin.audit": ["administrator"],
+  /** Import existing customers from the master sheet (Administration → Import customers). */
+  "admin.import": ["administrator"],
   "admin.retention": ["administrator"],
 } as const satisfies Record<string, readonly Role[]>;
 

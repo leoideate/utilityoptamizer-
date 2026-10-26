@@ -12,7 +12,7 @@ import { AdminService } from "./admin.service";
  * - sensitive documents and principal personal data on lost deals / long-ended contracts are erased;
  * - unconfirmed business-card scans are deleted;
  * - call recordings are deleted after their retention period (the call stays on the timeline);
- * - CRM assistant conversations are deleted after 90 days;
+ * - CRM assistant conversations, and customer import runs with their copy of the sheet, are deleted after 90 days;
  * - audit-log rows older than the retention period are purged (the only permitted deletion,
  *   done with the uo.allow_purge flag the append-only trigger checks).
  * Opportunities, customers and the timeline are never deleted.
@@ -92,7 +92,12 @@ export class RetentionService {
       return tx.assistantConversation.deleteMany({ where: { createdAt: { lt: conversationsBefore } } });
     });
 
-    const summary = { opportunities: ids.length, sensitiveFiles: files, principals, scans: oldScans.length, recordings: oldRecordings.length, auditRows: purged.count, assistantConversations: conversations.count };
+    // Customer import runs hold a copy of the master sheet and its report: 90 days, like assistant chats.
+    const oldRuns = await this.prisma.importRun.findMany({ where: { createdAt: { lt: conversationsBefore } }, select: { id: true, storageKey: true } });
+    for (const key of new Set(oldRuns.map((r) => r.storageKey))) await this.storage.delete(key);
+    await this.prisma.importRun.deleteMany({ where: { id: { in: oldRuns.map((r) => r.id) } } });
+
+    const summary = { opportunities: ids.length, sensitiveFiles: files, principals, scans: oldScans.length, recordings: oldRecordings.length, auditRows: purged.count, assistantConversations: conversations.count, importRuns: oldRuns.length };
     await this.audit.log(SYSTEM, { action: "retention.run", entityType: "system", summary: "Retention policy applied", data: summary });
     this.log.log({ summary }, "Retention run complete");
     return summary;
