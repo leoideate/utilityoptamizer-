@@ -9,6 +9,7 @@ import { ENV, type Env, ocrProvider } from "./config/env";
 import { ActivitiesController } from "./activities/activities.controller";
 import { ActivitiesService } from "./activities/activities.service";
 import { BillReadingController } from "./ai/bill-reading.controller";
+import { AssistantActions } from "./assistant/actions";
 import { AssistantController } from "./assistant/assistant.controller";
 import { AttentionController } from "./attention/attention.controller";
 import { AttentionService } from "./attention/attention.service";
@@ -197,13 +198,18 @@ export class FormsModule {}
 })
 export class SupplierApplicationsModule {}
 
-/** "Ask the CRM": a read-only assistant that looks things up with the asker's own access. */
+/**
+ * "Ask the CRM": looks things up with the asker's own access and prepares changes the user
+ * confirms (tasks, follow-ups, deal details, stages, notes, emails). After IntegrationsModule
+ * (a confirmed email is sent through it) and SupplierApplicationsModule (what a supplier form needs).
+ */
 @Module({
-  imports: [OpportunitiesModule, DocumentsModule, EnergyModule, SupplierApplicationsModule],
+  imports: [OpportunitiesModule, DocumentsModule, EnergyModule, IntegrationsModule, SupplierApplicationsModule],
   controllers: [AssistantController],
   providers: [
     AssistantService,
     AssistantTools,
+    AssistantActions,
     {
       provide: ASSISTANT_MODEL,
       inject: [ENV],

@@ -54,7 +54,7 @@ export const CAPABILITIES = {
   "chat.moderate": ["administrator"],
 
   // AI assistant
-  /** Ask the CRM assistant (read-only: it answers with the asker's own access). */
+  /** Ask the CRM assistant. It answers with the asker's own access and prepares changes they confirm, made with their own permissions. */
   "assistant.use": ["administrator", "manager", "salesperson", "operations", "compliance", "finance"],
   /** Read the answers people marked unhelpful, to improve the assistant's instructions. */
   "assistant.review": ["administrator", "manager"],

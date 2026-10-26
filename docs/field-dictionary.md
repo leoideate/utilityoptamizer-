@@ -1151,3 +1151,21 @@ Thumbs up or down on an answer (append-only); the unhelpful ones are reviewed to
 | comment | String |  |  |
 | created_at | DateTime | ✓ | Default now() |
 
+## AssistantAction
+
+A change the assistant prepared (see ASSISTANT_ACTION_KINDS). Nothing happens until the user
+confirms it; the change is then made through the usual services as that user. A trigger allows
+only the status moves pending → confirming → done | failed and pending → dismissed.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| message_id | UUID | ✓ | The answer that offered it |
+| user_id | UUID | ✓ |  |
+| kind | String | ✓ |  |
+| summary | String | ✓ | One sentence shown on the card, e.g. "Call Mary Murphy on 3 Nov (UO-000123)" |
+| payload | Json | ✓ | The change, validated with ASSISTANT_ACTION_PAYLOADS[kind]. No restricted values |
+| opportunity_id | UUID |  |  |
+| status | String | ✓ | Default "pending" |
+| error | String |  | Why it couldn't be done (user-facing), when status is failed |
+

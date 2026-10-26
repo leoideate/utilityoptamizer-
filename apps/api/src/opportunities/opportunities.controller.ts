@@ -184,16 +184,7 @@ export class OpportunitiesController {
 
   /** Log a call, note, email or WhatsApp message. Entries can't be edited; corrections are new entries. */
   @Post("opportunities/:id/timeline")
-  async addEntry(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(timelineEntrySchema.extend({ correctsId: z.string().uuid().optional() }))) body: z.infer<typeof timelineEntrySchema> & { correctsId?: string }) {
-    const opp = await this.access.writable(a, id);
-    if (body.correctsId) {
-      const original = await this.prisma.timelineEntry.findFirst({ where: { id: body.correctsId, opportunityId: id } });
-      if (!original) throw new NotFound("Timeline entry");
-    }
-    const occurredAt = body.occurredAt ? new Date(body.occurredAt) : new Date();
-    const entry = await this.audit.timeline(a, { opportunityId: id, customerId: opp.customerId, kind: body.kind, body: body.body, direction: body.direction ?? null, occurredAt, correctsId: body.correctsId ?? null });
-    const outbound = body.kind === "call" || body.direction === "outbound";
-    if (outbound) await this.prisma.opportunity.update({ where: { id }, data: { lastContactAt: occurredAt, firstContactAt: opp.firstContactAt ?? occurredAt } });
-    return entry;
+  addEntry(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(timelineEntrySchema.extend({ correctsId: z.string().uuid().optional() }))) body: z.infer<typeof timelineEntrySchema> & { correctsId?: string }) {
+    return this.opps.addTimelineEntry(a, id, body);
   }
 }

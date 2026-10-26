@@ -87,6 +87,7 @@ export class RetentionService {
       await tx.$executeRaw`SELECT set_config('uo.allow_purge', 'on', true)`;
       const old = { conversation: { createdAt: { lt: conversationsBefore } } };
       await tx.assistantFeedback.deleteMany({ where: { message: old } });
+      await tx.assistantAction.deleteMany({ where: { message: old } });
       await tx.assistantMessage.deleteMany({ where: old });
       return tx.assistantConversation.deleteMany({ where: { createdAt: { lt: conversationsBefore } } });
     });

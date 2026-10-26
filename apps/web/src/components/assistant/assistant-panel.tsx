@@ -1,13 +1,24 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
-import { Send, Sparkles, SquarePen, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Check, Send, Sparkles, SquarePen, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
-import { Button, Textarea } from "@/components/ui/primitives";
+import { ASSISTANT_ACTION_LABELS, type AssistantActionKind } from "@uo/shared";
+import { Badge, Button, Textarea } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/format";
+
+interface Action {
+  id: string;
+  kind: AssistantActionKind;
+  summary: string;
+  status: "pending" | "confirming" | "done" | "failed" | "dismissed";
+  error: string | null;
+  payload: { email?: { to: string; subject: string; body: string }; entry?: { body: string }; note?: string | null };
+  link: string | null;
+}
 
 interface Message {
   id: string;
@@ -15,11 +26,12 @@ interface Message {
   body: string;
   toolsUsed: string[];
   feedback?: { helpful: boolean }[];
+  actions?: Action[];
 }
 
 const UUID = /^\/opportunities\/([0-9a-f-]{36})/i;
-const ON_DEAL = ["What's blocking this deal?", "Which documents are still missing?", "What should I do next on this deal?"];
-const ELSEWHERE = ["Which of my deals are stuck?", "What are my overdue tasks?", "How do I submit a deal to the supplier?"];
+const ON_DEAL = ["What's blocking this deal?", "Remind me to call this customer tomorrow", "Draft an email asking for their latest bill"];
+const ELSEWHERE = ["Which of my deals are stuck?", "What are my overdue tasks?", "Move my overdue tasks to tomorrow"];
 
 /** Bold and links inside one line of an answer. Only links into the CRM ("/…") become links. */
 function inline(text: string, key: string): ReactNode[] {
@@ -75,6 +87,72 @@ export function Answer({ body }: { body: string }) {
   });
   flush();
   return <div className="space-y-2">{blocks}</div>;
+}
+
+/**
+ * A change the assistant prepared. Nothing happens until Confirm; the API then makes it as the user,
+ * with the same checks as the screens, and the card shows the outcome.
+ */
+function ActionCard({ action: initial }: { action: Action }) {
+  const qc = useQueryClient();
+  const [action, setAction] = useState(initial);
+  const [error, setError] = useState<string | null>(initial.error);
+  const decide = useMutation({
+    meta: { silent: true },
+    mutationFn: (verb: "confirm" | "dismiss") => api.post<Action>(`/assistant/actions/${action.id}/${verb}`),
+    onSuccess: (a) => {
+      setAction(a);
+      setError(null);
+      // The change may show on any open page (tasks, the deal, Home).
+      if (a.status === "done") void qc.invalidateQueries();
+    },
+    onError: (e) => {
+      const msg = e instanceof ApiError ? (e.issues.length ? e.issues.join(" ") : e.message) : "That didn't work. Try again.";
+      setError(msg);
+      if (e instanceof ApiError && e.status === 422) setAction((a) => ({ ...a, status: "failed" }));
+    },
+  });
+  const preview = action.payload.email ? `To ${action.payload.email.to}
+
+${action.payload.email.body}` : action.payload.entry?.body;
+
+  return (
+    <div className="mt-2 rounded-[var(--md-sys-shape-corner-medium)] border border-border bg-surface p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone="primary">{ASSISTANT_ACTION_LABELS[action.kind] ?? action.kind}</Badge>
+        {action.status === "done" && <Badge tone="success">Done</Badge>}
+        {action.status === "dismissed" && <Badge>Dismissed</Badge>}
+        {action.status === "failed" && <Badge tone="danger">Not done</Badge>}
+      </div>
+      <p className="mt-2 font-medium">{action.summary}</p>
+      {preview && (
+        <details className="mt-1 text-muted">
+          <summary className="min-h-6 cursor-pointer text-primary">{action.payload.email ? "Read the email" : "Read the text"}</summary>
+          <p className="mt-1 whitespace-pre-wrap">{preview}</p>
+        </details>
+      )}
+      {error && (
+        <p role="alert" className="mt-2 text-danger">
+          {error}
+        </p>
+      )}
+      {action.status === "pending" && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button size="sm" loading={decide.isPending && decide.variables === "confirm"} disabled={decide.isPending} onClick={() => decide.mutate("confirm")}>
+            <Check /> Confirm
+          </Button>
+          <Button size="sm" variant="ghost" disabled={decide.isPending} onClick={() => decide.mutate("dismiss")}>
+            Dismiss
+          </Button>
+        </div>
+      )}
+      {action.status === "done" && action.link && (
+        <Link href={action.link} className="mt-2 inline-block min-h-6 font-medium text-primary underline underline-offset-2">
+          Open
+        </Link>
+      )}
+    </div>
+  );
 }
 
 function Feedback({ message }: { message: Message }) {
@@ -170,7 +248,7 @@ export function AssistantPanel({ onClose }: { onClose: () => void }) {
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-4 text-sm" aria-live="polite">
         {messages.length === 0 && (
           <div className="space-y-3">
-            <p className="text-muted">Ask about {dealId ? "this deal" : "your deals"}, your tasks or how the CRM works. I can look things up but can't change anything.</p>
+            <p className="text-muted">Ask about {dealId ? "this deal" : "your deals"}, your tasks or how the CRM works. I can look things up and prepare changes (tasks, follow-ups, notes, emails, stage moves) that you confirm before anything is saved.</p>
             <div className="flex flex-col items-start gap-2">
               {(dealId ? ON_DEAL : ELSEWHERE).map((s) => (
                 <button key={s} type="button" className="min-h-8 rounded-full border border-border px-3 py-1 text-left text-sm hover:bg-[color-mix(in_srgb,var(--md-sys-color-on-surface)_8%,transparent)]" onClick={() => ask.mutate(s)}>
@@ -188,6 +266,7 @@ export function AssistantPanel({ onClose }: { onClose: () => void }) {
           ) : (
             <div key={m.id} className="mr-4">
               <Answer body={m.body} />
+              {m.actions?.map((a) => <ActionCard key={a.id} action={a} />)}
               {!m.id.startsWith("local-") && <Feedback message={m} />}
             </div>
           ),

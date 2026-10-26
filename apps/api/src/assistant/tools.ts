@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { STAGES, STAGE_KEYS, type StageKey, gateIssueArea, opportunityListQuerySchema } from "@uo/shared";
+import { ASSISTANT_ACTION_KINDS, STAGES, STAGE_KEYS, type StageKey, gateIssueArea, opportunityListQuerySchema } from "@uo/shared";
 import { z } from "zod";
 import { ActivitiesService } from "../activities/activities.service";
 import type { Actor } from "../common/actor";
@@ -12,6 +12,7 @@ import { OpportunityAccess } from "../opportunities/access.service";
 import { OpportunitiesService } from "../opportunities/opportunities.service";
 import { BordGaisElectricityService } from "../supplier-applications/bord-gais-electricity/bord-gais-electricity.service";
 import { FlogasElectricityService } from "../supplier-applications/flogas-electricity/flogas-electricity.service";
+import { PROPOSAL_DESCRIPTIONS, PROPOSAL_INPUTS, proposalTool } from "./actions";
 
 /** The longest tool result passed to the model; longer ones are cut. */
 const MAX_RESULT = 4000;
@@ -20,7 +21,7 @@ const DAY_MS = 86_400_000;
 const dealRef = z.string().trim().min(1).max(60).describe('The deal\'s id, or its number such as "UO-000123".');
 const views = opportunityListQuerySchema.shape.view.unwrap().options;
 
-/** The tools Claude may call. All read-only, all run with the asking user's own access. */
+/** The lookup tools Claude may call. Read-only, run with the asking user's own access. Changes go through the propose_ tools (actions.ts). */
 export const TOOL_INPUTS = {
   get_deal: z.object({ deal: dealRef }),
   what_blocks: z.object({ deal: dealRef, stage: z.enum(STAGE_KEYS).describe("The stage the user wants to move the deal to.") }),
@@ -48,13 +49,18 @@ const DESCRIPTIONS: Record<ToolName, string> = {
     "The supplier's own application form for a deal (Flogas or Bord Gáis electricity), if one applies, and what it still needs before it can go for signature, with links. Its Fill from bill button fills meter and address details from the uploaded bill.",
 };
 
-/** Tool definitions in the Messages API format, from the Zod inputs. */
+const schema = (s: z.ZodType) => z.toJSONSchema(s, { io: "input" }) as { type: "object"; [k: string]: unknown };
+
+/** Tool definitions in the Messages API format, from the Zod inputs: the lookups, then the propose_ tools. */
 export function toolDefinitions() {
-  return (Object.keys(TOOL_INPUTS) as ToolName[]).map((name) => ({
-    name,
-    description: DESCRIPTIONS[name],
-    input_schema: z.toJSONSchema(TOOL_INPUTS[name], { io: "input" }) as { type: "object"; [k: string]: unknown },
-  }));
+  return [
+    ...(Object.keys(TOOL_INPUTS) as ToolName[]).map((name) => ({ name, description: DESCRIPTIONS[name], input_schema: schema(TOOL_INPUTS[name]) })),
+    ...ASSISTANT_ACTION_KINDS.map((kind) => ({
+      name: proposalTool(kind),
+      description: `${PROPOSAL_DESCRIPTIONS[kind]} Nothing changes until the user clicks Confirm on the card this shows.`,
+      input_schema: schema(PROPOSAL_INPUTS[kind]),
+    })),
+  ];
 }
 
 /** The tab a "can't move yet" issue is fixed on (the web's gateIssueTarget, without supplier-specific tabs). */
@@ -137,7 +143,8 @@ export class AssistantTools {
       case "list_tasks": {
         const opportunityId = input.deal ? await this.dealId(actor, input.deal as string) : undefined;
         const page = await this.activities.list(actor, { scope: "mine", opportunityId, due: input.due as "overdue" | "today" | "week" | undefined, page: 1, pageSize: 25 });
-        return (page.items as { summary: string; type: string; dueDate: Date | null; priority: string; owner: { name: string } | null; opportunity: { id: string; number: number; name: string } | null }[]).map((a) => ({
+        return (page.items as { id: string; summary: string; type: string; dueDate: Date | null; priority: string; owner: { name: string } | null; opportunity: { id: string; number: number; name: string } | null }[]).map((a) => ({
+          id: a.id,
           task: a.summary,
           type: a.type,
           due: isoDay(a.dueDate),

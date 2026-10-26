@@ -1,12 +1,14 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { HttpException, Inject, Injectable, Logger } from "@nestjs/common";
 import { can, today } from "@uo/shared";
+import { z } from "zod";
 import { AuditService } from "../audit/audit.service";
 import { ENV, type Env } from "../config/env";
 import type { Actor } from "../common/actor";
-import { Forbidden, NotFound } from "../common/errors";
+import { Conflict, Forbidden, NotFound, RuleViolation } from "../common/errors";
 import { PrismaService } from "../common/prisma.service";
 import { dateOnly } from "../common/values";
+import { AssistantActions, type Prepared, proposalKind } from "./actions";
 import { assistantInstructions } from "./instructions";
 import { AssistantTools, toolDefinitions } from "./tools";
 
@@ -16,6 +18,8 @@ export const ASSISTANT_MODEL = Symbol("ASSISTANT_MODEL");
 
 /** Tool calls per question; past this the model is asked to answer with what it has. */
 const MAX_TOOL_CALLS = 6;
+/** Changes one answer may prepare. */
+const MAX_PROPOSALS = 5;
 /** Earlier turns of the conversation sent with each question. */
 const HISTORY = 20;
 const SORRY = "Sorry, I couldn't answer that just now. Try again in a minute, or ask it a different way.";
@@ -28,6 +32,7 @@ export class AssistantService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly tools: AssistantTools,
+    private readonly actions: AssistantActions,
     @Inject(ASSISTANT_MODEL) private readonly model: AssistantModel,
     @Inject(ENV) private readonly env: Env,
   ) {}
@@ -40,14 +45,15 @@ export class AssistantService {
 
   async messages(actor: Actor, conversationId: string) {
     await this.conversation(actor, conversationId);
-    return this.prisma.assistantMessage.findMany({
+    const rows = await this.prisma.assistantMessage.findMany({
       where: { conversationId },
       orderBy: { createdAt: "asc" },
-      select: { id: true, role: true, body: true, toolsUsed: true, createdAt: true, feedback: { select: { helpful: true } } },
+      select: { id: true, role: true, body: true, toolsUsed: true, createdAt: true, feedback: { select: { helpful: true } }, actions: { orderBy: { createdAt: "asc" } } },
     });
+    return rows.map((m) => ({ ...m, actions: m.actions.map((a) => this.actions.view(a)) }));
   }
 
-  /** Answers one question. The user's message and the answer are stored; nothing else changes. */
+  /** Answers one question. The user's message, the answer and any changes it prepared are stored; nothing else changes. */
   async ask(actor: Actor, input: { conversationId?: string | null; opportunityId?: string | null; message: string }) {
     const asked = await this.prisma.assistantMessage.count({ where: { role: "user", conversation: { userId: actor.id }, createdAt: { gte: dateOnly(today()) } } });
     if (asked >= this.env.AI_ASSISTANT_DAILY_LIMIT) throw new HttpException("You've reached today's assistant limit. It resets at midnight.", 429);
@@ -58,26 +64,31 @@ export class AssistantService {
     const earlier = await this.prisma.assistantMessage.findMany({ where: { conversationId: conversation.id }, orderBy: { createdAt: "desc" }, take: HISTORY, select: { role: true, body: true } });
     const question = await this.prisma.assistantMessage.create({ data: { conversationId: conversation.id, role: "user", body: input.message, toolsUsed: [] } });
 
-    const context = dealId ? `(I'm looking at deal ${dealId}.)\n\n` : "";
+    // Today's date goes with the question (not the cached instructions) so "next Tuesday" can be scheduled.
+    const now = today();
+    const weekday = new Date(`${now}T12:00:00Z`).toLocaleDateString("en-IE", { weekday: "long", timeZone: "UTC" });
+    const context = `(Today is ${weekday} ${now}.${dealId ? ` I'm looking at deal ${dealId}.` : ""})\n\n`;
     const messages: Anthropic.MessageParam[] = [...earlier.reverse().map((m) => ({ role: m.role as "user" | "assistant", content: m.body })), { role: "user", content: context + input.message }];
-    const { answer, toolsUsed, usage } = await this.converse(actor, messages);
+    const { answer, toolsUsed, usage, proposals } = await this.converse(actor, messages);
 
     const reply = await this.prisma.assistantMessage.create({
       data: { conversationId: conversation.id, role: "assistant", body: answer, toolsUsed, model: this.env.AI_ASSISTANT_MODEL, inputTokens: usage.input, outputTokens: usage.output },
     });
+    const actions = await this.actions.save(actor, reply.id, proposals);
     await this.audit.log(actor, {
       action: "assistant.message",
       entityType: "assistant_conversation",
       entityId: conversation.id,
       summary: "Asked the CRM assistant",
-      data: { questionId: question.id, answerId: reply.id, tools: toolsUsed, model: this.env.AI_ASSISTANT_MODEL, inputTokens: usage.input, outputTokens: usage.output, cachedTokens: usage.cached },
+      data: { questionId: question.id, answerId: reply.id, tools: toolsUsed, proposed: actions.map((a) => a.kind), model: this.env.AI_ASSISTANT_MODEL, inputTokens: usage.input, outputTokens: usage.output, cachedTokens: usage.cached },
     });
-    return { conversationId: conversation.id, message: { id: reply.id, role: "assistant", body: answer, toolsUsed, createdAt: reply.createdAt, feedback: [] } };
+    return { conversationId: conversation.id, message: { id: reply.id, role: "assistant", body: answer, toolsUsed, createdAt: reply.createdAt, feedback: [], actions } };
   }
 
-  /** The tool loop: Claude calls read-only tools (as the user) until it can answer. */
+  /** The tool loop: Claude calls read-only tools and prepares changes (as the user) until it can answer. */
   private async converse(actor: Actor, messages: Anthropic.MessageParam[]) {
     const toolsUsed: string[] = [];
+    const proposals: Prepared[] = [];
     const usage = { input: 0, output: 0, cached: 0 };
     const system: Anthropic.TextBlockParam[] = [{ type: "text", text: assistantInstructions(), cache_control: { type: "ephemeral" } }];
     try {
@@ -86,10 +97,10 @@ export class AssistantService {
         usage.input += res.usage.input_tokens;
         usage.output += res.usage.output_tokens;
         usage.cached += res.usage.cache_read_input_tokens ?? 0;
-        if (res.stop_reason === "refusal") return { answer: "I can't help with that one.", toolsUsed, usage };
+        if (res.stop_reason === "refusal") return { answer: "I can't help with that one.", toolsUsed, usage, proposals: [] };
         if (res.stop_reason !== "tool_use") {
           const text = res.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n").trim();
-          return { answer: text || SORRY, toolsUsed, usage };
+          return { answer: text || SORRY, toolsUsed, usage, proposals };
         }
         // Thinking and tool_use blocks go back unchanged, then one result per tool call.
         messages.push({ role: "assistant", content: res.content });
@@ -101,15 +112,31 @@ export class AssistantService {
             continue;
           }
           toolsUsed.push(block.name);
-          const out = await this.tools.run(actor, block.name, block.input);
+          const kind = proposalKind(block.name);
+          const out = kind ? await this.propose(actor, kind, block.input, proposals) : await this.tools.run(actor, block.name, block.input);
           results.push({ type: "tool_result", tool_use_id: block.id, content: out.text, ...(out.error ? { is_error: true } : {}) });
         }
         messages.push({ role: "user", content: results });
       }
-      return { answer: SORRY, toolsUsed, usage };
+      return { answer: SORRY, toolsUsed, usage, proposals: [] };
     } catch (e) {
       this.log.warn({ err: (e as Error).message, status: (e as { status?: number }).status }, "Assistant request failed");
-      return { answer: SORRY, toolsUsed, usage };
+      return { answer: SORRY, toolsUsed, usage, proposals: [] };
+    }
+  }
+
+  /** A propose_ tool call: checked and described now, stored with the answer, made only when the user confirms. */
+  private async propose(actor: Actor, kind: NonNullable<ReturnType<typeof proposalKind>>, input: unknown, proposals: Prepared[]) {
+    if (proposals.length >= MAX_PROPOSALS) return { text: `At most ${MAX_PROPOSALS} changes per answer. Offer the rest next time.`, error: true };
+    try {
+      const p = await this.actions.prepare(actor, kind, input);
+      proposals.push(p);
+      return { text: JSON.stringify({ prepared: p.summary, note: "Shown to the user as a card with Confirm. Nothing has changed yet." }), error: false };
+    } catch (e) {
+      if (e instanceof z.ZodError) return { text: `Invalid input: ${e.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}`, error: true };
+      if (e instanceof RuleViolation) return { text: `Can't prepare that: ${e.issues.join(" ")}`, error: true };
+      if (e instanceof NotFound || e instanceof Forbidden || e instanceof Conflict) return { text: e.message, error: true };
+      throw e;
     }
   }
 
