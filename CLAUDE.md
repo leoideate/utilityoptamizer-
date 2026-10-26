@@ -66,9 +66,9 @@ Schema changes: edit `apps/api/prisma/schema.prisma` and add a migration folder 
 - **Next.js page files** may only export the page component; put shared constants in `src/lib` or `src/components`.
 - **The team guide** (menu: Help & guide, `/help`) is `apps/api/assets/crm-guide.html`, a self-contained page with its screenshots embedded, served to signed-in users by `GET /api/help/guide` with its own strict CSP (no external loads) and framed by the web app. Replace the file to update it.
 
-## Third-party skills
+## Leoideate skills
 
-`.claude/skills/ecc-*` are general skills from Everything Claude Code (MIT; source, commit and review notes in `.claude/skills/ECC-SOURCE.md`). Where one disagrees with this file or the `utilityoptamizer-` skill, this repository's rules win. Review any update before replacing them.
+`.claude/skills/leoideate-*` are general skills selected and reviewed by Leoideate (architect) with Claude, adapted from Everything Claude Code (MIT; credit, source commit and review notes in `.claude/skills/SKILLS.md`, licence notice in `THIRD-PARTY-NOTICES`). Where one disagrees with this file or the `utilityoptamizer-` skill, this repository's rules win. Review any update before replacing them.
 
 ## Product rules to preserve
 
