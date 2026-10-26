@@ -94,4 +94,31 @@ describe("master sheet migration", () => {
     expect(parseSheetRow("Energia", 3, { ...base, utilityType: null, meter: "1234567" }, { today: TODAY }).row).toMatchObject({ fuel: "gas", gprn: "1234567", mprn: null });
     expect(parseSheetRow("Worldpay", 3, { ...base, meter: null, utilityType: null }, { today: TODAY }).row).toMatchObject({ serviceType: "merchant_services", fuel: null });
   });
+
+  it("reads the aligned layout: a Supplier column, +353 numbers, Contract start and term in years", () => {
+    expect(migrationColumn("Contract start")).toBe("startDate");
+    expect(migrationColumn("Contract term (years)")).toBe("term");
+    expect(migrationColumn("Contact number (+353)")).toBe("phoneIntl");
+    expect(migrationColumn("Supplier")).toBe("supplier");
+    expect(supplierFromTab("Flogas Customers").name).toBe("Flogas");
+    const { row } = parseSheetRow("Customers", 2, { ...base, supplier: "Flogas", phone: "0871234567", phoneIntl: "+353871234567", country: "Ireland" }, { today: TODAY });
+    expect(row).toMatchObject({ supplier: { name: "Flogas" }, phone: "+353871234567", country: "IE", sheetStatus: "Ready for Invoice", meterCheck: null });
+  });
+
+  it("ends clawed-back contracts, skips duplicates and errors, and keys rows by expiry when there's no start date", () => {
+    expect(parseSheetRow("Flogas", 2, { ...base, contractStatus: "Clawback" }, { today: TODAY }).row).toMatchObject({ contractStatus: "ended", sheetStatus: "Clawback" });
+    expect(parseSheetRow("Flogas", 2, { ...base, contractStatus: "Duplicate" }, { today: TODAY }).row).toBeNull();
+    expect(parseSheetRow("Flogas", 2, { ...base, contractStatus: "Error" }, { today: TODAY }).row).toBeNull();
+    expect(parseSheetRow("Flogas", 2, { ...base, contractStatus: "Under Investigation" }, { today: TODAY }).row!.contractStatus).toBe("live");
+    expect(parseSheetRow("Flogas", 2, { ...base, startDate: null, signDate: null }, { today: TODAY }).row!.importKey).toBe("sheet:flogas:10012345678:2028-06-11");
+  });
+
+  it("imports rows with a missing or non-standard meter number, flagged for an administrator", () => {
+    const missing = parseSheetRow("Flogas", 2, { ...base, utilityType: "Gas", meter: null }, { today: TODAY });
+    expect(missing.row).toMatchObject({ fuel: "gas", gprn: null, meterCheck: "missing" });
+    expect(missing.warnings.join()).toMatch(/No GPRN; imported with a task/);
+    expect(parseSheetRow("Flogas", 2, { ...base, utilityType: null, meter: null }, { today: TODAY }).row).toBeNull();
+    const short = parseSheetRow("Flogas", 2, { ...base, utilityType: "Gas", meter: "475303" }, { today: TODAY, allowFormatExceptions: true });
+    expect(short.row).toMatchObject({ gprn: "475303", meterCheck: "format", formatExceptionReason: FORMAT_EXCEPTION_REASON });
+  });
 });

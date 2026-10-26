@@ -125,6 +125,43 @@ describe("master sheet migration", () => {
     });
   });
 
+  it("imports the aligned sheet layout, with a task and a notification for meter numbers to fix", async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Flogas Customers");
+    const cols = ["Business name", "Trading name", "Country", "Contact person", "Contact number", "Contact number (+353)", "Email", "MPRN/GPRN", "Supplier", "Utility type", "Product type", "Contract start", "Expiry date", "Contract term (years)", "Contract status", "Sales agent"];
+    ws.addRow(cols);
+    const expiry = irish(addMonths(TODAY, 20));
+    ws.addRow(["Aligned Gas Ltd", null, "Ireland", "Pat Kelly", "0861112223", "+353861112223", null, null, "Flogas", "Gas", "MBU (Rate Card 4)", null, expiry, 2, "Clawback", "Sarah Sales"]);
+    ws.addRow(["Short Meter Ltd", null, "Ireland", null, null, null, null, "475303", "Flogas", "Gas", "SBU (Rate Card 4)", null, expiry, 1, "Accepted", "Sarah Sales"]);
+    ws.addRow(["Aligned Gas Limited", null, "Ireland", null, "0869998887", null, null, "10077777777", "Flogas", "Electricity", "GP (Rate Card 3)", null, expiry, 2, "Accepted", "Sarah Sales"]);
+    const tabs = await readMasterSheet(Buffer.from(await wb.xlsx.writeBuffer()));
+    const before = await t.prisma.notification.count();
+    const r = await migration.importCustomers(tabs, { commit: true, allowFormatExceptions: true });
+    expect(r.lines.map((l) => l.action)).toEqual(["created", "created", "created"]);
+    expect(r.meterChecks).toBe(2);
+    // Same business name, nothing else shared: a separate customer, flagged for a manager to merge.
+    expect(r.lines[2].warnings).toMatch(/Same name as Flogas Customers row 2, but no shared email, phone or Eircode/);
+
+    const deal = await t.prisma.opportunity.findFirstOrThrow({ where: { companyName: "Aligned Gas Ltd" }, include: { contracts: true, sites: { include: { meterPoints: true } } } });
+    expect(deal).toMatchObject({ applicationStatus: "Clawback", phone: "+353861112223" });
+    expect(deal.contracts[0]).toMatchObject({ status: "ended", termMonths: 24 });
+    expect(deal.sites[0]).toMatchObject({ country: "IE" });
+    expect(deal.sites[0].meterPoints[0]).toMatchObject({ fuel: "gas", gprn: null });
+
+    const adminUser = await t.prisma.user.findFirstOrThrow({ where: { roles: { some: { role: "administrator" } } }, orderBy: { createdAt: "asc" } });
+    const tasks = await t.prisma.activity.findMany({ where: { automationKey: "migration_meter_check" }, orderBy: { summary: "asc" } });
+    expect(tasks.map((a) => [a.summary, a.ownerId, a.priority, a.status])).toEqual([
+      ["Add the missing GPRN (imported without one)", adminUser.id, "high", "open"],
+      ["Check the GPRN 475303: it isn't in the standard format", adminUser.id, "high", "open"],
+    ]);
+    const notes = await t.prisma.notification.findMany({ where: { userId: adminUser.id }, orderBy: { createdAt: "desc" } });
+    expect(await t.prisma.notification.count()).toBeGreaterThan(before);
+    expect(notes[0]).toMatchObject({ title: "2 imported customers need an MPRN or GPRN added or checked", link: "/activities" });
+
+    const list = expectStatus(await admin.get("/customers?q=Aligned%20Gas%20Ltd"), 200).body;
+    expect(list.items[0].contract).toMatchObject({ applicationStatus: "Clawback", country: "IE", termMonths: 24, status: "ended" });
+  });
+
   it("attaches signed PDFs by meter number, file name or a manual match", async () => {
     const form = await PDFDocument.create();
     form.addPage();

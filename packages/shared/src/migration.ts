@@ -30,13 +30,16 @@ export const MIGRATION_FIELDS = [
   "postedBy",
   "reviewer",
   "reviewDate",
+  "supplier",
+  "phoneIntl",
+  "country",
 ] as const;
 export type MigrationField = (typeof MIGRATION_FIELDS)[number];
 
 /** Header spellings, compared lowercase with everything but letters and digits removed. */
 const ALIASES: Record<MigrationField, string[]> = {
   signDate: ["contractsigndate", "signdate", "datesigned", "signeddate"],
-  startDate: ["contractstartdate", "startdate", "livedate"],
+  startDate: ["contractstartdate", "contractstart", "startdate", "livedate"],
   contractStatus: ["contractstatus", "status"],
   businessName: ["businessname", "company", "companyname", "legalname", "customer", "customername"],
   tradingName: ["tradingname", "tradingas"],
@@ -48,7 +51,7 @@ const ALIASES: Record<MigrationField, string[]> = {
   utilityType: ["utilitytype", "utility", "fuel", "service"],
   connectionType: ["connectiontype", "saletype"],
   productType: ["producttype", "product", "tariff", "ratecard"],
-  term: ["termyrs", "term", "termyears", "termmonths"],
+  term: ["termyrs", "term", "termyears", "termmonths", "contracttermyears", "contractterm"],
   salesAgent: ["salesagentname", "salesagent", "agent", "salesperson"],
   contractIssue: ["commentcontractissue", "contractissue"],
   expiryDate: ["expiredate", "expirydate", "enddate", "contractenddate"],
@@ -57,6 +60,11 @@ const ALIASES: Record<MigrationField, string[]> = {
   postedBy: ["postedby"],
   reviewer: ["reviewer", "reviewedby"],
   reviewDate: ["reviewdate"],
+  /** A per-row supplier; otherwise the tab's name is the supplier. */
+  supplier: ["supplier", "suppliername", "currentsupplier"],
+  /** The same number in international format ("Contact number (+353)"); preferred over the local one. */
+  phoneIntl: ["contactnumber353", "phone353", "internationalnumber"],
+  country: ["country"],
 };
 const BY_ALIAS = new Map(Object.entries(ALIASES).flatMap(([field, names]) => names.map((n) => [n, field as MigrationField] as const)));
 
@@ -167,9 +175,12 @@ export interface SheetSupplier {
   kind: "energy" | "merchant";
 }
 
-/** The supplier a tab is for: its name, with the known Bord Gáis spellings normalised. */
+/**
+ * The supplier a tab (or a row's Supplier cell) names, with the known Bord Gáis spellings normalised
+ * and list words dropped ("Flogas Customers" is Flogas).
+ */
 export function supplierFromTab(tab: string): SheetSupplier {
-  const name = tab.trim();
+  const name = tab.replace(/\b(customers?|list|sheet|accounts?|contracts?)\b/gi, "").replace(/\s+/g, " ").trim() || tab.trim();
   if (/worldpay/i.test(name)) return { name: "Worldpay", kind: "merchant" };
   if (isBordGaisSupplier(name)) return { name: BORD_GAIS_SUPPLIER_NAME, kind: "energy" };
   return { name, kind: "energy" };
@@ -179,7 +190,9 @@ export function supplierFromTab(tab: string): SheetSupplier {
 export const sameSupplier = (a: string, b: string) => supplierKey(a) === supplierKey(b) || (isBordGaisSupplier(a) && isBordGaisSupplier(b));
 
 /** Statuses that mean the contract never went ahead; those rows are skipped and listed for review. */
-const NOT_LIVE = /cancel|reject|declin|withdraw|lost|void|terminat|not proceed/i;
+const NOT_LIVE = /cancel|reject|declin|withdraw|lost|void|terminat|not proceed|duplicate|error/i;
+/** Statuses for a contract that went live but has since ended (commission clawed back). */
+const ENDED = /clawback|claw back|clawed/i;
 
 export interface MigrationRow {
   tab: string;
@@ -202,8 +215,14 @@ export interface MigrationRow {
   signDate: string | null;
   startDate: string | null;
   endDate: string | null;
-  /** Ended when the expiry date has passed. */
+  /** Ended when the expiry date has passed, or the status says it ended (clawback). */
   contractStatus: "live" | "ended";
+  /** The sheet's own status ("Accepted", "Clawback"...), shown on the deal as its application status. */
+  sheetStatus: string | null;
+  /** ISO country code of the supply site. */
+  country: string;
+  /** The meter number is missing or not in the standard format: an administrator gets a task to fix it. */
+  meterCheck: "missing" | "format" | null;
   salesAgent: string | null;
   /** The sheet's columns the CRM has no field for, as label/value pairs for the timeline. */
   notes: { label: string; value: string }[];
@@ -246,7 +265,7 @@ export function parseSheetRow(
 ): ParsedSheetRow {
   const issues: string[] = [];
   const warnings: string[] = [];
-  const supplier = supplierFromTab(tab);
+  const supplier = supplierFromTab(text(cells.supplier) ?? tab);
   const dates: Partial<Record<MigrationField, string | null>> = {};
   for (const f of DATE_FIELDS) {
     const d = sheetDate(cells[f]);
@@ -270,7 +289,8 @@ export function parseSheetRow(
     else if (meter && /^\d{11}$/.test(meter)) fuel = "electricity";
     else if (meter && /^\d{7}$/.test(meter)) fuel = "gas";
     else issues.push(utility ? `Utility type "${text(cells.utilityType)}" isn't Gas or Electricity.` : "No utility type, and the meter number doesn't show whether it's gas or electricity.");
-    if (!meter) issues.push("No MPRN or GPRN.");
+    if (!meter && !fuel) issues.push("No MPRN or GPRN, and no utility type to say which it should be.");
+    else if (!meter) warnings.push(`No ${fuel === "gas" ? "GPRN" : "MPRN"}; imported with a task for an administrator to add it.`);
   }
   let mprn: string | null = null;
   let gprn: string | null = null;
@@ -281,7 +301,7 @@ export function parseSheetRow(
     const errors = meterPointErrors({ fuel, mprn, gprn });
     if (errors.length && opts.allowFormatExceptions) {
       formatExceptionReason = FORMAT_EXCEPTION_REASON;
-      warnings.push(`${errors.join(" ")} Imported with a format exception.`);
+      warnings.push(`${errors.join(" ")} Imported with a format exception and a task for an administrator to check it.`);
     } else issues.push(...errors);
   }
 
@@ -312,7 +332,7 @@ export function parseSheetRow(
       tradingName: text(cells.tradingName),
       contactName: text(cells.contactPerson),
       address: parseSheetAddress(cells.address),
-      phone: sheetPhone(cells.phone),
+      phone: sheetPhone(cells.phoneIntl) ?? sheetPhone(cells.phone),
       email: text(cells.email)?.toLowerCase() ?? null,
       mprn,
       gprn,
@@ -323,10 +343,14 @@ export function parseSheetRow(
       signDate: dates.signDate ?? null,
       startDate,
       endDate,
-      contractStatus: endDate && endDate < opts.today ? "ended" : "live",
+      contractStatus: (endDate && endDate < opts.today) || (statusText && ENDED.test(statusText)) ? "ended" : "live",
+      sheetStatus: statusText,
+      meterCheck: supplier.kind !== "energy" ? null : !meter ? "missing" : formatExceptionReason ? "format" : null,
+      // The sites are Irish; only a sheet that says Northern Ireland or the UK changes that.
+      country: /^(northern ireland|ni|uk|united kingdom|gb)$/i.test(text(cells.country) ?? "") ? "GB" : "IE",
       salesAgent: text(cells.salesAgent),
       notes,
-      importKey: `sheet:${supplierKey(supplier.name)}:${who}:${startDate ?? dates.signDate ?? ""}`,
+      importKey: `sheet:${supplierKey(supplier.name)}:${who}:${startDate ?? dates.signDate ?? endDate ?? ""}`,
     },
   };
 }

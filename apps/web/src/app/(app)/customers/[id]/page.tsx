@@ -52,6 +52,20 @@ interface Profile {
   /** Supply points this customer has occupied (change of entity history), including ones since taken over. */
   occupancies: { id: string; fromDate: string | null; recordedAt: string; site: { id: string; label: string | null; line1: string; customerId: string | null; meterPoints: { mprn: string | null; gprn: string | null }[] } }[];
   opportunities: { id: string; number: number; name: string; serviceType: "electricity"; saleType: string; outcome: "open"; stage: { name: string }; owner: { name: string } | null; createdAt: string }[];
+  /** One line per meter and supplier: a customer can be with several suppliers, and change over time. */
+  supplies: {
+    id: string;
+    fuel: "electricity" | "gas";
+    meter: string | null;
+    supplier: string | null;
+    product: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    status: string;
+    applicationStatus: string | null;
+    opportunityId: string;
+    opportunityNumber: number;
+  }[];
   canReadBank: boolean;
 }
 
@@ -169,6 +183,50 @@ export default function CustomerPage() {
       )}
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="space-y-6">
+          {data.supplies.length > 0 && (
+            <Card>
+              <CardHeader
+                title={`Supplies and contracts (${data.supplies.length})`}
+                description={(() => {
+                  const suppliers = [...new Set(data.supplies.filter((s) => s.status !== "ended").map((s) => s.supplier).filter(Boolean))];
+                  return suppliers.length > 1 ? `With ${suppliers.length} suppliers: ${suppliers.join(", ")}.` : "Every meter, its supplier and contract, current first.";
+                })()}
+              />
+              <div className="overflow-x-auto" tabIndex={0}>
+                <table className="w-full min-w-[720px] text-sm">
+                  <thead className="bg-surface-2 text-left text-muted">
+                    <tr>
+                      {["MPRN/GPRN", "Utility", "Supplier", "Product", "Start", "Expiry", "Status", "Deal"].map((h, i) => (
+                        <th key={h} className={i === 0 ? "px-5 py-2.5 font-medium" : "px-3 py-2.5 font-medium"}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.supplies.map((s) => (
+                      <tr key={s.id} className="border-t border-border">
+                        <td className="tabular px-5 py-2.5">{s.meter ?? <span className="text-warning">Missing</span>}</td>
+                        <td className="px-3 py-2.5 capitalize">{s.fuel}</td>
+                        <td className="px-3 py-2.5">{s.supplier ?? "—"}</td>
+                        <td className="px-3 py-2.5">{s.product ?? "—"}</td>
+                        <td className="px-3 py-2.5">{date(s.startDate)}</td>
+                        <td className="px-3 py-2.5">{date(s.endDate)}</td>
+                        <td className="px-3 py-2.5">
+                          <Badge tone={s.status === "live" ? "success" : s.status === "ended" ? "neutral" : "info"}>{s.applicationStatus ?? s.status.charAt(0).toUpperCase() + s.status.slice(1)}</Badge>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <Link href={`/opportunities/${s.opportunityId}`} className="inline-block py-0.5 text-primary hover:underline">
+                            {ref(s.opportunityNumber)}
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
           <Card>
             <CardHeader title={`Opportunities (${data.opportunities.length})`} description="Every sale and renewal for this customer, including completed ones." />
             {!data.opportunities.length ? (

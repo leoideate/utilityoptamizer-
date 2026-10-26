@@ -202,7 +202,41 @@ export class CustomersService {
       include: { stage: { select: { key: true, name: true } }, owner: { select: { id: true, name: true } } },
     });
     const mergedInto = c.mergedIntoId ? await this.prisma.customer.findUnique({ where: { id: c.mergedIntoId }, select: { id: true, legalName: true } }) : null;
-    return { ...c, opportunities, mergedInto, canReadBank: can(actor, "bank.read") };
+    // Every energy contract on a deal the actor can see, one per meter and supplier: in progress, then live, then ended.
+    const contracts = await this.prisma.energyContract.findMany({
+      where: { opportunity: { AND: [{ customerId: id }, this.access.visibleWhere(actor)] }, status: { notIn: ["draft", "quoted", "cancelled"] } },
+      orderBy: [{ status: "asc" }, { activationDate: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        fuel: true,
+        status: true,
+        pricingPlan: true,
+        termMonths: true,
+        activationDate: true,
+        contractEndDate: true,
+        selectedSupplier: { select: { name: true } },
+        site: { select: { meterPoints: { select: { fuel: true, mprn: true, gprn: true } } } },
+        opportunity: { select: { id: true, number: true, applicationStatus: true } },
+      },
+    });
+    const supplies = contracts.map((k) => {
+      const m = k.site?.meterPoints.find((p) => p.fuel === k.fuel);
+      return {
+        id: k.id,
+        fuel: k.fuel,
+        meter: m?.mprn ?? m?.gprn ?? null,
+        supplier: k.selectedSupplier?.name ?? null,
+        product: k.pricingPlan,
+        termMonths: k.termMonths,
+        startDate: isoDay(k.activationDate),
+        endDate: isoDay(k.contractEndDate),
+        status: k.status,
+        applicationStatus: k.opportunity.applicationStatus,
+        opportunityId: k.opportunity.id,
+        opportunityNumber: k.opportunity.number,
+      };
+    });
+    return { ...c, opportunities, supplies, mergedInto, canReadBank: can(actor, "bank.read") };
   }
 
   async list(actor: Actor, q: { q?: string; page: number; pageSize: number }): Promise<Page<unknown>> {
@@ -260,16 +294,31 @@ export class CustomersService {
         activationDate: true,
         contractEndDate: true,
         selectedSupplier: { select: { name: true } },
-        site: { select: { meterPoints: { select: { fuel: true, mprn: true, gprn: true } } } },
-        opportunity: { select: { id: true, customerId: true, owner: { select: { name: true } } } },
+        site: { select: { country: true, meterPoints: { select: { fuel: true, mprn: true, gprn: true } } } },
+        opportunity: { select: { id: true, customerId: true, applicationStatus: true, owner: { select: { name: true } } } },
       },
     });
+    // A customer can have several suppliers at once (electricity with one, gas with another) or
+    // over time: the latest contract fills the columns, and every supplier, utility and meter is listed.
+    const all = new Map<string, { suppliers: string[]; fuels: string[]; meters: string[] }>();
+    for (const k of contracts) {
+      const id = k.opportunity.customerId!;
+      const seen = all.get(id) ?? { suppliers: [], fuels: [], meters: [] };
+      const m = k.site?.meterPoints.find((p) => p.fuel === k.fuel);
+      const meterNo = m?.mprn ?? m?.gprn;
+      const supplierName = k.selectedSupplier?.name;
+      if (supplierName && !seen.suppliers.includes(supplierName)) seen.suppliers.push(supplierName);
+      if (!seen.fuels.includes(k.fuel)) seen.fuels.push(k.fuel);
+      if (meterNo && !seen.meters.includes(meterNo)) seen.meters.push(meterNo);
+      all.set(id, seen);
+    }
     const byCustomer = new Map<string, unknown>();
     for (const k of contracts) {
       const id = k.opportunity.customerId!;
       if (byCustomer.has(id)) continue;
       const meter = k.site?.meterPoints.find((m) => m.fuel === k.fuel);
       byCustomer.set(id, {
+        ...all.get(id),
         opportunityId: k.opportunity.id,
         supplier: k.selectedSupplier?.name ?? null,
         fuel: k.fuel,
@@ -279,6 +328,9 @@ export class CustomersService {
         startDate: isoDay(k.activationDate),
         endDate: isoDay(k.contractEndDate),
         status: k.status,
+        /** The supplier's own status where recorded ("Accepted", "Clawback"), as the master sheet shows it. */
+        applicationStatus: k.opportunity.applicationStatus,
+        country: k.site?.country ?? null,
         salesAgent: k.opportunity.owner?.name ?? null,
       });
     }

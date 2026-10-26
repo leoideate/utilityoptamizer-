@@ -38,6 +38,7 @@ async function main() {
     if (r.unmatchedAgents.length) console.log(`  sales agents with no matching user (left unassigned): ${r.unmatchedAgents.join(", ")}`);
     if (r.ignoredColumns.length) console.log(`  columns not imported: ${r.ignoredColumns.join(", ")}`);
     console.log(`  live contracts ending within 120 days (renewals open at the next 07:00 run): ${r.renewalsSoon}`);
+    if (r.meterChecks) console.log(`  missing or unverified MPRN/GPRN (a task for an administrator on each, and one notification): ${r.meterChecks}`);
     console.log(`  report: ${report}`);
   } finally {
     await app.close();
