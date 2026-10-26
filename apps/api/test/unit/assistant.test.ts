@@ -19,7 +19,7 @@ describe("the CRM assistant", () => {
 
   it("describes every tool with an object input schema", () => {
     const tools = toolDefinitions();
-    expect(tools.map((t) => t.name)).toEqual(["get_deal", "what_blocks", "list_documents", "list_tasks", "find_deals", "energy_details"]);
+    expect(tools.map((t) => t.name)).toEqual(["get_deal", "what_blocks", "list_documents", "list_tasks", "find_deals", "energy_details", "application_issues"]);
     for (const t of tools) expect(t.input_schema.type).toBe("object");
   });
 

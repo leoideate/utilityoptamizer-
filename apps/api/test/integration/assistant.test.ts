@@ -89,6 +89,7 @@ describe("the CRM assistant", () => {
       ["find_deals", { view: "my_open" }],
       ["find_deals", { view: "all", search: "Test" }],
       ["energy_details", { deal }],
+      ["application_issues", { deal }],
     ];
     for (const [name, input] of calls) {
       model.script = [toolUse(name, input), text("Done.")];

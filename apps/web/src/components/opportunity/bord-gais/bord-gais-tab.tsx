@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Save, ShieldCheck, UserPlus } from "lucide-react";
+import { CheckCircle2, Save, ShieldCheck, Sparkles, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   APPLICATION_STATUS_LABELS,
@@ -13,14 +13,18 @@ import {
   type FormSignerRole,
   bordGaisContactName,
   bordGaisElectricityIssues,
+  bordGaisFillSave,
+  bordGaisFillSuggestions,
 } from "@uo/shared";
 import { TabPanel, Tabs } from "@/components/ui/overlays";
 import { Badge, Button, Card, CardHeader, IssueList, Skeleton, type Tone } from "@/components/ui/primitives";
 import { type ApiError, api } from "@/lib/api";
+import { useUser } from "@/lib/session";
 import type { Workspace } from "@/lib/types";
 import { useRefreshOpportunity } from "../common";
 import { DocumentPanel } from "../supplier-application/document-panel";
 import { TabSummary } from "../supplier-application/fields";
+import { BILL_FILLABLE, FillFromBillDialog } from "../supplier-application/fill-from-bill";
 import type { BankEdit } from "../supplier-application/types";
 import { AccountTab, AgreementTab, DebitTab, DeclarationTab, PremisesTab, SupplyTab } from "./bord-gais-fields";
 import { type BordGaisView, forValidation, isEmptyPayload, savePayload } from "./draft";
@@ -48,6 +52,8 @@ export function BordGaisTab({ opp }: { opp: Workspace }) {
   const [showErrors, setShowErrors] = useState(false);
   const [saveIssues, setSaveIssues] = useState<string[]>([]);
   const [validated, setValidated] = useState(false);
+  const [filling, setFilling] = useState(false);
+  const aiReading = useUser().features.aiReading;
 
   const dirty = !!saved && !!draft && !isEmptyPayload(savePayload(saved, draft, bank, confirmIban));
   useEffect(() => {
@@ -115,6 +121,23 @@ export function BordGaisTab({ opp }: { opp: Workspace }) {
 
   return (
     <div className="space-y-4">
+      {filling && (
+        <FillFromBillDialog<typeof v.data, BordGaisView>
+          opportunityId={opp.id}
+          endpoint={base}
+          data={v.data}
+          suggest={bordGaisFillSuggestions}
+          saveFor={bordGaisFillSave}
+          stillNeeded={v.issues.filter((i) => !BILL_FILLABLE.test(i.path)).map((i) => i.message)}
+          onSaved={(saved) => {
+            qc.setQueryData(key, saved);
+            setSaved(saved.data);
+            setDraft(saved.data);
+            refreshOpp();
+          }}
+          onClose={() => setFilling(false)}
+        />
+      )}
       <Card>
         <CardHeader
           title="Bord Gáis Electricity Form"
@@ -126,6 +149,11 @@ export function BordGaisTab({ opp }: { opp: Workspace }) {
               <Button size="sm" variant="secondary" onClick={validate}>
                 <ShieldCheck /> Validate application
               </Button>
+              {!ro && aiReading && (
+                <Button size="sm" variant="secondary" disabled={dirty} title={dirty ? "Save or undo your changes first" : undefined} onClick={() => setFilling(true)}>
+                  <Sparkles /> Fill from bill
+                </Button>
+              )}
               {!ro && (
                 <Button size="sm" disabled={!dirty} loading={save.isPending} onClick={() => save.mutate()}>
                   <Save /> Save draft

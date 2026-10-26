@@ -137,22 +137,6 @@ export class WorkflowsModule {}
 })
 export class AiModule {}
 
-/** "Ask the CRM": a read-only assistant that looks things up with the asker's own access. */
-@Module({
-  imports: [OpportunitiesModule, DocumentsModule, EnergyModule],
-  controllers: [AssistantController],
-  providers: [
-    AssistantService,
-    AssistantTools,
-    {
-      provide: ASSISTANT_MODEL,
-      inject: [ENV],
-      // Without the key the routes 404 (AssistantEnabledGuard), so the client is never called.
-      useFactory: (env: Env) => new Anthropic({ apiKey: env.ANTHROPIC_API_KEY ?? "unset", timeout: 60_000, maxRetries: 2 }).messages,
-    },
-  ],
-})
-export class AssistantModule {}
 
 @Module({
   imports: [CustomersModule, OpportunitiesModule, AiModule],
@@ -207,8 +191,26 @@ export class FormsModule {}
   imports: [FormsModule, DocumentsModule],
   controllers: [FlogasElectricityController, BordGaisElectricityController],
   providers: [ApplicationDocuments, FlogasElectricityService, BordGaisElectricityService],
+  exports: [FlogasElectricityService, BordGaisElectricityService],
 })
 export class SupplierApplicationsModule {}
+
+/** "Ask the CRM": a read-only assistant that looks things up with the asker's own access. */
+@Module({
+  imports: [OpportunitiesModule, DocumentsModule, EnergyModule, SupplierApplicationsModule],
+  controllers: [AssistantController],
+  providers: [
+    AssistantService,
+    AssistantTools,
+    {
+      provide: ASSISTANT_MODEL,
+      inject: [ENV],
+      // Without the key the routes 404 (AssistantEnabledGuard), so the client is never called.
+      useFactory: (env: Env) => new Anthropic({ apiKey: env.ANTHROPIC_API_KEY ?? "unset", timeout: 60_000, maxRetries: 2 }).messages,
+    },
+  ],
+})
+export class AssistantModule {}
 
 @Module({ controllers: [ReportsController], providers: [ReportsService] })
 export class ReportsModule {}

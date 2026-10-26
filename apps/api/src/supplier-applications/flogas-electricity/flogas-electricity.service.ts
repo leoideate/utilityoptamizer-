@@ -268,6 +268,13 @@ export class FlogasElectricityService {
     };
   }
 
+  /** Whether the application applies and what still stops it going for signature; messages only, no values (for the assistant). */
+  async outstanding(actor: Actor, opportunityId: string) {
+    await this.access.readable(actor, opportunityId);
+    const ctx = await this.context(opportunityId);
+    return { applies: this.applies(ctx), issues: flogasElectricityIssues(this.assemble(ctx, true)).map((i) => ({ tab: i.tab, message: i.message })) };
+  }
+
   /** Who did what to this application, its versions, their signing and downloads, newest first. */
   async history(actor: Actor, opportunityId: string) {
     await this.access.readable(actor, opportunityId);
