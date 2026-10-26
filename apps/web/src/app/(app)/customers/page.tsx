@@ -26,12 +26,23 @@ interface CustomerRow {
     startDate: string | null;
     endDate: string | null;
     status: string;
+    applicationStatus: string | null;
+    country: string | null;
+    /** Every supplier, utility and meter across the customer's contracts (latest first). */
+    suppliers: string[];
+    fuels: ("electricity" | "gas")[];
+    meters: string[];
+    termMonths: number | null;
     salesAgent: string | null;
   } | null;
 }
 
 /** The master sheet's columns, in its order. */
-const COLUMNS = ["Business name", "Trading name", "Contact person", "Contact number", "Email", "MPRN/GPRN", "Supplier", "Utility type", "Product type", "Contract start", "Expiry date", "Contract status", "Sales agent"];
+const COLUMNS = ["Business name", "Trading name", "Country", "Contact person", "Contact number", "Email", "MPRN/GPRN", "Supplier", "Utility type", "Product type", "Contract start", "Expiry date", "Contract term (years)", "Contract status", "Sales agent"];
+const COUNTRIES: Record<string, string> = { IE: "Ireland", GB: "United Kingdom" };
+/** The first meter, and how many more the customer has. */
+const meterText = (meters: string[]) => (meters.length > 1 ? `${meters[0]} +${meters.length - 1} more` : (meters[0] ?? ""));
+const years = (months: number | null | undefined) => (months ? String(Math.round((months / 12) * 10) / 10) : "—");
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export default function CustomersPage() {
@@ -80,7 +91,7 @@ export default function CustomersPage() {
                   {c.tradingName && <p className="text-xs text-muted">t/a {c.tradingName}</p>}
                   {c.contract && (
                     <p className="mt-0.5 text-xs text-muted">
-                      {[c.contract.supplier, cap(c.contract.fuel), c.contract.meter, c.contract.endDate && `expires ${date(c.contract.endDate)}`].filter(Boolean).join(" · ")}
+                      {[c.contract.suppliers.join(", "), c.contract.fuels.map(cap).join(" & "), meterText(c.contract.meters), c.contract.endDate && `expires ${date(c.contract.endDate)}`].filter(Boolean).join(" · ")}
                     </p>
                   )}
                   {(c.contactName || c.phone || c.email) && <p className="mt-0.5 truncate text-xs text-muted">{[c.contactName, c.phone ?? c.email].filter(Boolean).join(" · ")}</p>}
@@ -89,7 +100,7 @@ export default function CustomersPage() {
             ))}
           </ul>
           <div className="hidden overflow-x-auto md:block" tabIndex={0}>
-            <table className="w-full min-w-[1500px] text-sm">
+            <table className="w-full min-w-[1700px] text-sm">
               <thead className="bg-surface-2 text-left text-muted">
                 <tr>
                   {COLUMNS.map((h, i) => (
@@ -108,16 +119,20 @@ export default function CustomersPage() {
                       </Link>
                     </td>
                     <td className="px-3 py-2.5">{c.tradingName ?? "—"}</td>
+                    <td className="px-3 py-2.5">{c.contract?.country ? (COUNTRIES[c.contract.country] ?? c.contract.country) : "—"}</td>
                     <td className="px-3 py-2.5">{c.contactName ?? "—"}</td>
                     <td className="tabular px-3 py-2.5">{c.phone ?? "—"}</td>
                     <td className="px-3 py-2.5 text-muted">{c.email ?? "—"}</td>
-                    <td className="tabular px-3 py-2.5">{c.contract?.meter ?? "—"}</td>
-                    <td className="px-3 py-2.5">{c.contract?.supplier ?? "—"}</td>
-                    <td className="px-3 py-2.5">{c.contract ? cap(c.contract.fuel) : "—"}</td>
+                    <td className="tabular px-3 py-2.5" title={c.contract?.meters.join(", ")}>
+                      {c.contract ? meterText(c.contract.meters) || "—" : "—"}
+                    </td>
+                    <td className="px-3 py-2.5">{c.contract?.suppliers.length ? c.contract.suppliers.join(", ") : "—"}</td>
+                    <td className="px-3 py-2.5">{c.contract ? c.contract.fuels.map(cap).join(" & ") : "—"}</td>
                     <td className="px-3 py-2.5">{c.contract?.product ?? "—"}</td>
                     <td className="px-3 py-2.5">{date(c.contract?.startDate)}</td>
                     <td className="px-3 py-2.5">{date(c.contract?.endDate)}</td>
-                    <td className="px-3 py-2.5">{c.contract ? cap(c.contract.status) : "—"}</td>
+                    <td className="tabular px-3 py-2.5">{years(c.contract?.termMonths)}</td>
+                    <td className="px-3 py-2.5">{c.contract ? (c.contract.applicationStatus ?? cap(c.contract.status)) : "—"}</td>
                     <td className="px-3 py-2.5">{c.contract?.salesAgent ?? "—"}</td>
                   </tr>
                 ))}

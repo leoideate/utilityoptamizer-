@@ -6,6 +6,7 @@ A one-off import of the customers Utility Optimizer had before the CRM. It reads
 
 - **Back up the database.** Imported deals are permanent, like every opportunity.
 - **Add every salesperson as a user** under **Users & roles**, using the same name as the sheet's *Sales Agent Name* column (capitals don't matter). Rows whose agent has no matching user are imported unassigned.
+- **Either sheet layout works.** The original master sheet (one tab per supplier) and the aligned export (`Business name, Trading name, Country, Contact person, Contact number, Contact number (+353), Email, MPRN/GPRN, Supplier, Utility type, Product type, Contract start, Expiry date, Contract term (years), Contract status, Sales agent`). With a *Supplier* column, each row's supplier comes from it; the +353 number is preferred over the local one; a missing contract start is fine (the expiry date keys the row).
 - **Check the suppliers.** Each tab's name is its supplier ("Flogas", "Bord Gais"; old Bord Gáis spellings are recognised). A tab called *Worldpay* imports card-payment customers. Suppliers the CRM doesn't have are reported; add them under **Administration**, or pass `--create-suppliers`.
 - **Run from a machine with the repository** (`npm install` done). Point `apps/api/.env` at the database you're importing into. To attach PDFs, Redis must be running too, because each upload is queued for a virus scan.
 
@@ -17,7 +18,8 @@ npm run migrate:customers -w @uo/api -- "C:\path\UOL - Master sheet.xlsx"
 
 This dry run prints a summary and writes `apps/api/migration-out/customers-report.csv`, one line per row. The report folder is gitignored because it holds customer details. Check:
 
-- **Statuses.** Rows whose *Contract Status* looks cancelled, rejected, lost or withdrawn are skipped. Every other status is imported. A contract whose expiry date has passed is imported as *ended*; any other is *live*.
+- **Statuses.** Rows whose *Contract Status* looks cancelled, rejected, lost, withdrawn, duplicate or error are skipped. *Clawback* is imported as an *ended* contract (history, no renewal). Every other status (Accepted, Ready for Invoice, Under Investigation…) is imported; a contract whose expiry date has passed is *ended*, any other *live*. The sheet's own status is shown on the deal and in the Customers list's *Contract status* column.
+- **Missing or non-standard MPRN/GPRN.** A row with no meter number is still imported when its utility type says gas or electricity; with `--allow-format-exceptions`, so is one whose number isn't in the standard format. Each such deal gets a high-priority task for the first administrator ("Add the missing GPRN…" / "Check the GPRN…", due in a week), and after a committed run every administrator gets one notification with the count.
 - **Skipped rows.** Each has its reason, for example:
   - a missing name;
   - a missing or badly formatted MPRN/GPRN;

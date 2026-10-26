@@ -1,12 +1,14 @@
 import { Injectable } from "@nestjs/common";
 import type { Prisma, Supplier } from "@prisma/client";
 import { type MigrationRow, addDays, parseSheetRow, sameSupplier, stageDef, today as businessToday } from "@uo/shared";
+import { ActivitiesService } from "../activities/activities.service";
 import { AuditService } from "../audit/audit.service";
 import { SYSTEM } from "../common/actor";
 import { PrismaService } from "../common/prisma.service";
 import { dateOnly, phoneKey } from "../common/values";
 import { CustomersService } from "../customers/customers.service";
 import { DocumentsService } from "../documents/documents.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { CryptoService } from "../common/crypto.service";
 import { StagesService } from "../opportunities/stages.service";
 import { pdfFacts } from "./pdf-facts";
@@ -51,6 +53,8 @@ export interface CustomersImport {
   /** Live contracts ending within the renewal window: the 07:00 job opens renewals for them. */
   renewalsSoon: number;
   ignoredColumns: string[];
+  /** Deals whose MPRN/GPRN is missing or unverified; each gets a task for an administrator. */
+  meterChecks: number;
 }
 
 /** How far ahead the renewal job looks (automations/renewals.service.ts). */
@@ -75,17 +79,23 @@ export class MigrationService {
     private readonly customers: CustomersService,
     private readonly stages: StagesService,
     private readonly documents: DocumentsService,
+    private readonly activities: ActivitiesService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async importCustomers(tabs: SheetTab[], opts: ImportOptions): Promise<CustomersImport> {
     const today = opts.today ?? businessToday();
-    const result: CustomersImport = { lines: [], statuses: {}, suppliersToCreate: [], unmatchedAgents: [], renewalsSoon: 0, ignoredColumns: [...new Set(tabs.flatMap((t) => t.ignored))] };
+    const result: CustomersImport = { lines: [], statuses: {}, suppliersToCreate: [], unmatchedAgents: [], renewalsSoon: 0, ignoredColumns: [...new Set(tabs.flatMap((t) => t.ignored))], meterChecks: 0 };
     const suppliers = await this.prisma.supplier.findMany();
     const users = await this.prisma.user.findMany({ where: { active: true }, select: { id: true, name: true } });
     const userByName = new Map(users.map((u) => [u.name.trim().toLowerCase(), u.id]));
     const liveWon = await this.stages.idFor("live_won");
+    // Missing or unverified meter numbers go to an administrator to fix.
+    const admins = await this.prisma.user.findMany({ where: { active: true, roles: { some: { role: "administrator" } } }, select: { id: true }, orderBy: { createdAt: "asc" } });
     // Customers a dry run would create, so later rows for the same business show as reused.
     const planned: { keys: string[]; label: string }[] = [];
+    // Customers created in this run by name, to flag a later row with the same name that nothing else ties to it.
+    const createdNames = new Map<string, string>();
 
     for (const tab of tabs) {
       for (const { line, cells } of tab.rows) {
@@ -134,15 +144,34 @@ export class MigrationService {
         const keys = this.customerKeys(row);
         const plannedMatch = matches.length ? undefined : planned.find((p) => p.keys.some((k) => keys.includes(k)));
         const customerLabel = matches[0] ? `existing: ${matches[0].customer.legalName} (${matches[0].reasons.join(", ")})` : plannedMatch ? `same as ${plannedMatch.label}` : "new";
+        // Same name but no shared email, phone or Eircode: kept separate (customers are never merged
+        // automatically), and flagged so a manager can merge them if they're one business.
+        if (customerLabel === "new") {
+          const name = this.nameKey(row.legalName);
+          const earlier = createdNames.get(name);
+          const existingSameName = earlier ? null : await this.prisma.customer.findFirst({ where: { legalName: { equals: row.legalName, mode: "insensitive" }, mergedIntoId: null }, select: { legalName: true } });
+          if (earlier || existingSameName) extra.push(`Same name as ${earlier ?? `existing customer ${existingSameName!.legalName}`}, but no shared email, phone or Eircode, so it's a separate customer. If it's the same business, merge them under Customers.`);
+          if (!earlier) createdNames.set(name, `${tab.name} row ${line}`);
+        }
 
         if (row.contractStatus === "live" && row.endDate && row.endDate <= addDays(today, RENEWAL_WINDOW_DAYS)) result.renewalsSoon++;
+        if (row.meterCheck) result.meterChecks++;
         if (!opts.commit) {
           if (!matches.length && !plannedMatch) planned.push({ keys, label: `${tab.name} row ${line}` });
           report("created", this.describe(row), customerLabel, extra);
           continue;
         }
-        const number = await this.prisma.$transaction((tx) => this.write(tx, row, { customerId: matches[0]?.customer.id, ownerId, supplier: supplier!, stageId: liveWon }));
+        const number = await this.prisma.$transaction((tx) => this.write(tx, row, { customerId: matches[0]?.customer.id, ownerId, supplier: supplier!, stageId: liveWon, adminId: admins[0]?.id ?? null, today }));
         report("created", `${ref(number)}: ${this.describe(row)}`, customerLabel, extra);
+      }
+    }
+    if (opts.commit && result.meterChecks) {
+      for (const a of admins) {
+        await this.notifications.notify(a.id, {
+          title: `${result.meterChecks} imported customer${result.meterChecks === 1 ? "" : "s"} need an MPRN or GPRN added or checked`,
+          body: "The master sheet had missing or non-standard meter numbers. Each deal has a task \"Add the missing…\" or \"Check the…\" under My tasks.",
+          link: "/activities",
+        });
       }
     }
     return result;
@@ -230,7 +259,12 @@ export class MigrationService {
     return [`${row.supplier.name} ${FUEL_LABEL[row.serviceType]}`, meter, row.product, until].filter(Boolean).join(", ");
   }
 
-  private async write(tx: Prisma.TransactionClient, row: MigrationRow, ctx: { customerId?: string; ownerId?: string; supplier: Supplier; stageId: string }): Promise<number> {
+  /** A business name for comparison: case, punctuation and "Ltd/Limited" ignored. */
+  private nameKey(name: string) {
+    return name.toLowerCase().replace(/\b(ltd|limited|teoranta|t\/a)\b/g, "").replace(/[^a-z0-9]/g, "");
+  }
+
+  private async write(tx: Prisma.TransactionClient, row: MigrationRow, ctx: { customerId?: string; ownerId?: string; supplier: Supplier; stageId: string; adminId: string | null; today: string }): Promise<number> {
     let customerId = ctx.customerId;
     if (!customerId) {
       const [first, ...rest] = (row.contactName ?? "").split(/\s+/).filter(Boolean);
@@ -273,6 +307,7 @@ export class MigrationService {
         saleType: row.saleType,
         leadSource: "migration",
         leadSourceDetail: `Master sheet, ${row.tab} tab, row ${row.line}`,
+        applicationStatus: row.sheetStatus,
         selectedSupplierId: ctx.supplier.id,
         wonAt: wonAt ? new Date(`${wonAt}T00:00:00Z`) : new Date(),
         activationDate: dateOnly(row.startDate),
@@ -293,6 +328,7 @@ export class MigrationService {
           city: a?.city,
           county: a?.county,
           postcode: a?.postcode,
+          country: row.country,
           serviceType: row.serviceType,
           meterPoints: { create: [{ fuel: row.fuel, mprn: row.mprn, gprn: row.gprn, formatExceptionReason: row.formatExceptionReason }] },
         },
@@ -311,6 +347,20 @@ export class MigrationService {
           pricingPlan: row.product,
         },
       });
+      if (row.meterCheck) {
+        const id = row.fuel === "gas" ? "GPRN" : "MPRN";
+        await this.activities.ensureAutomated(tx, {
+          opportunityId: opp.id,
+          customerId,
+          type: "todo",
+          summary: row.meterCheck === "missing" ? `Add the missing ${id} (imported without one)` : `Check the ${id} ${row.mprn ?? row.gprn}: it isn't in the standard format`,
+          note: `From the master sheet (${row.tab} tab, row ${row.line}). Take it from the customer's bill or the supplier, then update the meter on the Energy tab.`,
+          dueDate: addDays(ctx.today, 7),
+          priority: "high",
+          ownerId: ctx.adminId,
+          automationKey: "migration_meter_check",
+        });
+      }
     }
 
     await this.audit.record(
