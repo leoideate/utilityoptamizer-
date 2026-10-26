@@ -215,6 +215,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
       aria-label={fieldLabel ? undefined : p["aria-label"]}
       id={p.id}
       onBlur={p.onBlur as never}
+      onKeyDown={p.onKeyDown as never}
       onMdInput={(e) => onChange?.(asChange<HTMLTextAreaElement>(e as unknown as Event))}
     />
   );

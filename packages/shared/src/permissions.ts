@@ -53,6 +53,12 @@ export const CAPABILITIES = {
   /** Remove other people's chat messages and read message history (moderation). */
   "chat.moderate": ["administrator"],
 
+  // AI assistant
+  /** Ask the CRM assistant (read-only: it answers with the asker's own access). */
+  "assistant.use": ["administrator", "manager", "salesperson", "operations", "compliance", "finance"],
+  /** Read the answers people marked unhelpful, to improve the assistant's instructions. */
+  "assistant.review": ["administrator", "manager"],
+
   // Administration
   "admin.users": ["administrator"],
   "admin.pipeline": ["administrator"],

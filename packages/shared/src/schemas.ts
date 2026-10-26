@@ -533,3 +533,17 @@ export type RiskInput = z.infer<typeof riskSchema>;
 export type ActivityInput = z.infer<typeof activitySchema>;
 export type OpportunityListQuery = z.infer<typeof opportunityListQuerySchema>;
 export type OcrConfirmInput = z.infer<typeof ocrConfirmSchema>;
+
+// --- CRM assistant ---------------------------------------------------------
+
+export const assistantMessageSchema = z.object({
+  conversationId: id.nullable().optional(),
+  /** The deal on screen, if any. */
+  opportunityId: id.nullable().optional(),
+  message: z.string().trim().min(1, "Type a question.").max(2000, "Keep questions under 2,000 characters."),
+});
+
+export const assistantFeedbackSchema = z.object({
+  helpful: z.boolean(),
+  comment: optText(1000),
+});

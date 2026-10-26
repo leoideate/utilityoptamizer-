@@ -1781,3 +1781,49 @@ model EmailMessage {
   @@index([threadId])
   @@map("email_messages")
 }
+
+/// A conversation with the CRM assistant. Only its owner reads it; purged after 90 days.
+model AssistantConversation {
+  id            String             @id @default(uuid()) @db.Uuid
+  userId        String             @map("user_id") @db.Uuid
+  /// The deal the conversation started on, if any.
+  opportunityId String?            @map("opportunity_id") @db.Uuid
+  createdAt     DateTime           @default(now()) @map("created_at")
+  messages      AssistantMessage[]
+
+  @@index([userId, createdAt])
+  @@map("assistant_conversations")
+}
+
+/// Append-only (trigger-protected). Bodies hold no restricted values: the assistant's tools never return them.
+model AssistantMessage {
+  id             String                @id @default(uuid()) @db.Uuid
+  conversationId String                @map("conversation_id") @db.Uuid
+  conversation   AssistantConversation @relation(fields: [conversationId], references: [id])
+  /// "user" or "assistant".
+  role           String
+  body           String
+  toolsUsed      String[]              @map("tools_used")
+  model          String?
+  inputTokens    Int?                  @map("input_tokens")
+  outputTokens   Int?                  @map("output_tokens")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  feedback       AssistantFeedback[]
+
+  @@index([conversationId, createdAt])
+  @@map("assistant_messages")
+}
+
+/// Thumbs up or down on an answer (append-only); the unhelpful ones are reviewed to improve the instructions.
+model AssistantFeedback {
+  id        String           @id @default(uuid()) @db.Uuid
+  messageId String           @map("message_id") @db.Uuid
+  message   AssistantMessage @relation(fields: [messageId], references: [id])
+  userId    String           @map("user_id") @db.Uuid
+  helpful   Boolean
+  comment   String?
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  @@index([helpful, createdAt])
+  @@map("assistant_feedback")
+}

@@ -226,6 +226,7 @@ One sale (new or renewal). Permanent: can't be deleted or archived (database tri
 | lead_source | Enum: manual, social_media, email, website, whatsapp, referral, existing_customer, business_card, csv_import, api, renewal, migration | ✓ | Default manual |
 | lead_source_detail | String |  |  |
 | campaign | String |  |  |
+| notes | String |  | Persistent opportunity context, separate from timeline entries |
 | next_action | String |  |  |
 | follow_up_date | Date |  |  |
 | expected_close_date | Date |  |  |
@@ -1098,4 +1099,44 @@ One email from a connected mailbox (inbox or sent). Kept after a mailbox is disc
 | timeline_logged_at | DateTime |  | Set once the email has been written to the customer/opportunity timeline (exactly once) |
 | created_at | DateTime | ✓ | Default now() |
 | updated_at | DateTime | ✓ |  |
+
+## assistant_conversations
+
+A conversation with the CRM assistant. Only its owner reads it; purged after 90 days.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| user_id | UUID | ✓ |  |
+| opportunity_id | UUID |  | The deal the conversation started on, if any |
+| created_at | DateTime | ✓ | Default now() |
+
+## assistant_messages
+
+Append-only (trigger-protected). Bodies hold no restricted values: the assistant's tools never return them.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| conversation_id | UUID | ✓ |  |
+| role | String | ✓ | "user" or "assistant" |
+| body | String | ✓ |  |
+| tools_used | String | ✓ |  |
+| model | String |  |  |
+| input_tokens | Int |  |  |
+| output_tokens | Int |  |  |
+| created_at | DateTime | ✓ | Default now() |
+
+## assistant_feedback
+
+Thumbs up or down on an answer (append-only); the unhelpful ones are reviewed to improve the instructions.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| message_id | UUID | ✓ |  |
+| user_id | UUID | ✓ |  |
+| helpful | Boolean | ✓ |  |
+| comment | String |  |  |
+| created_at | DateTime | ✓ | Default now() |
 

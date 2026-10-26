@@ -12,10 +12,13 @@ import { AdminService } from "./admin.service";
  * - sensitive documents and principal personal data on lost deals / long-ended contracts are erased;
  * - unconfirmed business-card scans are deleted;
  * - call recordings are deleted after their retention period (the call stays on the timeline);
+ * - CRM assistant conversations are deleted after 90 days;
  * - audit-log rows older than the retention period are purged (the only permitted deletion,
  *   done with the uo.allow_purge flag the append-only trigger checks).
  * Opportunities, customers and the timeline are never deleted.
  */
+const ASSISTANT_DAYS = 90;
+
 @Injectable()
 export class RetentionService {
   private readonly log = new Logger(RetentionService.name);
@@ -78,7 +81,17 @@ export class RetentionService {
       return tx.auditLog.deleteMany({ where: { createdAt: { lt: auditBefore } } });
     });
 
-    const summary = { opportunities: ids.length, sensitiveFiles: files, principals, scans: oldScans.length, recordings: oldRecordings.length, auditRows: purged.count };
+    // Assistant conversations are kept for 90 days (their feedback and messages go with them).
+    const conversationsBefore = new Date(Date.now() - ASSISTANT_DAYS * 86_400_000);
+    const conversations = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('uo.allow_purge', 'on', true)`;
+      const old = { conversation: { createdAt: { lt: conversationsBefore } } };
+      await tx.assistantFeedback.deleteMany({ where: { message: old } });
+      await tx.assistantMessage.deleteMany({ where: old });
+      return tx.assistantConversation.deleteMany({ where: { createdAt: { lt: conversationsBefore } } });
+    });
+
+    const summary = { opportunities: ids.length, sensitiveFiles: files, principals, scans: oldScans.length, recordings: oldRecordings.length, auditRows: purged.count, assistantConversations: conversations.count };
     await this.audit.log(SYSTEM, { action: "retention.run", entityType: "system", summary: "Retention policy applied", data: summary });
     this.log.log({ summary }, "Retention run complete");
     return summary;

@@ -4,7 +4,7 @@ import { Throttle } from "@nestjs/throttler";
 import { CAPABILITIES, type Capability, can } from "@uo/shared";
 import type { CookieOptions, Response } from "express";
 import { z } from "zod";
-import { ENV, type Env } from "../config/env";
+import { ENV, type Env, assistantEnabled } from "../config/env";
 import { Public } from "../common/decorators";
 import { Forbidden } from "../common/errors";
 import { ZodPipe } from "../common/zod.pipe";
@@ -88,7 +88,7 @@ export class SsoController {
       res.clearCookie(SSO_MFA_COOKIE, { ...this.base(), path: SSO_PATH });
       this.setSession(res, session);
       const a = session.actor;
-      return { user: { id: a.id, name: a.name, roles: a.roles, capabilities: (Object.keys(CAPABILITIES) as Capability[]).filter((c) => can(a, c)), features: { chat: this.env.CHAT_ENABLED, aiReading: !!this.env.ANTHROPIC_API_KEY } }, csrfToken: session.csrfToken, next };
+      return { user: { id: a.id, name: a.name, roles: a.roles, capabilities: (Object.keys(CAPABILITIES) as Capability[]).filter((c) => can(a, c)), features: { chat: this.env.CHAT_ENABLED, aiReading: !!this.env.ANTHROPIC_API_KEY, assistant: assistantEnabled(this.env) } }, csrfToken: session.csrfToken, next };
     } catch (e) {
       if (e instanceof SsoError) throw new Forbidden("Your sign-in expired. Start again with Microsoft or Google.");
       throw e;

@@ -86,6 +86,13 @@ const envSchema = z
      */
     ANTHROPIC_API_KEY: z.string().optional(),
     AI_MODEL: z.string().default("claude-haiku-5-5"),
+    /** The "Ask the CRM" assistant: on with the key unless set to false; its model and per-person daily cap. */
+    AI_ASSISTANT_ENABLED: z
+      .enum(["true", "false", "1", "0"])
+      .optional()
+      .transform((v) => v !== "false" && v !== "0"),
+    AI_ASSISTANT_MODEL: z.string().default("claude-haiku-5-5"),
+    AI_ASSISTANT_DAILY_LIMIT: z.coerce.number().int().min(1).max(10_000).default(100),
 
     SIGNATURE_PROVIDER: z.enum(["manual", "webhook"]).default("manual"),
     SIGNATURE_WEBHOOK_SECRET: z.string().optional(),
@@ -198,3 +205,6 @@ export const ENV = Symbol("ENV");
 
 /** The business card reader in use: OCR_PROVIDER, or Claude when only the Anthropic key is set. */
 export const ocrProvider = (env: Env) => env.OCR_PROVIDER ?? (env.ANTHROPIC_API_KEY ? "claude" : "manual");
+
+/** Whether the CRM assistant is available (it needs the Anthropic key). */
+export const assistantEnabled = (env: Env) => !!env.ANTHROPIC_API_KEY && env.AI_ASSISTANT_ENABLED;

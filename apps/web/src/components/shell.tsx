@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, BookOpen, Building2, CalendarCheck, ClipboardList, FileSignature, MessagesSquare, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Mail, Menu as MenuIcon, ScanLine, Search, Settings } from "lucide-react";
+import { Bell, BookOpen, Sparkles, Building2, CalendarCheck, ClipboardList, FileSignature, MessagesSquare, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Mail, Menu as MenuIcon, ScanLine, Search, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -11,6 +11,7 @@ import { cn, ref, relative } from "@/lib/format";
 import { useChannels } from "@/lib/chat";
 import { useUnreadEmail } from "@/lib/email";
 import { useUser } from "@/lib/session";
+import { AssistantPanel } from "./assistant/assistant-panel";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "./ui/overlays";
 import { Logo } from "./brand";
 import { Button } from "./ui/primitives";
@@ -34,7 +35,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const user = useUser();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const isAdmin = user.capabilities.some((c) => c.startsWith("admin."));
+  const [assistant, setAssistant] = useState(false);
+  const canAsk = user.features.assistant && user.capabilities.includes("assistant.use");
+  const isAdmin = user.capabilities.some((c) => c.startsWith("admin.") || (c === "assistant.review" && user.features.assistant));
   const unread = useChannels(user.features.chat).data?.totalUnread ?? 0;
   const unreadEmail = useUnreadEmail().data ?? 0;
   useEffect(() => setOpen(false), [pathname]);
@@ -94,6 +97,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Button>
           <GlobalSearch />
           <div className="ml-auto flex items-center gap-1">
+            {canAsk && (
+              <Button variant="ghost" size="icon" aria-label="Ask the CRM" title="Ask the CRM" aria-expanded={assistant} onClick={() => setAssistant((a) => !a)}>
+                <Sparkles />
+              </Button>
+            )}
             <Notifications />
             <UserMenu />
           </div>
@@ -102,6 +110,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+      {canAsk && assistant && <AssistantPanel onClose={() => setAssistant(false)} />}
     </div>
   );
 }

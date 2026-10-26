@@ -4,7 +4,7 @@ import { Throttle } from "@nestjs/throttler";
 import { loginSchema, passwordSchema, type Role, ROLES, can, CAPABILITIES, type Capability } from "@uo/shared";
 import type { CookieOptions, Response } from "express";
 import { z } from "zod";
-import { ENV, type Env } from "../config/env";
+import { ENV, type Env, assistantEnabled } from "../config/env";
 import type { Actor } from "../common/actor";
 import { CurrentUser, Public } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
@@ -76,6 +76,6 @@ export class AuthController {
 
   private describe(a: Actor) {
     const capabilities = (Object.keys(CAPABILITIES) as Capability[]).filter((c) => can(a, c));
-    return { id: a.id, name: a.name, roles: a.roles.filter((r): r is Role => ROLES.includes(r)), capabilities, features: { chat: this.env.CHAT_ENABLED, aiReading: !!this.env.ANTHROPIC_API_KEY } };
+    return { id: a.id, name: a.name, roles: a.roles.filter((r): r is Role => ROLES.includes(r)), capabilities, features: { chat: this.env.CHAT_ENABLED, aiReading: !!this.env.ANTHROPIC_API_KEY, assistant: assistantEnabled(this.env) } };
   }
 }

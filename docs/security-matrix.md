@@ -32,6 +32,8 @@ Generated from `packages/shared/src/permissions.ts`, the single source of truth 
 | `report.read` | Business-wide dashboard (others see their own figures) | ✓ | ✓ |  | ✓ | ✓ | ✓ |
 | `chat.manage_channels` | Create, archive and add people to team channels (anyone can DM and join public channels) | ✓ | ✓ |  |  |  |  |
 | `chat.moderate` | Remove other people's chat messages and view edit/delete history (audit-logged) | ✓ |  |  |  |  |  |
+| `assistant.use` |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `assistant.review` |  | ✓ | ✓ |  |  |  |  |
 | `admin.users` | Manage users, roles, passwords and 2FA resets | ✓ |  |  |  |  |  |
 | `admin.pipeline` | Rename pipeline stages, run the stage check, manage suppliers | ✓ |  |  |  |  |  |
 | `admin.integrations` | Integration settings, outbound job queue and retries, signature templates | ✓ |  |  |  |  |  |
