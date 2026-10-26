@@ -20,8 +20,10 @@ import {
   isHandedOver,
   stageDef,
   stageGateIssues,
+  type timelineEntrySchema,
   today,
 } from "@uo/shared";
+import type { z } from "zod";
 import { AuditService } from "../audit/audit.service";
 import { type Actor, actorRef } from "../common/actor";
 import { CryptoService } from "../common/crypto.service";
@@ -833,6 +835,20 @@ export class OpportunitiesService {
   }
 
   /** Lists what blocks a stage, so the UI can explain before the user tries. */
+  /** A call, note, email or WhatsApp logged by hand. A correction is a new entry pointing at the one it corrects. */
+  async addTimelineEntry(actor: Actor, id: string, body: z.infer<typeof timelineEntrySchema> & { correctsId?: string }) {
+    const opp = await this.access.writable(actor, id);
+    if (body.correctsId) {
+      const original = await this.prisma.timelineEntry.findFirst({ where: { id: body.correctsId, opportunityId: id } });
+      if (!original) throw new NotFound("Timeline entry");
+    }
+    const occurredAt = body.occurredAt ? new Date(body.occurredAt) : new Date();
+    const entry = await this.audit.timeline(actor, { opportunityId: id, customerId: opp.customerId, kind: body.kind, body: body.body, direction: body.direction ?? null, occurredAt, correctsId: body.correctsId ?? null });
+    const outbound = body.kind === "call" || body.direction === "outbound";
+    if (outbound) await this.prisma.opportunity.update({ where: { id }, data: { lastContactAt: occurredAt, firstContactAt: opp.firstContactAt ?? occurredAt } });
+    return entry;
+  }
+
   async gatePreview(actor: Actor, id: string, target: StageKey) {
     await this.access.readable(actor, id);
     return { stage: target, issues: stageGateIssues(await this.facts(id), target) };

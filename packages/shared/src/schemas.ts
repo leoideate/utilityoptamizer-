@@ -454,6 +454,9 @@ export const activitySchema = z.object({
   customerId: id.nullable().optional(),
 });
 
+/** An email to a customer from a deal. The idempotency key stops a double click sending it twice. */
+export const emailSchema = z.object({ to: z.string().email(), subject: z.string().min(1).max(300), body: z.string().min(1).max(20000), idempotencyKey: z.string().min(8).max(100) });
+
 export const timelineEntrySchema = z.object({
   kind: z.enum(["call", "note", "email", "whatsapp"]),
   body: text(10000).min(1, "Write something."),

@@ -8,6 +8,7 @@ import { CurrentUser, RequireCapability } from "../common/decorators";
 import { NotFound } from "../common/errors";
 import { ZodPipe } from "../common/zod.pipe";
 import { ENV, type Env, assistantEnabled } from "../config/env";
+import { AssistantActions } from "./actions";
 import { AssistantService } from "./assistant.service";
 
 const Id = new ParseUUIDPipe({ version: "4" });
@@ -27,7 +28,10 @@ export class AssistantEnabledGuard implements CanActivate {
 @Controller("assistant")
 @UseGuards(AssistantEnabledGuard)
 export class AssistantController {
-  constructor(private readonly assistant: AssistantService) {}
+  constructor(
+    private readonly assistant: AssistantService,
+    private readonly actions: AssistantActions,
+  ) {}
 
   /** Ask a question. Read-only: the assistant looks things up with the asker's own access. */
   @Post("messages")
@@ -49,6 +53,21 @@ export class AssistantController {
   @RequireCapability("assistant.use")
   feedback(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(assistantFeedbackSchema)) body: z.infer<typeof assistantFeedbackSchema>) {
     return this.assistant.feedback(a, id, body);
+  }
+
+  /** Makes a change the assistant prepared. Runs as the user, with every check the screens apply. */
+  @Post("actions/:id/confirm")
+  @HttpCode(200)
+  @RequireCapability("assistant.use")
+  confirm(@CurrentUser() a: Actor, @Param("id", Id) id: string) {
+    return this.actions.confirm(a, id);
+  }
+
+  @Post("actions/:id/dismiss")
+  @HttpCode(200)
+  @RequireCapability("assistant.use")
+  dismiss(@CurrentUser() a: Actor, @Param("id", Id) id: string) {
+    return this.actions.dismiss(a, id);
   }
 
   /** Answers people marked unhelpful (managers and administrators). */

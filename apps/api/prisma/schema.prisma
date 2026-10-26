@@ -1826,6 +1826,7 @@ model AssistantMessage {
   outputTokens   Int?                  @map("output_tokens")
   createdAt      DateTime              @default(now()) @map("created_at")
   feedback       AssistantFeedback[]
+  actions        AssistantAction[]
 
   @@index([conversationId, createdAt])
   @@map("assistant_messages")
@@ -1843,4 +1844,32 @@ model AssistantFeedback {
 
   @@index([helpful, createdAt])
   @@map("assistant_feedback")
+}
+
+/// A change the assistant prepared (see ASSISTANT_ACTION_KINDS). Nothing happens until the user
+/// confirms it; the change is then made through the usual services as that user. A trigger allows
+/// only the status moves pending → confirming → done | failed and pending → dismissed.
+model AssistantAction {
+  id            String           @id @default(uuid()) @db.Uuid
+  /// The answer that offered it.
+  messageId     String           @map("message_id") @db.Uuid
+  message       AssistantMessage @relation(fields: [messageId], references: [id])
+  userId        String           @map("user_id") @db.Uuid
+  kind          String
+  /// One sentence shown on the card, e.g. "Call Mary Murphy on 3 Nov (UO-000123)".
+  summary       String
+  /// The change, validated with ASSISTANT_ACTION_PAYLOADS[kind]. No restricted values.
+  payload       Json
+  opportunityId String?          @map("opportunity_id") @db.Uuid
+  status        String           @default("pending")
+  /// Why it couldn't be done (user-facing), when status is failed.
+  error         String?
+  /// What was created or changed, e.g. { activityId } or { opportunityId }.
+  result        Json?
+  decidedAt     DateTime?        @map("decided_at")
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  @@index([messageId])
+  @@index([userId, createdAt])
+  @@map("assistant_actions")
 }
