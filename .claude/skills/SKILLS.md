@@ -1,7 +1,7 @@
 # Leoideate skills for the Utility Optimizer CRM
 
 The `leoideate-*` skills were selected, reviewed and set up for this repository by
-**Leoideate (architect)**, with **Claude** (Anthropic's AI, via Claude Code) as reviewer.
+**Leoideate (architect)**.
 
 They are adapted from Everything Claude Code by Affaan Mustafa (github.com/affaan-m/ECC),
 under the MIT licence; its copyright and permission notice is kept in `THIRD-PARTY-NOTICES`,
