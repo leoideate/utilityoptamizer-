@@ -54,12 +54,28 @@ for (const width of WIDTHS) {
       const scroller = page.locator("main table").locator("..");
       const size = await scroller.evaluate((el) => ({ content: el.scrollWidth, box: el.clientWidth }));
       expect(size.content).toBeGreaterThan(size.box);
+      // A long business name must not consume the desktop table's whole width.
+      const firstCell = page.locator("main tbody tr").first().locator("td").first();
+      expect(await firstCell.evaluate((el) => el.getBoundingClientRect().width)).toBeLessThanOrEqual(280);
+      const originalLeft = await firstCell.evaluate((el) => el.getBoundingClientRect().left);
+      const businessLink = firstCell.getByRole("link");
+      await expect(businessLink).toHaveAttribute("title", longName);
+      expect(await businessLink.evaluate((el) => el.getBoundingClientRect().height)).toBeLessThanOrEqual(48);
+      const viewport = await scroller.evaluate((el) => ({ content: el.scrollHeight, box: el.clientHeight }));
+      expect(viewport.content).toBeGreaterThan(viewport.box);
       await scroller.evaluate((el) => { el.scrollLeft = el.scrollWidth; });
-      await expect.poll(() => scroller.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+      expect(await firstCell.evaluate((el) => el.getBoundingClientRect().left)).toBeCloseTo(originalLeft, 0);
+      const heading = page.getByRole("columnheader", { name: "Business name", exact: true });
+      const originalTop = await heading.evaluate((el) => el.getBoundingClientRect().top);
+      await scroller.evaluate((el) => { el.scrollTop = 200; });
+      expect(await heading.evaluate((el) => el.getBoundingClientRect().top)).toBeCloseTo(originalTop, 0);
+      await scroller.evaluate((el) => { el.scrollLeft = 0; el.scrollTop = 0; });
+
     }
     await page.getByRole("button", { name: "Next page", exact: true }).click();
     await expect(page.getByText("Page 2 of 40", { exact: true })).toBeVisible();
     await expect(page.locator('a[href="/customers/customer-0-page2"]').filter({ visible: true })).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath("customers-" + width + ".png"), fullPage: true });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: testInfo.outputPath("customers-" + width + ".png"), fullPage: width < 768 });
   });
 }
