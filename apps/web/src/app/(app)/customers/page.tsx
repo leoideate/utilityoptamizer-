@@ -78,7 +78,7 @@ export default function CustomersPage() {
           <EmptyState icon={<Building2 />} title={debounced ? "No customers match" : "No customers yet"} />
         ) : (
           <>
-          <ul className="divide-y divide-border md:hidden">
+          <ul className="divide-y divide-border [overflow-wrap:anywhere] md:hidden">
             {data.items.map((c) => (
               <li key={c.id}>
                 <Link href={`/customers/${c.id}`} className="block px-4 py-3 active:bg-surface-2">
