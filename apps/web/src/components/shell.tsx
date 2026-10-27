@@ -163,7 +163,7 @@ function GlobalSearch() {
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
-        placeholder="Search customers, opportunities, MPRN…"
+        placeholder="Search by customer or business name"
         aria-label="Search"
         className="h-12 w-full rounded-full bg-[var(--md-sys-color-surface-container-high)] pl-11 pr-4 text-base placeholder:text-muted"
       />
