@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FileSpreadsheet, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog } from "@/components/ui/overlays";
-import { Badge, Button, Card, CardHeader, Checkbox, IssueList, Select, Skeleton } from "@/components/ui/primitives";
+import { Badge, Button, Card, CardHeader, Checkbox, Field, Input, IssueList, Select, Skeleton } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api";
 import { cn, dateTime } from "@/lib/format";
 
@@ -27,6 +27,8 @@ interface Summary {
   unmatchedAgents: string[];
   renewalsSoon: number;
   meterChecks: number;
+  /** Rows the sheet marks Rejected, Cancel... imported as lost deals. Missing on runs from before this was counted. */
+  lost?: number;
   ignoredColumns: string[];
 }
 interface Run {
@@ -50,6 +52,9 @@ interface User {
 
 const failure = (e: unknown) => (e instanceof ApiError ? (e.issues.length ? e.issues : [e.message]) : ["Something went wrong. Try again."]);
 const csvCell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+/** The salesperson choice that adds the sheet name as a new user. */
+const NEW = "new";
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** A likely user for a sheet name: the one whose name is the sheet name or its first name ("Abdullah Liaqat" → "Abdullah"). */
 function suggest(name: string, users: User[]): string | null {
@@ -73,6 +78,8 @@ export function ImportCustomers() {
   const [createSuppliers, setCreateSuppliers] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [agents, setAgents] = useState<Record<string, string | null>>({});
+  // Emails for the sheet names chosen as "Add as a new salesperson".
+  const [emails, setEmails] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState(false);
   const [filter, setFilter] = useState<"all" | "skipped" | "warnings">("all");
 
@@ -93,7 +100,7 @@ export function ImportCustomers() {
   // Pre-fill each unknown agent with the likely user, once the dry run reports them.
   useEffect(() => {
     if (r?.mode !== "dry_run" || r.status !== "done" || !r.summary) return;
-    setAgents((prev) => Object.fromEntries(r.summary!.unmatchedAgents.map((name) => [name, name in prev ? prev[name] : suggest(name, active)])));
+    setAgents((prev) => Object.fromEntries(r.summary!.unmatchedAgents.map((name) => [name, name in prev ? prev[name] : (suggest(name, active) ?? NEW)])));
   }, [r?.id, r?.status, r?.mode, r?.summary, active]);
 
   const dryRun = useMutation({
@@ -105,14 +112,23 @@ export function ImportCustomers() {
       fd.append("createSuppliers", String(createSuppliers));
       return api.postForm<Run>("/admin/imports", fd);
     },
-    onSuccess: (x) => (setRunId(x.id), setAgents({})),
+    onSuccess: (x) => (setRunId(x.id), setAgents({}), setEmails({})),
   });
   const commit = useMutation({
     meta: { silent: true },
-    mutationFn: () => api.post<Run>(`/admin/imports/${r!.id}/import`, { allowFormatExceptions: r!.options.allowFormatExceptions, createSuppliers: r!.options.createSuppliers, agents }),
+    mutationFn: () =>
+      api.post<Run>(`/admin/imports/${r!.id}/import`, {
+        allowFormatExceptions: r!.options.allowFormatExceptions,
+        createSuppliers: r!.options.createSuppliers,
+        agents: Object.fromEntries(Object.entries(agents).filter(([, v]) => v !== NEW)),
+        newAgents: Object.fromEntries(newNames.map((n) => [n, emails[n]?.trim() ?? ""])),
+      }),
     onSuccess: (x) => (setConfirming(false), setRunId(x.id)),
   });
 
+  const newNames = Object.keys(agents).filter((n) => agents[n] === NEW);
+  const emailsMissing = newNames.filter((n) => !EMAIL.test(emails[n]?.trim() ?? ""));
+  const matchedExisting = Object.values(agents).filter((v) => v && v !== NEW).length;
   const lines = (r?.lines ?? []).filter((l) => (filter === "skipped" ? l.action === "skipped" : filter === "warnings" ? !!l.warnings : true));
   const download = () => {
     const rows = [["Tab", "Row", r!.mode === "import" ? "Result" : "Would be", "Business", "Customer", "Detail", "Warnings"], ...(r!.lines ?? []).map((l) => [l.tab, l.line, l.action, l.business, l.customer, l.detail, l.warnings])];
@@ -127,7 +143,7 @@ export function ImportCustomers() {
       <Card>
         <CardHeader
           title="Import customers"
-          description="Bring in existing customers from the master sheet. Each row becomes a customer with a won deal and its contract. A dry run comes first and changes nothing; importing again never creates duplicates."
+          description="Bring in existing customers from the master sheet. Every row is kept: accepted rows become a customer with a won deal and its contract, and rows marked Rejected, Cancel, Duplicate or Error become lost deals so their history is in the CRM. A dry run comes first and changes nothing; importing again never creates duplicates."
         />
         <div className="space-y-4 px-5 pb-5">
           <div className="flex flex-wrap items-center gap-3">
@@ -160,10 +176,11 @@ export function ImportCustomers() {
             {r?.status === "failed" && <IssueList issues={[r.error ?? "The run failed."]} title="It stopped:" />}
             {r?.status === "done" && r.summary && (
               <>
-                <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                   {[
                     [r.mode === "import" ? "Imported" : "Would import", r.summary.created],
                     ["Already imported", r.summary.exists],
+                    ["Of those, lost deals", r.summary.lost ?? 0],
                     ["Skipped", r.summary.skipped],
                     ["Meter numbers to fix", r.summary.meterChecks],
                   ].map(([k, v]) => (
@@ -186,24 +203,39 @@ export function ImportCustomers() {
                 {r.mode === "dry_run" && r.summary.unmatchedAgents.length > 0 && (
                   <div className="space-y-2">
                     <p className="font-medium">Salespeople the CRM doesn&apos;t know by these names</p>
-                    <p className="text-muted">Choose who each sheet name is. Add missing people under Users &amp; roles first, then reload this page to see them here.</p>
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <p className="text-muted">
+                      Choose who each sheet name is, or add them as a new salesperson with their work email. New salespeople get a random password: set one for them under Users &amp; roles (Reset password) when they start using the CRM.
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
                       {r.summary.unmatchedAgents.map((name) => (
-                        <Select key={name} fieldLabel={name} value={agents[name] ?? ""} onChange={(e) => setAgents({ ...agents, [name]: e.target.value || null })}>
-                          <option value="">Leave unassigned</option>
-                          {active.map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.name} ({u.email})
-                            </option>
-                          ))}
-                        </Select>
+                        <div key={name} className="space-y-2">
+                          <Select fieldLabel={name} value={agents[name] ?? ""} onChange={(e) => setAgents({ ...agents, [name]: e.target.value || null })}>
+                            <option value={NEW}>Add as a new salesperson</option>
+                            <option value="">Leave unassigned</option>
+                            {active.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.name} ({u.email})
+                              </option>
+                            ))}
+                          </Select>
+                          {agents[name] === NEW && (
+                            <Field label={`${name}'s email`} required error={emails[name] && !EMAIL.test(emails[name].trim()) ? "Enter a valid email." : undefined}>
+                              {(p) => <Input {...p} type="email" autoComplete="off" value={emails[name] ?? ""} onChange={(e) => setEmails({ ...emails, [name]: e.target.value })} />}
+                            </Field>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>
                 )}
 
                 {r.mode === "dry_run" && r.summary.created > 0 && (
-                  <Button onClick={() => setConfirming(true)}>Import {r.summary.created} rows</Button>
+                  <div className="space-y-1">
+                    <Button disabled={emailsMissing.length > 0} onClick={() => setConfirming(true)}>
+                      Import {r.summary.created} rows
+                    </Button>
+                    {emailsMissing.length > 0 && <p className="text-xs text-muted">Enter an email for {emailsMissing.join(", ")}, or choose a user for them.</p>}
+                  </div>
                 )}
                 {r.mode === "import" && (
                   <p className="text-success">
@@ -275,7 +307,7 @@ export function ImportCustomers() {
           open
           onOpenChange={(o) => !o && setConfirming(false)}
           title={`Import ${r.summary!.created} rows into the CRM?`}
-          description="Each becomes a customer with a won deal and its contract. Deals can't be deleted afterwards, so make sure the database has a recent backup. Running the import again later skips rows already in."
+          description="Each becomes a customer with a won or lost deal and its contract. Deals can't be deleted afterwards, so make sure the database has a recent backup. Running the import again later skips rows already in."
           footer={
             <>
               <Button variant="ghost" onClick={() => setConfirming(false)}>
@@ -288,7 +320,12 @@ export function ImportCustomers() {
           }
         >
           <ul className="ml-5 list-disc space-y-1 text-sm">
-            <li>{Object.values(agents).filter(Boolean).length} of {r.summary!.unmatchedAgents.length} unknown salespeople matched to a user; the rest are left unassigned.</li>
+            {newNames.length > 0 && <li>New salespeople added as users: {newNames.map((n) => `${n} (${emails[n]?.trim()})`).join(", ")}.</li>}
+            <li>
+              {matchedExisting} of {r.summary!.unmatchedAgents.length} unknown salespeople matched to an existing user
+              {r.summary!.unmatchedAgents.length - newNames.length - matchedExisting > 0 ? "; the rest are left unassigned" : ""}.
+            </li>
+            <li>{r.summary!.lost ?? 0} rows marked Rejected, Cancel, Duplicate or Error become lost deals.</li>
             <li>{r.summary!.meterChecks} meter numbers to fix become tasks for an administrator.</li>
             <li>Renewal reminders start for {r.summary!.renewalsSoon} contracts ending soon.</li>
           </ul>

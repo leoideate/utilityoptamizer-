@@ -17,7 +17,7 @@ Administrators can run the import from the CRM itself, with nothing installed an
 1. **Back up the database** (Render → the database → Backups), and add any missing salespeople under **Users & roles**.
 2. Open **Administration → Import customers**, choose the sheet and click **Run dry run**. It runs on the server in the background (a thousand rows take about a minute) and changes nothing.
 3. Read the report: counts, statuses, skipped rows and why, rows with warnings. **Download report** gives every row as a CSV.
-4. For each sales agent name the CRM doesn't know, choose the user it is (a first-name match such as "Abdullah Liaqat" → "Abdullah" is pre-filled), or leave it unassigned.
+4. For each sales agent name the CRM doesn't know, choose the user it is (a first-name match such as "Abdullah Liaqat" → "Abdullah" is pre-filled), choose **Add as a new salesperson** and enter their work email, or leave it unassigned. New salespeople are created as Salesperson users when you import, with a random password: set one under **Users & roles → Reset password** when they start signing in.
 5. Click **Import** and confirm. The import also runs in the background (a few minutes); the page shows the result. Running it again skips rows already imported.
 
 Runs and their copy of the sheet are kept for 90 days, then deleted by the retention job. Signed PDFs are still attached with the script below.
@@ -30,15 +30,16 @@ npm run migrate:customers -w @uo/api -- "C:\path\UOL - Master sheet.xlsx"
 
 This dry run prints a summary and writes `apps/api/migration-out/customers-report.csv`, one line per row. The report folder is gitignored because it holds customer details. Check:
 
-- **Statuses.** Rows whose *Contract Status* looks cancelled, rejected, lost, withdrawn, duplicate or error are skipped. *Clawback* is imported as an *ended* contract (history, no renewal). Every other status (Accepted, Ready for Invoice, Under Investigation…) is imported; a contract whose expiry date has passed is *ended*, any other *live*. The sheet's own status is shown on the deal and in the Customers list's *Contract status* column.
-- **Missing or non-standard MPRN/GPRN.** A row with no meter number is still imported when its utility type says gas or electricity; with `--allow-format-exceptions`, so is one whose number isn't in the standard format. Each such deal gets a high-priority task for the first administrator ("Add the missing GPRN…" / "Check the GPRN…", due in a week), and after a committed run every administrator gets one notification with the count.
+- **Statuses.** Rows whose *Contract Status* looks cancelled, rejected, lost, withdrawn, duplicate or error are imported as **lost deals** (at Submitted, lost reason "Master sheet status: …", a cancelled contract with the meter, no renewal and no meter task), so their history is in the CRM. *Clawback* is imported as an *ended* contract (history, no renewal). Every other status (Accepted, Ready for Invoice, Under Investigation…) is imported; a contract whose expiry date has passed is *ended*, any other *live*. The sheet's own status is shown on the deal and in the Customers list's *Contract status* column.
+- **Missing or non-standard MPRN/GPRN.** A row with no meter number is still imported (as electricity if nothing says which fuel); a row with no utility type takes its fuel from the meter number's length (7 digits or fewer: gas) and gets a task to check it; with `--allow-format-exceptions`, so is one whose number isn't in the standard format. Each such deal gets a high-priority task for the first administrator ("Add the missing GPRN…" / "Check the GPRN…", due in a week), and after a committed run every administrator gets one notification with the count.
 - **Skipped rows.** Each has its reason, for example:
   - a missing name;
-  - a missing or badly formatted MPRN/GPRN;
+  - a badly formatted MPRN/GPRN without `--allow-format-exceptions` (the admin page ticks it by default);
   - a dual fuel row (split it into one row per meter);
   - a row that matches more than one existing customer (merge them first).
   
   Fix the sheet and run again. To import meter numbers that really don't follow the standard format, add `--allow-format-exceptions`; each one is then recorded with a reason.
+- **Repeated rows.** A row with the same meter, dates and status as an earlier row is imported as its own record, with a warning naming the earlier row.
 - **Customer column.** It shows whether the row creates a new customer or reuses one. A customer is reused when it matches exactly one existing customer by email, phone, or name and Eircode. Several rows for the same business share one customer.
 - **Renewals.** The summary counts live contracts that end within 120 days. The renewal job opens renewal deals for them at its next 07:00 run.
 

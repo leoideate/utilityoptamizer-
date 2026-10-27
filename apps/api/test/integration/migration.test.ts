@@ -61,7 +61,7 @@ describe("master sheet migration", () => {
     expect(r.lines.map((l) => [l.tab, l.line, l.action])).toEqual([
       ["Flogas", 2, "created"],
       ["Flogas", 3, "created"],
-      ["Flogas", 4, "skipped"],
+      ["Flogas", 4, "created"],
       ["Bord Gais", 2, "created"],
       ["Bord Gais", 3, "skipped"],
       ["Energia", 2, "skipped"],
@@ -71,6 +71,7 @@ describe("master sheet migration", () => {
     expect(r.unmatchedAgents).toEqual(["Former Agent"]);
     expect(r.renewalsSoon).toBe(1);
     expect(r.statuses).toMatchObject({ "Ready for Invoice": 5, Cancelled: 1 });
+    expect(r.lost).toBe(1);
     expect(r.ignoredColumns).toEqual(expect.arrayContaining(["Month", "Year"]));
     expect(await t.prisma.opportunity.count()).toBe(0);
     expect(await t.prisma.customer.count()).toBe(0);
@@ -78,8 +79,8 @@ describe("master sheet migration", () => {
 
   it("imports won deals with live contracts, once", async () => {
     const r = await migration.importCustomers(await workbook(), { commit: true });
-    expect(r.lines.filter((l) => l.action === "created")).toHaveLength(3);
-    expect(await t.prisma.customer.count()).toBe(2); // both Harbour Café rows share one customer
+    expect(r.lines.filter((l) => l.action === "created")).toHaveLength(4);
+    expect(await t.prisma.customer.count()).toBe(3); // both Harbour Café rows share one customer
 
     const sarah = await t.prisma.user.findFirstOrThrow({ where: { name: "Sarah Sales" } });
     const elec = await t.prisma.opportunity.findFirstOrThrow({ where: { importKey: { contains: "10012345678" } }, include: { stage: true, contracts: true, sites: { include: { meterPoints: true } }, customer: { include: { contacts: true, addresses: true } }, timeline: true } });
@@ -94,11 +95,17 @@ describe("master sheet migration", () => {
 
     const bakery = await t.prisma.opportunity.findFirstOrThrow({ where: { importKey: { contains: "10098765432" } }, include: { selectedSupplier: true } });
     expect(bakery).toMatchObject({ ownerId: null, selectedSupplier: { name: "Bord Gáis Energy" } });
-    expect(await t.prisma.auditLog.count({ where: { action: "migration.import" } })).toBe(3);
+    expect(await t.prisma.auditLog.count({ where: { action: "migration.import" } })).toBe(4);
+
+    // A cancelled row is kept as a lost deal at Submitted, with its meter but no live contract or renewal.
+    const gone = await t.prisma.opportunity.findFirstOrThrow({ where: { importKey: { contains: "10011111111" } }, include: { stage: true, contracts: true, sites: { include: { meterPoints: true } } } });
+    expect(gone).toMatchObject({ outcome: "lost", lostReason: "Master sheet status: Cancelled", wonAt: null, renewalDate: null, probability: 0, stage: { key: "submitted" }, applicationStatus: "Cancelled" });
+    expect(gone.contracts[0]).toMatchObject({ status: "cancelled", activationDate: null });
+    expect(gone.sites[0].meterPoints[0].mprn).toBe("10011111111");
 
     const again = await migration.importCustomers(await workbook(), { commit: true });
-    expect(again.lines.filter((l) => l.action === "exists")).toHaveLength(3);
-    expect(await t.prisma.opportunity.count()).toBe(3);
+    expect(again.lines.filter((l) => l.action === "exists")).toHaveLength(4);
+    expect(await t.prisma.opportunity.count()).toBe(4);
   });
 
   it("adds missing suppliers when asked", async () => {

@@ -57,6 +57,8 @@ export interface CustomersImport {
   ignoredColumns: string[];
   /** Deals whose MPRN/GPRN is missing or unverified; each gets a task for an administrator. */
   meterChecks: number;
+  /** Rows the sheet says never went ahead (Rejected, Cancel...), imported as lost deals. */
+  lost: number;
 }
 
 /** How far ahead the renewal job looks (automations/renewals.service.ts). */
@@ -87,7 +89,7 @@ export class MigrationService {
 
   async importCustomers(tabs: SheetTab[], opts: ImportOptions): Promise<CustomersImport> {
     const today = opts.today ?? businessToday();
-    const result: CustomersImport = { lines: [], statuses: {}, suppliersToCreate: [], unmatchedAgents: [], renewalsSoon: 0, ignoredColumns: [...new Set(tabs.flatMap((t) => t.ignored))], meterChecks: 0 };
+    const result: CustomersImport = { lines: [], statuses: {}, suppliersToCreate: [], unmatchedAgents: [], renewalsSoon: 0, ignoredColumns: [...new Set(tabs.flatMap((t) => t.ignored))], meterChecks: 0, lost: 0 };
     const suppliers = await this.prisma.supplier.findMany();
     const users = await this.prisma.user.findMany({ where: { active: true }, select: { id: true, name: true } });
     const userByName = new Map(users.map((u) => [u.name.trim().toLowerCase(), u.id]));
@@ -95,6 +97,8 @@ export class MigrationService {
     const activeIds = new Set(users.map((u) => u.id));
     const agents = new Map(Object.entries(opts.agents ?? {}).flatMap(([name, id]) => (id === null || activeIds.has(id) ? [[name.trim().toLowerCase(), id] as const] : [])));
     const liveWon = await this.stages.idFor("live_won");
+    // Lost deals (Rejected, Cancel...) stay at Submitted: they reached the supplier, which is where they stopped.
+    const submitted = await this.stages.idFor("submitted");
     // Missing or unverified meter numbers go to an administrator to fix.
     const admins = await this.prisma.user.findMany({ where: { active: true, roles: { some: { role: "administrator" } } }, select: { id: true }, orderBy: { createdAt: "asc" } });
     // Customers a dry run would create, so later rows for the same business show as reused.
@@ -104,6 +108,8 @@ export class MigrationService {
     // Customers this run created: a later row matching several of them is the same business seen
     // through different details (phone on one row, email on another), not an ambiguous match.
     const createdIds = new Map<string, string>();
+    // Import keys seen in this run: a second row with the same meter, dates and status is kept as its own record.
+    const runKeys = new Map<string, number>();
 
     for (const tab of tabs) {
       for (const { line, cells } of tab.rows) {
@@ -116,6 +122,12 @@ export class MigrationService {
         if (!row) {
           report("skipped", parsed.issues.join(" "));
           continue;
+        }
+        const twin = runKeys.get(row.importKey);
+        runKeys.set(row.importKey, twin ?? line);
+        if (twin !== undefined) {
+          row.importKey = `${row.importKey}:row${line}`;
+          parsed.warnings.push(`Same meter, dates and status as row ${twin}; imported as a separate record.`);
         }
         const existing = await this.prisma.opportunity.findUnique({ where: { importKey: row.importKey }, select: { number: true } });
         if (existing) {
@@ -170,6 +182,7 @@ export class MigrationService {
           if (!earlier) createdNames.set(name, `${tab.name} row ${line}`);
         }
 
+        if (row.outcome === "lost") result.lost++;
         if (row.contractStatus === "live" && row.endDate && row.endDate <= addDays(today, RENEWAL_WINDOW_DAYS)) result.renewalsSoon++;
         if (row.meterCheck) result.meterChecks++;
         if (!opts.commit) {
@@ -177,7 +190,7 @@ export class MigrationService {
           report("created", this.describe(row), customerLabel, extra);
           continue;
         }
-        const { number, customerId } = await this.prisma.$transaction((tx) => this.write(tx, row, { customerId: matches[0]?.customer.id, ownerId, supplier: supplier!, stageId: liveWon, adminId: admins[0]?.id ?? null, today }));
+        const { number, customerId } = await this.prisma.$transaction((tx) => this.write(tx, row, { customerId: matches[0]?.customer.id, ownerId, supplier: supplier!, stageId: row.outcome === "lost" ? submitted : liveWon, adminId: admins[0]?.id ?? null, today }));
         if (!matches.length) createdIds.set(customerId, `${row.legalName} (${tab.name} row ${line})`);
         report("created", `${ref(number)}: ${this.describe(row)}`, customerLabel, extra);
       }
@@ -272,7 +285,7 @@ export class MigrationService {
 
   private describe(row: MigrationRow) {
     const meter = row.mprn ? `MPRN ${row.mprn}` : row.gprn ? `GPRN ${row.gprn}` : null;
-    const until = row.endDate ? `${row.contractStatus === "ended" ? "ended" : "until"} ${row.endDate}` : null;
+    const until = row.outcome === "lost" ? `lost (${row.sheetStatus})` : row.endDate ? `${row.contractStatus === "ended" ? "ended" : "until"} ${row.endDate}` : null;
     return [`${row.supplier.name} ${FUEL_LABEL[row.serviceType]}`, meter, row.product, until].filter(Boolean).join(", ");
   }
 
@@ -306,6 +319,7 @@ export class MigrationService {
     }
 
     const wonAt = row.signDate ?? row.startDate;
+    const lost = row.outcome === "lost";
     const opp = await tx.opportunity.create({
       data: {
         name: `${row.tradingName ?? row.legalName} – ${FUEL_LABEL[row.serviceType]}`,
@@ -318,16 +332,18 @@ export class MigrationService {
         ownerId: ctx.ownerId ?? null,
         stageId: ctx.stageId,
         stageEnteredAt: wonAt ? new Date(`${wonAt}T00:00:00Z`) : new Date(),
-        outcome: "won",
-        probability: stageDef("live_won").probability,
+        outcome: row.outcome,
+        probability: lost ? 0 : stageDef("live_won").probability,
         serviceType: row.serviceType,
         saleType: row.saleType,
         leadSource: "migration",
         leadSourceDetail: `Master sheet, ${row.tab} tab, row ${row.line}`,
         applicationStatus: row.sheetStatus,
         selectedSupplierId: ctx.supplier.id,
-        wonAt: wonAt ? new Date(`${wonAt}T00:00:00Z`) : new Date(),
-        activationDate: dateOnly(row.startDate),
+        wonAt: lost ? null : wonAt ? new Date(`${wonAt}T00:00:00Z`) : new Date(),
+        lostAt: lost ? (wonAt ? new Date(`${wonAt}T00:00:00Z`) : new Date()) : null,
+        lostReason: lost ? `Master sheet status: ${row.sheetStatus}` : null,
+        activationDate: lost ? null : dateOnly(row.startDate),
         renewalDate: row.contractStatus === "live" ? dateOnly(row.endDate) : null,
         importKey: row.importKey,
       },
@@ -359,7 +375,7 @@ export class MigrationService {
           selectedSupplierId: ctx.supplier.id,
           status: row.contractStatus,
           termMonths: row.termMonths,
-          activationDate: dateOnly(row.startDate),
+          activationDate: lost ? null : dateOnly(row.startDate),
           contractEndDate: dateOnly(row.endDate),
           pricingPlan: row.product,
         },
@@ -370,7 +386,12 @@ export class MigrationService {
           opportunityId: opp.id,
           customerId,
           type: "todo",
-          summary: row.meterCheck === "missing" ? `Add the missing ${id} (imported without one)` : `Check the ${id} ${row.mprn ?? row.gprn}: it isn't in the standard format`,
+          summary:
+            row.meterCheck === "missing"
+              ? `Add the missing ${id} (imported without one)`
+              : row.meterCheck === "fuel"
+                ? `Check this is ${row.fuel} and the ${id} ${row.mprn ?? row.gprn}: the sheet had no utility type`
+                : `Check the ${id} ${row.mprn ?? row.gprn}: it isn't in the standard format`,
           note: `From the master sheet (${row.tab} tab, row ${row.line}). Take it from the customer's bill or the supplier, then update the meter on the Energy tab.`,
           dueDate: addDays(ctx.today, 7),
           priority: "high",
