@@ -256,6 +256,12 @@ export const opportunityListQuerySchema = z.object({
   serviceType: z.enum(SERVICE_TYPES).optional(),
   stage: z.enum(STAGE_KEYS).optional(),
   supplierId: id.optional(),
+  outcome: z.enum(["open", "won", "lost"]).optional(),
+  leadSource: z.enum(LEAD_SOURCES).optional(),
+  /** A period, as the dashboard counts it: deals created, won or lost between from and to (both days included). */
+  dated: z.enum(["created", "won", "lost"]).optional(),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(25),
 });

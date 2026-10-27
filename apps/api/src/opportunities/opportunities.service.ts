@@ -723,6 +723,13 @@ export class OpportunitiesService {
     if (q.serviceType) and.push({ serviceType: q.serviceType });
     if (q.stage) and.push({ stage: { key: q.stage } });
     if (q.supplierId) and.push({ selectedSupplierId: q.supplierId });
+    if (q.outcome) and.push({ outcome: q.outcome });
+    if (q.leadSource) and.push({ leadSource: q.leadSource });
+    if (q.dated && (q.from || q.to)) {
+      // The same day boundaries as the dashboard (ReportsService.range), so a figure and its list agree.
+      const field = ({ created: "createdAt", won: "wonAt", lost: "lostAt" } as const)[q.dated];
+      and.push({ [field]: { ...(q.from ? { gte: new Date(`${q.from}T00:00:00Z`) } : {}), ...(q.to ? { lt: new Date(`${addDays(q.to, 1)}T00:00:00Z`) } : {}) } });
+    }
     if (q.q) {
       const term = q.q.trim();
       const n = opportunityNumber(term);

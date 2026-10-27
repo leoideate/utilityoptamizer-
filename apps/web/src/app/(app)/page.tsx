@@ -18,7 +18,19 @@ interface Dashboard {
   newLeads: number;
   leadsBySource: { source: LeadSource; count: number }[];
   opportunitiesByStage: { key: string; name: string; count: number; value: number }[];
-  opportunitiesBySalesperson: { ownerId: string | null; name: string; open: number; won: number; lost: number; value: number }[];
+  opportunitiesBySalesperson: {
+    ownerId: string | null;
+    name: string;
+    open: number;
+    won: number;
+    lost: number;
+    value: number;
+    leadsInPeriod: number;
+    wonInPeriod: number;
+    lostInPeriod: number;
+    wonValueInPeriod: number;
+    winRate: number | null;
+  }[];
   opportunitiesByService: { serviceType: ServiceType; open: number; won: number; lost: number }[];
   won: number;
   lost: number;
@@ -51,6 +63,10 @@ export default function HomePage() {
   const query = qs(filters);
   const { data, isLoading, refetch, isFetching } = useQuery({ queryKey: ["dashboard", query], queryFn: () => api.get<Dashboard>(`/reports/dashboard${query}`) });
   const set = (k: keyof typeof filters) => (v: string) => setFilters((f) => ({ ...f, [k]: v }));
+  // Each figure opens the deals behind it: the opportunities list with the same filters and period.
+  const drill = (extra: Record<string, string | null | undefined>) =>
+    `/opportunities${qs({ view: "all", ownerId: filters.ownerId, serviceType: filters.serviceType, supplierId: filters.supplierId, ...extra })}`;
+  const period = data ? { from: data.range.from, to: data.range.to } : {};
 
   return (
     <>
@@ -146,11 +162,12 @@ export default function HomePage() {
         </div>
       ) : (
         <div className="space-y-6">
-          <section aria-label="Key figures" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-            <Stat label="New leads" value={num(data.newLeads)} sub="in this period" />
-            <Stat label="Open pipeline" value={moneyCompact(data.pipelineValue)} sub={`${moneyCompact(data.weightedPipelineValue)} weighted by probability`} />
-            <Stat label="Won / lost" value={`${data.won} / ${data.lost}`} sub={`Win rate ${pct(data.winRate)} · conversion ${pct(data.conversionRate)}`} tone="success" />
-            <Stat label="Avg. days to activation" value={data.averageDaysToActivation ?? "—"} sub="lead created → live" />
+          <section aria-label="Key figures" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
+            <StatLink href={drill({ dated: "created", ...period })} label="New leads" value={num(data.newLeads)} sub="created in this period" />
+            <StatLink href={drill({ outcome: "open" })} label="Open pipeline" value={moneyCompact(data.pipelineValue)} sub={`${moneyCompact(data.weightedPipelineValue)} weighted by probability`} />
+            <StatLink href={drill({ outcome: "won", dated: "won", ...period })} label="Won" value={num(data.won)} sub={`Win rate ${pct(data.winRate)} · conversion ${pct(data.conversionRate)}`} tone="success" />
+            <StatLink href={drill({ outcome: "lost", dated: "lost", ...period })} label="Lost" value={num(data.lost)} sub="lost in this period" />
+            <StatLink href={drill({ outcome: "won", dated: "won", ...period })} label="Avg. days to activation" value={data.averageDaysToActivation ?? "—"} sub="lead created → live" />
           </section>
 
           <section aria-label="Needs attention" className="grid gap-4 sm:grid-cols-3">
@@ -169,48 +186,22 @@ export default function HomePage() {
             <Card>
               <CardHeader title="Open opportunities by stage" description="Count and value of deals currently at each stage." />
               <div className="p-5">
-                <BarList rows={data.opportunitiesByStage.filter((s) => s.count > 0).map((s) => ({ label: s.name, value: s.count, hint: s.value ? money(s.value) : undefined, href: `/opportunities?view=all&stage=${s.key}` }))} />
+                <BarList rows={data.opportunitiesByStage.filter((s) => s.count > 0).map((s) => ({ label: s.name, value: s.count, hint: s.value ? money(s.value) : undefined, href: drill({ stage: s.key, outcome: "open" }) }))} />
               </div>
             </Card>
             <Card>
               <CardHeader title="Leads by source" />
               <div className="p-5">
-                <BarList rows={data.leadsBySource.map((s) => ({ label: LEAD_SOURCE_LABELS[s.source], value: s.count }))} />
+                <BarList rows={data.leadsBySource.map((s) => ({ label: LEAD_SOURCE_LABELS[s.source], value: s.count, href: drill({ leadSource: s.source, dated: "created", ...period }) }))} />
               </div>
             </Card>
-            {seesAll && (
-              <Card>
-                <CardHeader title="By salesperson" />
-                <div className="overflow-x-auto" tabIndex={0}>
-                  <table className="w-full text-sm">
-                    <thead className="text-left text-muted">
-                      <tr>
-                        <th className="px-5 py-2 font-medium">Salesperson</th>
-                        <th className="px-3 py-2 text-right font-medium">Open</th>
-                        <th className="px-3 py-2 text-right font-medium">Won</th>
-                        <th className="px-3 py-2 text-right font-medium">Lost</th>
-                        <th className="px-5 py-2 text-right font-medium">Pipeline</th>
-                      </tr>
-                    </thead>
-                    <tbody className="tabular">
-                      {data.opportunitiesBySalesperson.map((r) => (
-                        <tr key={r.ownerId ?? "none"} className="border-t border-border">
-                          <td className="px-5 py-2">{r.name}</td>
-                          <td className="px-3 py-2 text-right">{r.open}</td>
-                          <td className="px-3 py-2 text-right">{r.won}</td>
-                          <td className="px-3 py-2 text-right">{r.lost}</td>
-                          <td className="px-5 py-2 text-right">{money(r.value)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-            )}
+            {seesAll && <TeamPerformance rows={data.opportunitiesBySalesperson} drill={drill} period={period} />}
             <Card>
               <CardHeader title="By service" />
               <div className="p-5">
-                <BarList rows={data.opportunitiesByService.map((s) => ({ label: SERVICE_TYPE_LABELS[s.serviceType], value: s.open + s.won, hint: `${s.won} won` }))} />
+                <BarList
+                  rows={data.opportunitiesByService.map((s) => ({ label: SERVICE_TYPE_LABELS[s.serviceType], value: s.open + s.won + s.lost, hint: `${s.open} open · ${s.won} won`, href: drill({ serviceType: s.serviceType }) }))}
+                />
               </div>
             </Card>
             <Card>
@@ -222,7 +213,11 @@ export default function HomePage() {
             <Card>
               <CardHeader title="Supplier performance" />
               <div className="p-5">
-                <BarList rows={data.supplierPerformance.map((s) => ({ label: s.name, value: s.won, hint: `win rate ${pct(s.winRate)}` }))} format={(n) => `${n} won`} empty="No supplier selected on any deal yet." />
+                <BarList
+                  rows={data.supplierPerformance.map((s) => ({ label: s.name, value: s.won, hint: `win rate ${pct(s.winRate)}`, href: drill({ supplierId: s.supplierId, outcome: "won" }) }))}
+                  format={(n) => `${n} won`}
+                  empty="No supplier selected on any deal yet."
+                />
               </div>
             </Card>
             <Card>
@@ -275,6 +270,83 @@ function WorkQueue() {
           </Link>
         ))}
       </div>
+    </Card>
+  );
+}
+
+/** A key figure that opens the deals it counts. */
+function StatLink({ href, ...stat }: { href: string } & React.ComponentProps<typeof Stat>) {
+  return (
+    <Link href={href} className="group min-w-0 rounded-xl outline-offset-2 [&>*]:h-full [&>*]:transition-colors hover:[&>*]:border-primary" aria-label={`${stat.label}: open the list`}>
+      <Stat {...stat} />
+    </Link>
+  );
+}
+
+/** A count that opens the deals behind it; zero, or no list to open, stays plain. */
+function CountLink({ href, value, children }: { href?: string; value: number; children?: React.ReactNode }) {
+  if (!href || !value) return <>{children ?? value}</>;
+  return (
+    <Link href={href} className="inline-block min-h-6 min-w-6 py-0.5 font-medium text-primary hover:underline">
+      {children ?? value}
+    </Link>
+  );
+}
+
+/**
+ * Each salesperson's results: leads, wins and losses in the period, and what they hold now. Every
+ * figure opens those deals.
+ */
+function TeamPerformance({ rows, drill, period }: { rows: Dashboard["opportunitiesBySalesperson"]; drill: (extra: Record<string, string | null | undefined>) => string; period: { from?: string; to?: string } }) {
+  return (
+    <Card className="lg:col-span-2">
+      <CardHeader title="Team performance" description="New leads, won and lost in the selected period; open deals and pipeline as they stand now. Click a figure to see the deals." />
+      {rows.length === 0 ? (
+        <p className="px-5 pb-5 text-sm text-muted">No deals in this period.</p>
+      ) : (
+        <div className="overflow-x-auto" tabIndex={0}>
+          <table className="w-full text-sm">
+            <thead className="text-left text-muted">
+              <tr>
+                <th className="px-5 py-2 font-medium">Salesperson</th>
+                <th className="px-3 py-2 text-right font-medium">New leads</th>
+                <th className="px-3 py-2 text-right font-medium">Won</th>
+                <th className="px-3 py-2 text-right font-medium">Won value</th>
+                <th className="px-3 py-2 text-right font-medium">Lost</th>
+                <th className="px-3 py-2 text-right font-medium">Win rate</th>
+                <th className="px-3 py-2 text-right font-medium">Open now</th>
+                <th className="px-5 py-2 text-right font-medium">Pipeline</th>
+              </tr>
+            </thead>
+            <tbody className="tabular">
+              {rows.map((r) => {
+                // Unassigned deals have no owner to filter on; only the open ones have a list (the Unassigned view).
+                const own = (extra: Record<string, string | undefined>) => (r.ownerId ? drill({ ownerId: r.ownerId, ...extra }) : undefined);
+                return (
+                  <tr key={r.ownerId ?? "none"} className="border-t border-border">
+                    <td className="whitespace-nowrap px-5 py-2">{r.ownerId ? <CountLink href={own({})} value={1}>{r.name}</CountLink> : r.name}</td>
+                    <td className="px-3 py-2 text-right">
+                      <CountLink href={own({ dated: "created", ...period })} value={r.leadsInPeriod} />
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <CountLink href={own({ outcome: "won", dated: "won", ...period })} value={r.wonInPeriod} />
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right">{money(r.wonValueInPeriod)}</td>
+                    <td className="px-3 py-2 text-right">
+                      <CountLink href={own({ outcome: "lost", dated: "lost", ...period })} value={r.lostInPeriod} />
+                    </td>
+                    <td className="px-3 py-2 text-right">{pct(r.winRate)}</td>
+                    <td className="px-3 py-2 text-right">
+                      <CountLink href={r.ownerId ? own({ outcome: "open" }) : "/opportunities?view=unassigned"} value={r.open} />
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-2 text-right">{money(r.value)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Card>
   );
 }

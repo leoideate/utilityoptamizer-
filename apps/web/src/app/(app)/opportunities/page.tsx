@@ -5,8 +5,8 @@ import { ChevronLeft, ChevronRight, Inbox, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { SELECTABLE_SERVICE_TYPES, SERVICE_TYPE_LABELS, STAGES } from "@uo/shared";
-import { OutcomeBadge, ServiceBadge, UserSelect } from "@/components/domain";
+import { LEAD_SOURCE_LABELS, type LeadSource, SELECTABLE_SERVICE_TYPES, SERVICE_TYPE_LABELS, STAGES } from "@uo/shared";
+import { OutcomeBadge, ServiceBadge, UserSelect, useSuppliers } from "@/components/domain";
 import { BulkAssignBar } from "@/components/bulk-assign-bar";
 import { CloseLeadBatchButton } from "@/components/close-lead-batch";
 import { ImportLeadsButton } from "@/components/import-leads";
@@ -46,7 +46,30 @@ function OpportunitiesList() {
   }, [params, pathname, router]);
 
   const view = params.get("view") ?? (seesAll ? "all" : "my_open");
-  const filters = { view, q: params.get("q") ?? "", serviceType: params.get("serviceType") ?? "", stage: params.get("stage") ?? "", ownerId: params.get("ownerId") ?? "", page: Number(params.get("page") ?? 1), pageSize: 25 };
+  const filters = {
+    view,
+    q: params.get("q") ?? "",
+    serviceType: params.get("serviceType") ?? "",
+    stage: params.get("stage") ?? "",
+    ownerId: params.get("ownerId") ?? "",
+    // Set by the dashboard's figures; shown as one line above the list.
+    supplierId: params.get("supplierId") ?? "",
+    outcome: params.get("outcome") ?? "",
+    leadSource: params.get("leadSource") ?? "",
+    dated: params.get("dated") ?? "",
+    from: params.get("from") ?? "",
+    to: params.get("to") ?? "",
+    page: Number(params.get("page") ?? 1),
+    pageSize: 25,
+  };
+  const suppliers = useSuppliers();
+  const DATED = { created: "Created", won: "Won", lost: "Lost" } as const;
+  const OUTCOME = { open: "Open", won: "Won", lost: "Lost" } as const;
+  const drilled = [
+    filters.dated && (filters.from || filters.to) ? `${DATED[filters.dated as keyof typeof DATED] ?? filters.dated} ${filters.from ? date(filters.from) : "…"} – ${filters.to ? date(filters.to) : "…"}` : filters.outcome && OUTCOME[filters.outcome as keyof typeof OUTCOME],
+    filters.leadSource && `Source: ${LEAD_SOURCE_LABELS[filters.leadSource as LeadSource] ?? filters.leadSource}`,
+    filters.supplierId && `Supplier: ${suppliers.data?.find((s) => s.id === filters.supplierId)?.name ?? "selected"}`,
+  ].filter(Boolean);
   const setParam = (patch: Record<string, string | number>) => {
     const next = new URLSearchParams(params);
     for (const [k, v] of Object.entries(patch)) {
@@ -147,18 +170,36 @@ function OpportunitiesList() {
                 <UserSelect value={filters.ownerId} onChange={(v) => setParam({ ownerId: v })} />
               </div>
             )}
-            {(filters.q || filters.serviceType || filters.stage || filters.ownerId) && (
+            {(filters.q || filters.serviceType || filters.stage || filters.ownerId || drilled.length > 0) && (
               <Button
                 variant="ghost"
                 onClick={() => {
                   setSearch("");
-                  setParam({ q: "", serviceType: "", stage: "", ownerId: "" });
+                  setParam({ q: "", serviceType: "", stage: "", ownerId: "", supplierId: "", outcome: "", leadSource: "", dated: "", from: "", to: "" });
                 }}
               >
                 Reset filters
               </Button>
             )}
           </div>
+          {drilled.length > 0 && (
+            <p className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted">Showing:</span>
+              {drilled.map((d) => (
+                <Badge key={String(d)} tone="primary">
+                  {d}
+                </Badge>
+              ))}
+              {data && <span className="text-muted">· {data.total} deal{data.total === 1 ? "" : "s"}</span>}
+              <button
+                type="button"
+                className="min-h-6 text-primary hover:underline"
+                onClick={() => setParam({ supplierId: "", outcome: "", leadSource: "", dated: "", from: "", to: "" })}
+              >
+                Clear
+              </button>
+            </p>
+          )}
 
           {canAssign && <BulkAssignBar ids={[...selected]} label={nameOf} onDone={() => setSelected(new Set())} onClear={() => setSelected(new Set())} />}
 
