@@ -1,7 +1,8 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { ImportRun, Prisma } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
+import { hashPassword } from "../auth/passwords";
 import type { Actor } from "../common/actor";
 import { Conflict, NotFound, RuleViolation } from "../common/errors";
 import { PrismaService } from "../common/prisma.service";
@@ -16,6 +17,8 @@ export interface ImportRunOptions {
   createSuppliers: boolean;
   /** Sheet sales agent name → user id, or null to leave those deals unassigned. */
   agents: Record<string, string | null>;
+  /** Sheet sales agent name → email: added as salesperson users when importing (not in a dry run). */
+  newAgents?: Record<string, string>;
 }
 
 /**
@@ -65,12 +68,38 @@ export class ImportRunsService {
     if (dry.status !== "done") throw new RuleViolation(["Wait for the dry run to finish, then import."]);
     const running = await this.prisma.importRun.findFirst({ where: { mode: "import", status: "running" } });
     if (running) throw new Conflict("An import is already running. Wait for it to finish.");
+    options = { ...options, agents: { ...options.agents, ...(await this.createAgents(actor, options.newAgents ?? {})) }, newAgents: {} };
     const run = await this.prisma.importRun.create({
       data: { mode: "import", filename: dry.filename, storageKey: dry.storageKey, sha256: dry.sha256, options: options as unknown as Prisma.InputJsonValue, fromRunId: dry.id, createdById: actor.id },
     });
     await this.audit.log(actor, { action: "import.customers", entityType: "import_run", entityId: run.id, summary: `Importing customers from ${run.filename}` });
     this.start(run, true);
     return this.view(run);
+  }
+
+  /**
+   * Adds the sheet's salespeople the CRM doesn't have as salesperson users, before the import
+   * assigns their deals. Each gets a random password nobody knows: an administrator sets one under
+   * Users & roles (Reset password) when the person starts signing in.
+   */
+  private async createAgents(actor: Actor, newAgents: Record<string, string>) {
+    const entries = Object.entries(newAgents).map(([name, email]) => [name.trim(), email] as const).filter(([name]) => name);
+    if (!entries.length) return {};
+    const emails = entries.map(([, email]) => email);
+    const issues = emails.filter((e, i) => emails.indexOf(e) !== i).map((e) => `${e} is entered for more than one salesperson.`);
+    const taken = await this.prisma.user.findMany({ where: { email: { in: emails } }, select: { email: true } });
+    issues.push(...taken.map((u) => `A user with email ${u.email} already exists. Choose that user in the list instead.`));
+    if (issues.length) throw new RuleViolation([...new Set(issues)]);
+    const ids: Record<string, string> = {};
+    for (const [name, email] of entries) {
+      const user = await this.prisma.$transaction(async (tx) => {
+        const u = await tx.user.create({ data: { name, email, passwordHash: await hashPassword(randomBytes(32).toString("base64url")), roles: { create: [{ role: "salesperson" }] } } });
+        await this.audit.log(actor, { action: "user.create", entityType: "user", entityId: u.id, summary: `Created user ${email} for the customer import`, data: { roles: ["salesperson"] } }, tx);
+        return u;
+      });
+      ids[name] = user.id;
+    }
+    return ids;
   }
 
   async get(id: string) {

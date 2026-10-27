@@ -18,6 +18,7 @@ async function sheet() {
   ws.addRow(COLS);
   ws.addRow(["Run Café Ltd", null, "Ireland", "Pat Kelly", "0861112223", "+353861112223", null, "10012300001", "Flogas", "Electricity", "GP (Rate Card 3)", null, expiry, 2, "Accepted", "Pat Kelly Sales"]);
   ws.addRow(["Run Bakery", null, "Ireland", null, "0861114445", null, null, "10012300002", "Flogas", "Electricity", "GP (Rate Card 3)", null, expiry, 2, "Rejected", "Pat Kelly Sales"]);
+  ws.addRow(["Run Deli", null, "Ireland", null, "0861117778", null, null, "10012300003", "Flogas", "Electricity", "GP (Rate Card 3)", null, expiry, 2, "Accepted", "Sam New"]);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
@@ -51,20 +52,29 @@ describe("Administration → Import customers", () => {
     const started = expectStatus(await admin.upload("/admin/imports", await sheet(), "Flogas customers.xlsx", XLSX), 201).body;
     expect(started).toMatchObject({ mode: "dry_run", status: "running" });
     const dry = await finished(admin, started.id);
-    expect(dry.summary).toMatchObject({ rows: 2, created: 1, skipped: 1, unmatchedAgents: ["Pat Kelly Sales"] });
-    expect(dry.lines.map((l: { action: string }) => l.action)).toEqual(["created", "skipped"]);
+    expect(dry.summary).toMatchObject({ rows: 3, created: 3, lost: 1, skipped: 0, unmatchedAgents: ["Pat Kelly Sales", "Sam New"] });
+    expect(dry.lines.map((l: { action: string }) => l.action)).toEqual(["created", "created", "created"]);
     expect(await t.prisma.opportunity.count({ where: { leadSource: "migration" } })).toBe(0);
 
-    const imported = await finished(admin, expectStatus(await admin.post(`/admin/imports/${dry.id}/import`, { agents: { "Pat Kelly Sales": pat.id } }), 201).body.id);
-    expect(imported).toMatchObject({ mode: "import", status: "done", summary: { created: 1, unmatchedAgents: [] } });
-    const deal = await t.prisma.opportunity.findFirstOrThrow({ where: { leadSource: "migration" } });
-    expect(deal).toMatchObject({ companyName: "Run Café Ltd", ownerId: pat.id, outcome: "won", applicationStatus: "Accepted" });
+    // A new salesperson's email must be free.
+    const taken = await t.prisma.user.findUniqueOrThrow({ where: { id: pat.id }, select: { email: true } });
+    expect(expectStatus(await admin.post(`/admin/imports/${dry.id}/import`, { agents: { "Pat Kelly Sales": pat.id }, newAgents: { "Sam New": taken.email } }), 422).body.issues[0]).toMatch(/already exists/);
+
+    const imported = await finished(admin, expectStatus(await admin.post(`/admin/imports/${dry.id}/import`, { agents: { "Pat Kelly Sales": pat.id }, newAgents: { "Sam New": "Sam.New@Example.ie" } }), 201).body.id);
+    expect(imported).toMatchObject({ mode: "import", status: "done", summary: { created: 3, lost: 1, unmatchedAgents: [] } });
+    const sam = await t.prisma.user.findUniqueOrThrow({ where: { email: "sam.new@example.ie" }, include: { roles: true } });
+    expect(sam).toMatchObject({ name: "Sam New", active: true, roles: [expect.objectContaining({ role: "salesperson" })] });
+    expect(await t.prisma.auditLog.count({ where: { action: "user.create", entityId: sam.id } })).toBe(1);
+    const deal = await t.prisma.opportunity.findFirstOrThrow({ where: { leadSource: "migration", companyName: "Run Café Ltd" } });
+    expect(deal).toMatchObject({ ownerId: pat.id, outcome: "won", applicationStatus: "Accepted" });
+    expect(await t.prisma.opportunity.findFirstOrThrow({ where: { companyName: "Run Bakery" } })).toMatchObject({ ownerId: pat.id, outcome: "lost", applicationStatus: "Rejected" });
+    expect(await t.prisma.opportunity.findFirstOrThrow({ where: { companyName: "Run Deli" } })).toMatchObject({ ownerId: sam.id, outcome: "won" });
     expect(await t.prisma.auditLog.count({ where: { action: "import.customers", entityId: imported.id } })).toBe(1);
 
     // The same sheet again: nothing new.
     const again = await finished(admin, expectStatus(await admin.post(`/admin/imports/${dry.id}/import`, { agents: {} }), 201).body.id);
-    expect(again.summary).toMatchObject({ created: 0, exists: 1 });
-    expect(await t.prisma.opportunity.count({ where: { leadSource: "migration" } })).toBe(1);
+    expect(again.summary).toMatchObject({ created: 0, exists: 3 });
+    expect(await t.prisma.opportunity.count({ where: { leadSource: "migration" } })).toBe(3);
 
     const runs = expectStatus(await admin.get("/admin/imports"), 200).body;
     expect(runs[0]).not.toHaveProperty("storageKey");

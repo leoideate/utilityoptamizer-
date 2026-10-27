@@ -189,7 +189,7 @@ export function supplierFromTab(tab: string): SheetSupplier {
 /** Same supplier, ignoring case, accents, spaces and punctuation. */
 export const sameSupplier = (a: string, b: string) => supplierKey(a) === supplierKey(b) || (isBordGaisSupplier(a) && isBordGaisSupplier(b));
 
-/** Statuses that mean the contract never went ahead; those rows are skipped and listed for review. */
+/** Statuses that mean the contract never went ahead; those rows are imported as lost deals, so the history is kept. */
 const NOT_LIVE = /cancel|reject|declin|withdraw|lost|void|terminat|not proceed|duplicate|error/i;
 /** Statuses for a contract that went live but has since ended (commission clawed back). */
 const ENDED = /clawback|claw back|clawed/i;
@@ -215,14 +215,16 @@ export interface MigrationRow {
   signDate: string | null;
   startDate: string | null;
   endDate: string | null;
-  /** Ended when the expiry date has passed, or the status says it ended (clawback). */
-  contractStatus: "live" | "ended";
+  /** Won for a contract that went live; lost when the sheet says it never went ahead (Rejected, Cancel...). */
+  outcome: "won" | "lost";
+  /** Ended when the expiry date has passed, or the status says it ended (clawback); cancelled for a lost deal. */
+  contractStatus: "live" | "ended" | "cancelled";
   /** The sheet's own status ("Accepted", "Clawback"...), shown on the deal as its application status. */
   sheetStatus: string | null;
   /** ISO country code of the supply site. */
   country: string;
-  /** The meter number is missing or not in the standard format: an administrator gets a task to fix it. */
-  meterCheck: "missing" | "format" | null;
+  /** The meter number is missing, not in the standard format, or its fuel was guessed: an administrator gets a task to fix it. Never set on lost deals. */
+  meterCheck: "missing" | "format" | "fuel" | null;
   salesAgent: string | null;
   /** The sheet's columns the CRM has no field for, as label/value pairs for the timeline. */
   notes: { label: string; value: string }[];
@@ -276,21 +278,27 @@ export function parseSheetRow(
   const legalName = text(cells.businessName) ?? text(cells.tradingName) ?? text(cells.contactPerson);
   if (!legalName) issues.push("No business name, trading name or contact person.");
   const statusText = text(cells.contractStatus);
-  if (statusText && NOT_LIVE.test(statusText)) issues.push(`Status is "${statusText}", so it isn't imported as a live contract.`);
+  const lost = !!statusText && NOT_LIVE.test(statusText);
+  if (lost) warnings.push(`Status is "${statusText}", so it's imported as a lost deal, not a live contract.`);
 
   // Fuel from the utility type, or else from the meter number's shape.
   const meter = normalizeIdentifier(text(cells.meter)?.replace(/\.0+$/, "") ?? null);
   const utility = (text(cells.utilityType) ?? "").toLowerCase();
   let fuel: MigrationRow["fuel"] = null;
+  let fuelGuessed = false;
   if (supplier.kind === "energy") {
     if (/dual/.test(utility)) issues.push("Dual fuel rows need splitting: one row per MPRN or GPRN.");
     else if (/gas/.test(utility)) fuel = "gas";
     else if (/elec|power/.test(utility)) fuel = "electricity";
     else if (meter && /^\d{11}$/.test(meter)) fuel = "electricity";
     else if (meter && /^\d{7}$/.test(meter)) fuel = "gas";
-    else issues.push(utility ? `Utility type "${text(cells.utilityType)}" isn't Gas or Electricity.` : "No utility type, and the meter number doesn't show whether it's gas or electricity.");
-    if (!meter && !fuel) issues.push("No MPRN or GPRN, and no utility type to say which it should be.");
-    else if (!meter) warnings.push(`No ${fuel === "gas" ? "GPRN" : "MPRN"}; imported with a task for an administrator to add it.`);
+    else {
+      // Nothing says which fuel: take the nearer meter shape (a GPRN is 7 digits, an MPRN 11) and have it checked.
+      fuel = meter && meter.replace(/\D/g, "").length <= 8 ? "gas" : "electricity";
+      fuelGuessed = true;
+      warnings.push(`${utility ? `Utility type "${text(cells.utilityType)}" isn't Gas or Electricity` : "No utility type"}; imported as ${fuel}${meter ? " from the meter number's length" : ""}, with a task for an administrator to check it.`);
+    }
+    if (!meter) warnings.push(`No ${fuel === "gas" ? "GPRN" : "MPRN"}; imported with a task for an administrator to add it.`);
   }
   let mprn: string | null = null;
   let gprn: string | null = null;
@@ -343,14 +351,16 @@ export function parseSheetRow(
       signDate: dates.signDate ?? null,
       startDate,
       endDate,
-      contractStatus: (endDate && endDate < opts.today) || (statusText && ENDED.test(statusText)) ? "ended" : "live",
+      outcome: lost ? "lost" : "won",
+      contractStatus: lost ? "cancelled" : (endDate && endDate < opts.today) || (statusText && ENDED.test(statusText)) ? "ended" : "live",
       sheetStatus: statusText,
-      meterCheck: supplier.kind !== "energy" ? null : !meter ? "missing" : formatExceptionReason ? "format" : null,
+      meterCheck: supplier.kind !== "energy" || lost ? null : !meter ? "missing" : formatExceptionReason ? "format" : fuelGuessed ? "fuel" : null,
       // The sites are Irish; only a sheet that says Northern Ireland or the UK changes that.
       country: /^(northern ireland|ni|uk|united kingdom|gb)$/i.test(text(cells.country) ?? "") ? "GB" : "IE",
       salesAgent: text(cells.salesAgent),
       notes,
-      importKey: `sheet:${supplierKey(supplier.name)}:${who}:${startDate ?? dates.signDate ?? endDate ?? ""}`,
+      // A lost row is a separate record from a live row for the same meter and dates.
+      importKey: `sheet:${supplierKey(supplier.name)}:${who}:${startDate ?? dates.signDate ?? endDate ?? ""}${lost ? `:lost:${statusText!.toLowerCase().replace(/[^a-z0-9]+/g, "-")}` : ""}`,
     },
   };
 }

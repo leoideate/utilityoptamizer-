@@ -82,8 +82,21 @@ describe("master sheet migration", () => {
     expect(parseSheetRow("Flogas", 2, { ...base, expiryDate: null }, { today: TODAY }).row!.endDate).toBe("2028-06-10");
   });
 
-  it("skips cancelled, dual fuel and badly formatted rows with reasons", () => {
-    expect(parseSheetRow("Flogas", 2, { ...base, contractStatus: "Cancelled by customer" }, { today: TODAY }).issues[0]).toMatch(/Cancelled/);
+  it("keeps cancelled and rejected rows as lost deals, separate from a live row for the same meter", () => {
+    const lost = parseSheetRow("Flogas", 2, { ...base, contractStatus: "Rejected" }, { today: TODAY });
+    expect(lost.issues).toEqual([]);
+    expect(lost.row).toMatchObject({ outcome: "lost", contractStatus: "cancelled", sheetStatus: "Rejected", meterCheck: null });
+    expect(lost.row!.importKey).not.toBe(parseSheetRow("Flogas", 2, base, { today: TODAY }).row!.importKey);
+    expect(parseSheetRow("Flogas", 2, base, { today: TODAY }).row!.outcome).toBe("won");
+  });
+
+  it("guesses the fuel from the meter's length when the sheet has no utility type, with a check", () => {
+    expect(parseSheetRow("Flogas", 2, { ...base, utilityType: null, meter: "505059" }, { today: TODAY, allowFormatExceptions: true }).row).toMatchObject({ fuel: "gas", gprn: "505059", meterCheck: "format" });
+    expect(parseSheetRow("Flogas", 2, { ...base, utilityType: null, meter: null }, { today: TODAY }).row).toMatchObject({ fuel: "electricity", meterCheck: "missing" });
+    expect(parseSheetRow("Flogas", 2, { ...base, utilityType: "Water", meter: "100123456789" }, { today: TODAY, allowFormatExceptions: true }).row).toMatchObject({ fuel: "electricity", meterCheck: "format" });
+  });
+
+  it("skips dual fuel and badly formatted rows with reasons", () => {
     expect(parseSheetRow("Flogas", 2, { ...base, utilityType: "Dual Fuel" }, { today: TODAY }).issues[0]).toMatch(/one row per/);
     expect(parseSheetRow("Flogas", 2, { ...base, meter: "2012345678" }, { today: TODAY }).issues.join()).toMatch(/11 digits/);
     const allowed = parseSheetRow("Flogas", 2, { ...base, meter: "2012345678" }, { today: TODAY, allowFormatExceptions: true });
@@ -105,10 +118,10 @@ describe("master sheet migration", () => {
     expect(row).toMatchObject({ supplier: { name: "Flogas" }, phone: "+353871234567", country: "IE", sheetStatus: "Ready for Invoice", meterCheck: null });
   });
 
-  it("ends clawed-back contracts, skips duplicates and errors, and keys rows by expiry when there's no start date", () => {
+  it("ends clawed-back contracts, keeps duplicates and errors as lost deals, and keys rows by expiry when there's no start date", () => {
     expect(parseSheetRow("Flogas", 2, { ...base, contractStatus: "Clawback" }, { today: TODAY }).row).toMatchObject({ contractStatus: "ended", sheetStatus: "Clawback" });
-    expect(parseSheetRow("Flogas", 2, { ...base, contractStatus: "Duplicate" }, { today: TODAY }).row).toBeNull();
-    expect(parseSheetRow("Flogas", 2, { ...base, contractStatus: "Error" }, { today: TODAY }).row).toBeNull();
+    expect(parseSheetRow("Flogas", 2, { ...base, contractStatus: "Duplicate" }, { today: TODAY }).row).toMatchObject({ outcome: "lost" });
+    expect(parseSheetRow("Flogas", 2, { ...base, contractStatus: "Error" }, { today: TODAY }).row).toMatchObject({ outcome: "lost" });
     expect(parseSheetRow("Flogas", 2, { ...base, contractStatus: "Under Investigation" }, { today: TODAY }).row!.contractStatus).toBe("live");
     expect(parseSheetRow("Flogas", 2, { ...base, startDate: null, signDate: null }, { today: TODAY }).row!.importKey).toBe("sheet:flogas:10012345678:2028-06-11");
   });
@@ -117,7 +130,7 @@ describe("master sheet migration", () => {
     const missing = parseSheetRow("Flogas", 2, { ...base, utilityType: "Gas", meter: null }, { today: TODAY });
     expect(missing.row).toMatchObject({ fuel: "gas", gprn: null, meterCheck: "missing" });
     expect(missing.warnings.join()).toMatch(/No GPRN; imported with a task/);
-    expect(parseSheetRow("Flogas", 2, { ...base, utilityType: null, meter: null }, { today: TODAY }).row).toBeNull();
+    expect(parseSheetRow("Flogas", 2, { ...base, utilityType: null, meter: null }, { today: TODAY }).row).toMatchObject({ fuel: "electricity", meterCheck: "missing" });
     const short = parseSheetRow("Flogas", 2, { ...base, utilityType: "Gas", meter: "475303" }, { today: TODAY, allowFormatExceptions: true });
     expect(short.row).toMatchObject({ gprn: "475303", meterCheck: "format", formatExceptionReason: FORMAT_EXCEPTION_REASON });
   });

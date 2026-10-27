@@ -24,6 +24,17 @@ const optionsSchema = z.object({
       }
     })])
     .default({}),
+  /** Sheet name → email: salespeople to add as users when importing, so their deals are assigned to them. */
+  newAgents: z
+    .union([z.record(z.string().max(200), z.string().trim().toLowerCase().email()), z.string().transform((s, ctx) => {
+      try {
+        return z.record(z.string().max(200), z.string().trim().toLowerCase().email()).parse(s ? JSON.parse(s) : {});
+      } catch {
+        ctx.addIssue({ code: "custom", message: "Enter a valid email for each new salesperson." });
+        return z.NEVER;
+      }
+    })])
+    .default({}),
 });
 
 /** Administration → Import customers: dry run a master sheet, then import it. Administrators only. */
