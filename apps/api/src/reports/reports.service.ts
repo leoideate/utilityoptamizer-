@@ -54,7 +54,7 @@ export class ReportsService {
     const inRange = (field: "createdAt" | "wonAt" | "lostAt") => ({ AND: [base, { [field]: { gte: r.from, lt: r.to } }] });
     const openWhere: Prisma.OpportunityWhereInput = { AND: [base, { outcome: "open" }] };
 
-    const [newLeads, bySource, byService, wonInRange, lostInRange, createdCohortWon, open, stageGroups, owners] = await Promise.all([
+    const [newLeads, bySource, byService, wonInRange, lostInRange, createdCohortWon, open, stageGroups, owners, ownerLeads, ownerWon, ownerLost] = await Promise.all([
       this.prisma.opportunity.count({ where: inRange("createdAt") }),
       this.prisma.opportunity.groupBy({ by: ["leadSource"], where: inRange("createdAt"), _count: { _all: true } }),
       this.prisma.opportunity.groupBy({ by: ["serviceType", "outcome"], where: base, _count: { _all: true }, _sum: { expectedRevenue: true } }),
@@ -64,22 +64,37 @@ export class ReportsService {
       this.prisma.opportunity.findMany({ where: openWhere, select: { expectedRevenue: true, probability: true } }),
       this.prisma.opportunity.groupBy({ by: ["stageId"], where: openWhere, _count: { _all: true }, _sum: { expectedRevenue: true } }),
       this.prisma.opportunity.groupBy({ by: ["ownerId", "outcome"], where: base, _count: { _all: true }, _sum: { expectedRevenue: true } }),
+      // Each salesperson's figures for the period, counted the same way as the totals above.
+      this.prisma.opportunity.groupBy({ by: ["ownerId"], where: inRange("createdAt"), _count: { _all: true } }),
+      this.prisma.opportunity.groupBy({ by: ["ownerId"], where: inRange("wonAt"), _count: { _all: true }, _sum: { expectedRevenue: true } }),
+      this.prisma.opportunity.groupBy({ by: ["ownerId"], where: inRange("lostAt"), _count: { _all: true } }),
     ]);
 
     const stages = await this.prisma.stage.findMany({ orderBy: { sequence: "asc" } });
-    const users = await this.prisma.user.findMany({ where: { id: { in: owners.map((o) => o.ownerId).filter((x): x is string => !!x) } }, select: { id: true, name: true } });
+    const ownerIds = [...owners, ...ownerLeads, ...ownerWon, ...ownerLost].map((o) => o.ownerId).filter((x): x is string => !!x);
+    const users = await this.prisma.user.findMany({ where: { id: { in: ownerIds } }, select: { id: true, name: true } });
 
     const pipelineValue = open.reduce((s, o) => s + Number(o.expectedRevenue ?? 0), 0);
     const weightedValue = open.reduce((s, o) => s + (Number(o.expectedRevenue ?? 0) * o.probability) / 100, 0);
 
-    const ownerMap = new Map<string, { ownerId: string | null; name: string; open: number; won: number; lost: number; value: number }>();
+    // open/won/lost/value: everything each person holds now; *InPeriod: leads created, deals won and lost in the period.
+    type OwnerRow = { ownerId: string | null; name: string; open: number; won: number; lost: number; value: number; leadsInPeriod: number; wonInPeriod: number; lostInPeriod: number; wonValueInPeriod: number; winRate: number | null };
+    const ownerMap = new Map<string, OwnerRow>();
+    const ownerRow = (ownerId: string | null) => {
+      const key = ownerId ?? "none";
+      const row = ownerMap.get(key) ?? { ownerId, name: users.find((u) => u.id === ownerId)?.name ?? "Unassigned", open: 0, won: 0, lost: 0, value: 0, leadsInPeriod: 0, wonInPeriod: 0, lostInPeriod: 0, wonValueInPeriod: 0, winRate: null };
+      ownerMap.set(key, row);
+      return row;
+    };
     for (const o of owners) {
-      const key = o.ownerId ?? "none";
-      const row = ownerMap.get(key) ?? { ownerId: o.ownerId, name: users.find((u) => u.id === o.ownerId)?.name ?? "Unassigned", open: 0, won: 0, lost: 0, value: 0 };
+      const row = ownerRow(o.ownerId);
       row[o.outcome] += o._count._all;
       if (o.outcome === "open") row.value += Number(o._sum.expectedRevenue ?? 0);
-      ownerMap.set(key, row);
     }
+    for (const o of ownerLeads) ownerRow(o.ownerId).leadsInPeriod = o._count._all;
+    for (const o of ownerWon) Object.assign(ownerRow(o.ownerId), { wonInPeriod: o._count._all, wonValueInPeriod: Number(o._sum.expectedRevenue ?? 0) });
+    for (const o of ownerLost) ownerRow(o.ownerId).lostInPeriod = o._count._all;
+    for (const row of ownerMap.values()) row.winRate = pct(row.wonInPeriod, row.wonInPeriod + row.lostInPeriod);
 
     const [avgStage, avgActivation, supplierPerf, worldpay, outstandingDocs, complianceQueries, renewalsDue, commissions] = await Promise.all([
       this.averageTimeInStage(actor, f),
@@ -102,7 +117,7 @@ export class ReportsService {
           return { key: s.key, name: s.name, count: g?._count._all ?? 0, value: Number(g?._sum.expectedRevenue ?? 0) };
         })
         .filter((s) => s.key !== "live_won"),
-      opportunitiesBySalesperson: [...ownerMap.values()].sort((a, b) => b.open + b.won - (a.open + a.won)),
+      opportunitiesBySalesperson: [...ownerMap.values()].sort((a, b) => b.wonInPeriod - a.wonInPeriod || b.leadsInPeriod - a.leadsInPeriod || b.open - a.open),
       opportunitiesByService: (["electricity", "gas", "dual_fuel", "merchant_services"] as const).map((s) => {
         const rows = byService.filter((x) => x.serviceType === s);
         const get = (o: string) => rows.find((x) => x.outcome === o)?._count._all ?? 0;
