@@ -96,6 +96,8 @@ export const APPROVAL_LABELS = labels<ApprovalState>({
   rejected: "Rejected",
 });
 
+export const INCORPORATION_COUNTRIES = ["IE", "UK"] as const;
+
 export const VAT_STATUSES = ["yes", "no", "pending"] as const;
 export type VatStatus = (typeof VAT_STATUSES)[number];
 

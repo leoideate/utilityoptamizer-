@@ -1,7 +1,7 @@
 "use client";
 
 import { type useForm } from "react-hook-form";
-import { LEGAL_ENTITIES, LEGAL_ENTITY_LABELS, VAT_STATUSES } from "@uo/shared";
+import { INCORPORATION_COUNTRIES, LEGAL_ENTITIES, LEGAL_ENTITY_LABELS, VAT_STATUSES } from "@uo/shared";
 import { Field, Input, Select } from "@/components/ui/primitives";
 
 /** "" = not asked, so forms leave both the Yes and the No box empty. */
@@ -146,6 +146,7 @@ export function CustomerFields({ form, address = true }: { form: ReturnType<type
   const vatExempt = watch("vatExempt");
   const website = watch("website");
   const entity = watch("legalEntity");
+  const country = watch("countryOfIncorporation");
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <Field label="Legal name" required className="sm:col-span-2">{(p) => <Input {...p} {...register("legalName")} />}</Field>
@@ -179,7 +180,15 @@ export function CustomerFields({ form, address = true }: { form: ReturnType<type
       </Field>
       {vat === "yes" && <Field label="VAT number" required>{(p) => <Input {...p} placeholder="IE1234567T" {...register("vatNumber")} />}</Field>}
       <Field label="Date established" hint="Incorporation date, or when the business started.">{(p) => <Input {...p} type="date" {...register("incorporationDate")} />}</Field>
-      <Field label="Country of incorporation">{(p) => <Input {...p} maxLength={2} {...register("countryOfIncorporation")} />}</Field>
+      <Field label="Country of incorporation" hint="UK includes Northern Ireland.">
+        {(p) => (
+          <Select {...p} {...register("countryOfIncorporation")}>
+            <option value="">Not known</option>
+            {INCORPORATION_COUNTRIES.map((code) => <option key={code} value={code}>{code}</option>)}
+            {country && !INCORPORATION_COUNTRIES.some((code) => code === country) && <option value={country}>{country} (existing value)</option>}
+          </Select>
+        )}
+      </Field>
       <Field label="Number of employees" className="hidden">{(p) => <Input {...p} type="number" min={0} inputMode="numeric" {...register("employees")} />}</Field>
       <Field label="Registered charity number">{(p) => <Input {...p} {...register("charityNumber")} />}</Field>
       <Field label="Email">{(p) => <Input {...p} type="email" {...register("email")} />}</Field>
