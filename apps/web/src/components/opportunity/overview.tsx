@@ -310,7 +310,7 @@ function DetailsCard({ opp }: { opp: Workspace }) {
           value={watch("productInterest")}
           onChange={(v) => setValue("productInterest", v, { shouldDirty: true })}
         />
-        <Field label="Next action">{(p) => <Input {...p} {...register("nextAction")} />}</Field>
+        <Field label="Next action">{(p) => <Input {...p} placeholder="e.g. Call to get latest bill" {...register("nextAction")} />}</Field>
         <Field label="Follow-up date">{(p) => <Input {...p} type="date" {...register("followUpDate")} />}</Field>
         <Field label="Expected closing">{(p) => <Input {...p} type="date" {...register("expectedCloseDate")} />}</Field>
         <Field label="Date of visit">{(p) => <Input {...p} type="date" {...register("visitDate")} />}</Field>
