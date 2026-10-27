@@ -39,6 +39,12 @@ interface CustomerRow {
 
 /** The master sheet's columns, in its order. */
 const COLUMNS = ["Business name", "Trading name", "Country", "Contact person", "Contact number", "Email", "MPRN/GPRN", "Supplier", "Utility type", "Product type", "Contract start", "Expiry date", "Contract term (years)", "Contract status", "Sales agent"];
+const COLUMN_WIDTHS = [220, 180, 100, 160, 140, 200, 170, 160, 120, 160, 120, 120, 120, 150, 160];
+
+function TableText({ value }: { value: string | null | undefined }) {
+  return <span title={value ?? undefined} className="line-clamp-2 [overflow-wrap:anywhere]">{value ?? "—"}</span>;
+}
+
 const COUNTRIES: Record<string, string> = { IE: "Ireland", GB: "United Kingdom" };
 /** The first meter, and how many more the customer has. */
 const meterText = (meters: string[]) => (meters.length > 1 ? `${meters[0]} +${meters.length - 1} more` : (meters[0] ?? ""));
@@ -78,7 +84,7 @@ export default function CustomersPage() {
           <EmptyState icon={<Building2 />} title={debounced ? "No customers match" : "No customers yet"} />
         ) : (
           <>
-          <ul className="divide-y divide-border md:hidden">
+          <ul className="divide-y divide-border [overflow-wrap:anywhere] md:hidden">
             {data.items.map((c) => (
               <li key={c.id}>
                 <Link href={`/customers/${c.id}`} className="block px-4 py-3 active:bg-surface-2">
@@ -99,12 +105,13 @@ export default function CustomersPage() {
               </li>
             ))}
           </ul>
-          <div className="hidden overflow-x-auto md:block" tabIndex={0}>
-            <table className="w-full min-w-[1700px] text-sm">
+          <div className="hidden max-h-[min(65vh,640px)] overflow-auto md:block" tabIndex={0} role="region" aria-label="Customer table — scroll for more columns and rows">
+            <table className="w-[2280px] table-fixed border-separate border-spacing-0 text-sm [&_td]:border-b [&_td]:border-border [&_td]:align-top">
+              <colgroup>{COLUMN_WIDTHS.map((width, i) => <col key={COLUMNS[i]} style={{ width }} />)}</colgroup>
               <thead className="bg-surface-2 text-left text-muted">
                 <tr>
                   {COLUMNS.map((h, i) => (
-                    <th key={h} className={i === 0 ? "px-4 py-2.5 font-medium" : "px-3 py-2.5 font-medium"}>
+                    <th key={h} scope="col" className={i === 0 ? "sticky left-0 top-0 z-30 border-r border-border bg-surface-2 px-4 py-2.5 font-medium" : "sticky top-0 z-20 bg-surface-2 px-3 py-2.5 font-medium"}>
                       {h}
                     </th>
                   ))}
@@ -112,28 +119,28 @@ export default function CustomersPage() {
               </thead>
               <tbody>
                 {data.items.map((c) => (
-                  <tr key={c.id} className="border-t border-border hover:bg-surface-2/60">
-                    <td className="px-4 py-2.5">
-                      <Link href={`/customers/${c.id}`} className="inline-block py-0.5 font-medium hover:underline">
+                  <tr key={c.id} className="group hover:bg-surface-2/60">
+                    <td className="sticky left-0 z-10 border-r border-border bg-surface px-4 py-2.5 group-hover:bg-surface-2">
+                      <Link href={`/customers/${c.id}`} title={c.legalName} className="line-clamp-2 py-0.5 font-medium [overflow-wrap:anywhere] hover:underline">
                         {c.legalName}
                       </Link>
                     </td>
-                    <td className="px-3 py-2.5">{c.tradingName ?? "—"}</td>
-                    <td className="px-3 py-2.5">{c.contract?.country ? (COUNTRIES[c.contract.country] ?? c.contract.country) : "—"}</td>
-                    <td className="px-3 py-2.5">{c.contactName ?? "—"}</td>
-                    <td className="tabular px-3 py-2.5">{c.phone ?? "—"}</td>
-                    <td className="px-3 py-2.5 text-muted">{c.email ?? "—"}</td>
+                    <td className="px-3 py-2.5"><TableText value={c.tradingName ?? "—"} /></td>
+                    <td className="px-3 py-2.5"><TableText value={c.contract?.country ? (COUNTRIES[c.contract.country] ?? c.contract.country) : "—"} /></td>
+                    <td className="px-3 py-2.5"><TableText value={c.contactName ?? "—"} /></td>
+                    <td className="tabular px-3 py-2.5"><TableText value={c.phone ?? "—"} /></td>
+                    <td className="px-3 py-2.5 text-muted"><TableText value={c.email ?? "—"} /></td>
                     <td className="tabular px-3 py-2.5" title={c.contract?.meters.join(", ")}>
-                      {c.contract ? meterText(c.contract.meters) || "—" : "—"}
+                      <TableText value={c.contract ? meterText(c.contract.meters) || "—" : "—"} />
                     </td>
-                    <td className="px-3 py-2.5">{c.contract?.suppliers.length ? c.contract.suppliers.join(", ") : "—"}</td>
-                    <td className="px-3 py-2.5">{c.contract ? c.contract.fuels.map(cap).join(" & ") : "—"}</td>
-                    <td className="px-3 py-2.5">{c.contract?.product ?? "—"}</td>
-                    <td className="px-3 py-2.5">{date(c.contract?.startDate)}</td>
-                    <td className="px-3 py-2.5">{date(c.contract?.endDate)}</td>
-                    <td className="tabular px-3 py-2.5">{years(c.contract?.termMonths)}</td>
-                    <td className="px-3 py-2.5">{c.contract ? (c.contract.applicationStatus ?? cap(c.contract.status)) : "—"}</td>
-                    <td className="px-3 py-2.5">{c.contract?.salesAgent ?? "—"}</td>
+                    <td className="px-3 py-2.5"><TableText value={c.contract?.suppliers.length ? c.contract.suppliers.join(", ") : "—"} /></td>
+                    <td className="px-3 py-2.5"><TableText value={c.contract ? c.contract.fuels.map(cap).join(" & ") : "—"} /></td>
+                    <td className="px-3 py-2.5"><TableText value={c.contract?.product ?? "—"} /></td>
+                    <td className="px-3 py-2.5"><TableText value={date(c.contract?.startDate)} /></td>
+                    <td className="px-3 py-2.5"><TableText value={date(c.contract?.endDate)} /></td>
+                    <td className="tabular px-3 py-2.5"><TableText value={years(c.contract?.termMonths)} /></td>
+                    <td className="px-3 py-2.5"><TableText value={c.contract ? (c.contract.applicationStatus ?? cap(c.contract.status)) : "—"} /></td>
+                    <td className="px-3 py-2.5"><TableText value={c.contract?.salesAgent ?? "—"} /></td>
                   </tr>
                 ))}
               </tbody>
