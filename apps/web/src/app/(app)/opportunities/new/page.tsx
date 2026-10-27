@@ -116,10 +116,11 @@ function NewOpportunityForm() {
               </Select>
             )}
           </Field>
-          <Field label="Campaign" hint="Optional">
+          {/* Temporarily hidden to match Overview; retain registration, validation and submission. */}
+          <Field label="Campaign" hint="Optional" className="hidden">
             {(p) => <Input {...p} {...register("campaign")} />}
           </Field>
-          <Field label="Source details" hint="Who referred them, which web form, etc." className="sm:col-span-2">
+          <Field label="Source details" hint="Who referred them, which web form, etc." className="hidden sm:col-span-2">
             {(p) => <Input {...p} {...register("leadSourceDetail")} />}
           </Field>
           {isEnergyService(watch("serviceType")) && (
@@ -160,7 +161,7 @@ function NewOpportunityForm() {
           <Field label="Follow-up date" hint="A first-contact task is created for this date (today if blank).">
             {(p) => <Input {...p} type="date" {...register("followUpDate")} />}
           </Field>
-          <Field label="Expected revenue (€)" error={e.expectedRevenue?.message}>
+          <Field label="Expected revenue (€)" error={e.expectedRevenue?.message} className="hidden">
             {(p) => <Input {...p} inputMode="decimal" {...register("expectedRevenue")} />}
           </Field>
           <Field label="Expected closing">{(p) => <Input {...p} type="date" {...register("expectedCloseDate")} />}</Field>
