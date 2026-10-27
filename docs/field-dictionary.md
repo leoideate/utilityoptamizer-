@@ -1169,3 +1169,25 @@ only the status moves pending → confirming → done | failed and pending → d
 | status | String | ✓ | Default "pending" |
 | error | String |  | Why it couldn't be done (user-facing), when status is failed |
 
+## import_runs
+
+A customer import from the master sheet run from Administration (dry run or real). The sheet is
+kept in storage so a dry run can be imported without uploading it again; purged after 90 days.
+
+| Column | Type | Required | Notes |
+|---|---|:-:|---|
+| id | UUID | ✓ | Primary key. Default uuid() |
+| mode | String | ✓ | "dry_run" or "import" |
+| status | String | ✓ | "running", "done" or "failed". Default "running" |
+| filename | String | ✓ |  |
+| storage_key | String | ✓ |  |
+| sha256 | String | ✓ |  |
+| options | Json | ✓ | Options used: allowFormatExceptions, createSuppliers, agents (sheet name -> user id or null) |
+| summary | Json |  | Counts, statuses, unmatched agents, suppliers to create, renewals and meter checks |
+| lines | Json |  | One entry per sheet row: what happened and why |
+| error | String |  |  |
+| from_run_id | UUID |  | The dry run an import was confirmed from |
+| created_by_id | UUID | ✓ |  |
+| created_at | DateTime | ✓ | Default now() |
+| finished_at | DateTime |  |  |
+

@@ -1873,3 +1873,31 @@ model AssistantAction {
   @@index([userId, createdAt])
   @@map("assistant_actions")
 }
+
+/// A customer import from the master sheet run from Administration (dry run or real). The sheet is
+/// kept in storage so a dry run can be imported without uploading it again; purged after 90 days.
+model ImportRun {
+  id          String    @id @default(uuid()) @db.Uuid
+  /// "dry_run" or "import".
+  mode        String
+  /// "running", "done" or "failed".
+  status      String    @default("running")
+  filename    String
+  storageKey  String    @map("storage_key")
+  sha256      String
+  /// Options used: allowFormatExceptions, createSuppliers, agents (sheet name -> user id or null).
+  options     Json
+  /// Counts, statuses, unmatched agents, suppliers to create, renewals and meter checks.
+  summary     Json?
+  /// One entry per sheet row: what happened and why.
+  lines       Json?
+  error       String?
+  /// The dry run an import was confirmed from.
+  fromRunId   String?   @map("from_run_id") @db.Uuid
+  createdById String    @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  finishedAt  DateTime? @map("finished_at")
+
+  @@index([createdAt])
+  @@map("import_runs")
+}

@@ -162,6 +162,21 @@ describe("master sheet migration", () => {
     expect(list.items[0].contract).toMatchObject({ applicationStatus: "Clawback", country: "IE", termMonths: 24, status: "ended" });
   });
 
+  it("adds a row matching two customers from the same import to the first, and flags them to merge", async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Flogas Customers");
+    ws.addRow(["Business name", "Contact number", "Email", "MPRN/GPRN", "Supplier", "Utility type", "Expiry date", "Contract term (years)", "Contract status"]);
+    const expiry = irish(addMonths(TODAY, 18));
+    ws.addRow(["Ajmal Traders", "0871231234", null, "10044400001", "Flogas", "Electricity", expiry, 2, "Accepted"]);
+    ws.addRow(["Ajmal Traders", null, "ajmal@traders.ie", "10044400002", "Flogas", "Electricity", expiry, 2, "Accepted"]);
+    ws.addRow(["Ajmal Traders", "0871231234", "ajmal@traders.ie", "10044400003", "Flogas", "Electricity", expiry, 2, "Accepted"]);
+    const r = await migration.importCustomers(await readMasterSheet(Buffer.from(await wb.xlsx.writeBuffer())), { commit: true });
+    expect(r.lines.map((l) => l.action)).toEqual(["created", "created", "created"]);
+    expect(r.lines[2].warnings).toMatch(/Also matches Ajmal Traders \(Flogas Customers row 3\), created earlier in this import; added to Ajmal Traders \(Flogas Customers row 2\)/);
+    const deals = await t.prisma.opportunity.findMany({ where: { companyName: "Ajmal Traders" }, orderBy: { number: "asc" }, select: { customerId: true } });
+    expect(deals[2].customerId).toBe(deals[0].customerId);
+  });
+
   it("attaches signed PDFs by meter number, file name or a manual match", async () => {
     const form = await PDFDocument.create();
     form.addPage();

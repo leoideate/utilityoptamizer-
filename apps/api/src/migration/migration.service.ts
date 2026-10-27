@@ -21,6 +21,8 @@ export interface ImportOptions {
   allowFormatExceptions?: boolean;
   /** Add suppliers the CRM doesn't have yet instead of skipping their rows. */
   createSuppliers?: boolean;
+  /** Sheet sales agent names (any case) mapped to a user id, or null to leave their deals unassigned. */
+  agents?: Record<string, string | null>;
   today?: string;
 }
 
@@ -89,6 +91,9 @@ export class MigrationService {
     const suppliers = await this.prisma.supplier.findMany();
     const users = await this.prisma.user.findMany({ where: { active: true }, select: { id: true, name: true } });
     const userByName = new Map(users.map((u) => [u.name.trim().toLowerCase(), u.id]));
+    // Names chosen on the import screen; only active users count, and null means "leave unassigned".
+    const activeIds = new Set(users.map((u) => u.id));
+    const agents = new Map(Object.entries(opts.agents ?? {}).flatMap(([name, id]) => (id === null || activeIds.has(id) ? [[name.trim().toLowerCase(), id] as const] : [])));
     const liveWon = await this.stages.idFor("live_won");
     // Missing or unverified meter numbers go to an administrator to fix.
     const admins = await this.prisma.user.findMany({ where: { active: true, roles: { some: { role: "administrator" } } }, select: { id: true }, orderBy: { createdAt: "asc" } });
@@ -96,6 +101,9 @@ export class MigrationService {
     const planned: { keys: string[]; label: string }[] = [];
     // Customers created in this run by name, to flag a later row with the same name that nothing else ties to it.
     const createdNames = new Map<string, string>();
+    // Customers this run created: a later row matching several of them is the same business seen
+    // through different details (phone on one row, email on another), not an ambiguous match.
+    const createdIds = new Map<string, string>();
 
     for (const tab of tabs) {
       for (const { line, cells } of tab.rows) {
@@ -130,13 +138,21 @@ export class MigrationService {
         }
 
         const extra: string[] = [];
-        const ownerId = row.salesAgent ? userByName.get(row.salesAgent.toLowerCase()) : undefined;
-        if (row.salesAgent && !ownerId) {
+        const mapped = row.salesAgent ? agents.get(row.salesAgent.trim().toLowerCase()) : undefined;
+        const ownerId = mapped !== undefined ? (mapped ?? undefined) : row.salesAgent ? userByName.get(row.salesAgent.trim().toLowerCase()) : undefined;
+        if (row.salesAgent && !ownerId && mapped !== null) {
           extra.push(`No active user called "${row.salesAgent}"; left unassigned.`);
           if (!result.unmatchedAgents.includes(row.salesAgent)) result.unmatchedAgents.push(row.salesAgent);
         }
 
         const matches = await this.customers.findDuplicates({ email: row.email, phone: row.phone, legalName: row.legalName, postcode: row.address?.postcode });
+        const ours = matches.length > 1 && matches.every((m) => createdIds.has(m.customer.id));
+        if (ours) {
+          const order = [...createdIds.keys()];
+          matches.sort((x, y) => order.indexOf(x.customer.id) - order.indexOf(y.customer.id));
+          extra.push(`Also matches ${matches.slice(1).map((m) => createdIds.get(m.customer.id)).join(", ")}, created earlier in this import; added to ${createdIds.get(matches[0].customer.id)}. Merge them under Customers if they're one business.`);
+          matches.splice(1);
+        }
         if (matches.length > 1) {
           report("skipped", `Matches ${matches.length} existing customers (${matches.map((m) => `${m.customer.legalName}: ${m.reasons.join(", ")}`).join("; ")}). Merge them first or correct the row.`, "", extra);
           continue;
@@ -161,7 +177,8 @@ export class MigrationService {
           report("created", this.describe(row), customerLabel, extra);
           continue;
         }
-        const number = await this.prisma.$transaction((tx) => this.write(tx, row, { customerId: matches[0]?.customer.id, ownerId, supplier: supplier!, stageId: liveWon, adminId: admins[0]?.id ?? null, today }));
+        const { number, customerId } = await this.prisma.$transaction((tx) => this.write(tx, row, { customerId: matches[0]?.customer.id, ownerId, supplier: supplier!, stageId: liveWon, adminId: admins[0]?.id ?? null, today }));
+        if (!matches.length) createdIds.set(customerId, `${row.legalName} (${tab.name} row ${line})`);
         report("created", `${ref(number)}: ${this.describe(row)}`, customerLabel, extra);
       }
     }
@@ -264,7 +281,7 @@ export class MigrationService {
     return name.toLowerCase().replace(/\b(ltd|limited|teoranta|t\/a)\b/g, "").replace(/[^a-z0-9]/g, "");
   }
 
-  private async write(tx: Prisma.TransactionClient, row: MigrationRow, ctx: { customerId?: string; ownerId?: string; supplier: Supplier; stageId: string; adminId: string | null; today: string }): Promise<number> {
+  private async write(tx: Prisma.TransactionClient, row: MigrationRow, ctx: { customerId?: string; ownerId?: string; supplier: Supplier; stageId: string; adminId: string | null; today: string }): Promise<{ number: number; customerId: string }> {
     let customerId = ctx.customerId;
     if (!customerId) {
       const [first, ...rest] = (row.contactName ?? "").split(/\s+/).filter(Boolean);
@@ -374,6 +391,6 @@ export class MigrationService {
       },
       tx,
     );
-    return opp.number;
+    return { number: opp.number, customerId: customerId! };
   }
 }

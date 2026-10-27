@@ -10,7 +10,19 @@ A one-off import of the customers Utility Optimizer had before the CRM. It reads
 - **Check the suppliers.** Each tab's name is its supplier ("Flogas", "Bord Gais"; old Bord Gáis spellings are recognised). A tab called *Worldpay* imports card-payment customers. Suppliers the CRM doesn't have are reported; add them under **Administration**, or pass `--create-suppliers`.
 - **Run from a machine with the repository** (`npm install` done). Point `apps/api/.env` at the database you're importing into. To attach PDFs, Redis must be running too, because each upload is queued for a virus scan.
 
-## 1. Customers and contracts
+## On the live CRM: Administration → Import customers
+
+Administrators can run the import from the CRM itself, with nothing installed and no database password on anyone's computer:
+
+1. **Back up the database** (Render → the database → Backups), and add any missing salespeople under **Users & roles**.
+2. Open **Administration → Import customers**, choose the sheet and click **Run dry run**. It runs on the server in the background (a thousand rows take about a minute) and changes nothing.
+3. Read the report: counts, statuses, skipped rows and why, rows with warnings. **Download report** gives every row as a CSV.
+4. For each sales agent name the CRM doesn't know, choose the user it is (a first-name match such as "Abdullah Liaqat" → "Abdullah" is pre-filled), or leave it unassigned.
+5. Click **Import** and confirm. The import also runs in the background (a few minutes); the page shows the result. Running it again skips rows already imported.
+
+Runs and their copy of the sheet are kept for 90 days, then deleted by the retention job. Signed PDFs are still attached with the script below.
+
+## 1. Customers and contracts (from a terminal)
 
 ```bash
 npm run migrate:customers -w @uo/api -- "C:\path\UOL - Master sheet.xlsx"
