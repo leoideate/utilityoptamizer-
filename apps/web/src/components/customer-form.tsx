@@ -180,7 +180,7 @@ export function CustomerFields({ form, address = true }: { form: ReturnType<type
       {vat === "yes" && <Field label="VAT number" required>{(p) => <Input {...p} placeholder="IE1234567T" {...register("vatNumber")} />}</Field>}
       <Field label="Date established" hint="Incorporation date, or when the business started.">{(p) => <Input {...p} type="date" {...register("incorporationDate")} />}</Field>
       <Field label="Country of incorporation">{(p) => <Input {...p} maxLength={2} {...register("countryOfIncorporation")} />}</Field>
-      <Field label="Number of employees">{(p) => <Input {...p} type="number" min={0} inputMode="numeric" {...register("employees")} />}</Field>
+      <Field label="Number of employees" className="hidden">{(p) => <Input {...p} type="number" min={0} inputMode="numeric" {...register("employees")} />}</Field>
       <Field label="Registered charity number">{(p) => <Input {...p} {...register("charityNumber")} />}</Field>
       <Field label="Email">{(p) => <Input {...p} type="email" {...register("email")} />}</Field>
       <Field label="Phone">{(p) => <Input {...p} type="tel" {...register("phone")} />}</Field>
