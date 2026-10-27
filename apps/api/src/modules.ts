@@ -206,7 +206,7 @@ export class SupplierApplicationsModule {}
  * (a confirmed email is sent through it) and SupplierApplicationsModule (what a supplier form needs).
  */
 @Module({
-  imports: [OpportunitiesModule, DocumentsModule, EnergyModule, IntegrationsModule, SupplierApplicationsModule],
+  imports: [OpportunitiesModule, DocumentsModule, EnergyModule, IntegrationsModule, SupplierApplicationsModule, AiModule],
   controllers: [AssistantController],
   providers: [
     AssistantService,

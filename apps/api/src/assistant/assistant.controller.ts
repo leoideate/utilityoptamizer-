@@ -1,7 +1,9 @@
-import { Body, type CanActivate, Controller, Get, HttpCode, Inject, Injectable, Param, ParseUUIDPipe, Post, UseGuards } from "@nestjs/common";
+import { Body, type CanActivate, Controller, Get, HttpCode, Inject, Injectable, Param, ParseUUIDPipe, Post, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
-import { assistantFeedbackSchema, assistantMessageSchema } from "@uo/shared";
+import { assistantFeedbackSchema, assistantMessageSchema, assistantUploadSchema } from "@uo/shared";
+import { memoryStorage } from "multer";
 import type { z } from "zod";
 import type { Actor } from "../common/actor";
 import { CurrentUser, RequireCapability } from "../common/decorators";
@@ -40,6 +42,16 @@ export class AssistantController {
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   ask(@CurrentUser() a: Actor, @Body(new ZodPipe(assistantMessageSchema)) body: z.infer<typeof assistantMessageSchema>) {
     return this.assistant.ask(a, body);
+  }
+
+  /** Ask with an energy bill or business card attached: the AI reads it, and the details go with the question. The file isn't kept. */
+  @Post("messages/upload")
+  @HttpCode(200)
+  @RequireCapability("assistant.use")
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @UseInterceptors(FileInterceptor("file", { storage: memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 10, parts: 20 } }))
+  askWithFile(@CurrentUser() a: Actor, @Body(new ZodPipe(assistantUploadSchema)) body: z.infer<typeof assistantUploadSchema>, @UploadedFile() file?: Express.Multer.File) {
+    return this.assistant.askWithFile(a, file, body);
   }
 
   @Get("conversations/:id/messages")
