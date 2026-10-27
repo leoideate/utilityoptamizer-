@@ -77,7 +77,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 ## Leoideate skills
 
-`.claude/skills/leoideate-*` are general skills selected and reviewed by Leoideate (architect), adapted from Everything Claude Code (MIT; credit, source commit and review notes in `.claude/skills/SKILLS.md`, licence notice in `THIRD-PARTY-NOTICES`). Where one disagrees with this file or the `utilityoptamizer-` skill, this repository's rules win. Review any update before replacing them.
+`.claude/skills/leoideate-*` are general skills selected and reviewed by Leoideate (architect), adapted from Everything Claude Code (MIT; credit, source commit and review notes in `.claude/skills/SKILLS.md`, licence notice in `THIRD-PARTY-NOTICES`). `.claude/skills/security-audit` is Cloudflare's security audit skill (MIT, same files). Where one disagrees with this file or the `utilityoptamizer-` skill, this repository's rules win. Review any update before replacing them.
 
 ## Product rules to preserve
 
