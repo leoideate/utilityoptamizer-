@@ -30,7 +30,7 @@ export const TOOL_INPUTS = {
   find_deals: z.object({
     view: z.enum(views).default("my_open"),
     stage: z.enum(STAGE_KEYS).optional(),
-    search: z.string().trim().max(100).optional().describe("Customer, company, contact or deal number."),
+    search: z.string().trim().max(100).optional().describe("Customer, company, contact, deal number, or a full MPRN or GPRN."),
   }),
   energy_details: z.object({ deal: dealRef }),
   application_issues: z.object({ deal: dealRef }),

@@ -547,6 +547,18 @@ export const assistantMessageSchema = z.object({
   message: z.string().trim().min(1, "Type a question.").max(2000, "Keep questions under 2,000 characters."),
 });
 
+/** What the assistant can read from an attached file: an energy bill or a business card. */
+export const ASSISTANT_ATTACHMENT_KINDS = ["bill", "card"] as const;
+export type AssistantAttachmentKind = (typeof ASSISTANT_ATTACHMENT_KINDS)[number];
+
+/** The form fields sent with a file to the assistant. The question is optional: each kind has a default. */
+export const assistantUploadSchema = z.object({
+  conversationId: id.nullable().optional(),
+  opportunityId: id.nullable().optional(),
+  kind: z.enum(ASSISTANT_ATTACHMENT_KINDS),
+  message: z.string().trim().max(2000, "Keep questions under 2,000 characters.").optional(),
+});
+
 export const assistantFeedbackSchema = z.object({
   helpful: z.boolean(),
   comment: optText(1000),

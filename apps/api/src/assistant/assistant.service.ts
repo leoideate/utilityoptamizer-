@@ -1,14 +1,17 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { HttpException, Inject, Injectable, Logger } from "@nestjs/common";
-import { can, today } from "@uo/shared";
+import { type AssistantAttachmentKind, can, today } from "@uo/shared";
 import { z } from "zod";
+import { DOCUMENT_READER, type DocumentReader, ReadFailed } from "../ai/document-reader";
 import { AuditService } from "../audit/audit.service";
 import { ENV, type Env } from "../config/env";
 import type { Actor } from "../common/actor";
 import { Conflict, Forbidden, NotFound, RuleViolation } from "../common/errors";
 import { PrismaService } from "../common/prisma.service";
 import { dateOnly } from "../common/values";
+import { sniffMatches } from "../documents/documents.service";
 import { AssistantActions, type Prepared, proposalKind } from "./actions";
+import { ATTACHMENT_TYPES, DEFAULT_QUESTION, attachmentText } from "./attachments";
 import { assistantInstructions } from "./instructions";
 import { AssistantTools, toolDefinitions } from "./tools";
 
@@ -34,6 +37,7 @@ export class AssistantService {
     private readonly tools: AssistantTools,
     private readonly actions: AssistantActions,
     @Inject(ASSISTANT_MODEL) private readonly model: AssistantModel,
+    @Inject(DOCUMENT_READER) private readonly reader: DocumentReader,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -53,22 +57,54 @@ export class AssistantService {
     return rows.map((m) => ({ ...m, actions: m.actions.map((a) => this.actions.view(a)) }));
   }
 
-  /** Answers one question. The user's message, the answer and any changes it prepared are stored; nothing else changes. */
-  async ask(actor: Actor, input: { conversationId?: string | null; opportunityId?: string | null; message: string }) {
+  private async checkLimit(actor: Actor) {
     const asked = await this.prisma.assistantMessage.count({ where: { role: "user", conversation: { userId: actor.id }, createdAt: { gte: dateOnly(today()) } } });
     if (asked >= this.env.AI_ASSISTANT_DAILY_LIMIT) throw new HttpException("You've reached today's assistant limit. It resets at midnight.", 429);
+  }
+
+  /**
+   * A question with a bill or business card attached. The AI reader pulls out its details, which go
+   * with the question as text; the file isn't stored. The assistant then works as usual: it looks
+   * things up and prepares changes the user confirms.
+   */
+  async askWithFile(
+    actor: Actor,
+    file: Express.Multer.File | undefined,
+    input: { conversationId?: string | null; opportunityId?: string | null; kind: AssistantAttachmentKind; message?: string },
+  ) {
+    if (!file) throw new RuleViolation([input.kind === "bill" ? "Choose the bill to attach." : "Choose a photo of the card."]);
+    if (!this.reader.configured) throw new RuleViolation(["Reading files with AI isn't set up yet. An administrator needs to add the Anthropic API key."]);
+    if (!ATTACHMENT_TYPES[input.kind].includes(file.mimetype) || !sniffMatches(file.mimetype, file.buffer))
+      throw new RuleViolation([input.kind === "bill" ? "Attach the bill as a PDF or a JPG, PNG or WEBP photo." : "Attach a JPG, PNG or WEBP photo of the card."]);
+    // Checked before reading, so a user over the limit doesn't run up a read.
+    await this.checkLimit(actor);
+    let read;
+    try {
+      read = input.kind === "bill" ? await this.reader.readBill(file.buffer, file.mimetype) : await this.reader.readCard(file.buffer, file.mimetype);
+    } catch (e) {
+      if (e instanceof ReadFailed) throw new RuleViolation([e.message]);
+      throw e;
+    }
+    const message = input.message?.trim() || DEFAULT_QUESTION[input.kind];
+    return this.ask(actor, { conversationId: input.conversationId, opportunityId: input.opportunityId, message }, { kind: input.kind, text: attachmentText(input.kind, read) });
+  }
+
+  /** Answers one question. The user's message, the answer and any changes it prepared are stored; nothing else changes. */
+  async ask(actor: Actor, input: { conversationId?: string | null; opportunityId?: string | null; message: string }, attachment?: { kind: AssistantAttachmentKind; text: string }) {
+    await this.checkLimit(actor);
 
     // The deal on screen, only if the user can see it (otherwise it's just not mentioned).
     const dealId = input.opportunityId ? await this.tools.dealId(actor, input.opportunityId).catch(() => null) : null;
     const conversation = input.conversationId ? await this.conversation(actor, input.conversationId) : await this.prisma.assistantConversation.create({ data: { userId: actor.id, opportunityId: dealId } });
     const earlier = await this.prisma.assistantMessage.findMany({ where: { conversationId: conversation.id }, orderBy: { createdAt: "desc" }, take: HISTORY, select: { role: true, body: true } });
-    const question = await this.prisma.assistantMessage.create({ data: { conversationId: conversation.id, role: "user", body: input.message, toolsUsed: [] } });
+    const body = attachment ? `${input.message}\n\n${attachment.text}` : input.message;
+    const question = await this.prisma.assistantMessage.create({ data: { conversationId: conversation.id, role: "user", body, toolsUsed: [] } });
 
     // Today's date goes with the question (not the cached instructions) so "next Tuesday" can be scheduled.
     const now = today();
     const weekday = new Date(`${now}T12:00:00Z`).toLocaleDateString("en-IE", { weekday: "long", timeZone: "UTC" });
     const context = `(Today is ${weekday} ${now}.${dealId ? ` I'm looking at deal ${dealId}.` : ""})\n\n`;
-    const messages: Anthropic.MessageParam[] = [...earlier.reverse().map((m) => ({ role: m.role as "user" | "assistant", content: m.body })), { role: "user", content: context + input.message }];
+    const messages: Anthropic.MessageParam[] = [...earlier.reverse().map((m) => ({ role: m.role as "user" | "assistant", content: m.body })), { role: "user", content: context + body }];
     const { answer, toolsUsed, usage, proposals } = await this.converse(actor, messages);
 
     const reply = await this.prisma.assistantMessage.create({
@@ -80,9 +116,9 @@ export class AssistantService {
       entityType: "assistant_conversation",
       entityId: conversation.id,
       summary: "Asked the CRM assistant",
-      data: { questionId: question.id, answerId: reply.id, tools: toolsUsed, proposed: actions.map((a) => a.kind), model: this.env.AI_ASSISTANT_MODEL, inputTokens: usage.input, outputTokens: usage.output, cachedTokens: usage.cached },
+      data: { questionId: question.id, answerId: reply.id, ...(attachment ? { attachment: attachment.kind, reader: this.reader.model } : {}), tools: toolsUsed, proposed: actions.map((a) => a.kind), model: this.env.AI_ASSISTANT_MODEL, inputTokens: usage.input, outputTokens: usage.output, cachedTokens: usage.cached },
     });
-    return { conversationId: conversation.id, message: { id: reply.id, role: "assistant", body: answer, toolsUsed, createdAt: reply.createdAt, feedback: [], actions } };
+    return { conversationId: conversation.id, question: { id: question.id, role: "user", body }, message: { id: reply.id, role: "assistant", body: answer, toolsUsed, createdAt: reply.createdAt, feedback: [], actions } };
   }
 
   /** The tool loop: Claude calls read-only tools and prepares changes (as the user) until it can answer. */

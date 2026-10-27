@@ -1,11 +1,11 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Send, Sparkles, SquarePen, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { Check, CreditCard, FileText, Paperclip, Send, Sparkles, SquarePen, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
-import { ASSISTANT_ACTION_LABELS, type AssistantActionKind } from "@uo/shared";
+import { ASSISTANT_ACTION_LABELS, type AssistantActionKind, type AssistantAttachmentKind } from "@uo/shared";
 import { Badge, Button, Textarea } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/format";
@@ -30,6 +30,12 @@ interface Message {
 }
 
 const UUID = /^\/opportunities\/([0-9a-f-]{36})/i;
+/** Files the assistant can read: bills as PDFs or photos, cards as photos. */
+const ATTACH: Record<AssistantAttachmentKind, { label: string; accept: string }> = {
+  bill: { label: "Energy bill", accept: "application/pdf,image/jpeg,image/png,image/webp" },
+  card: { label: "Business card", accept: "image/jpeg,image/png,image/webp" },
+};
+const MAX_FILE = 10 * 1024 * 1024;
 const ON_DEAL = ["What's blocking this deal?", "Remind me to call this customer tomorrow", "Draft an email asking for their latest bill"];
 const ELSEWHERE = ["Which of my deals are stuck?", "What are my overdue tasks?", "Move my overdue tasks to tomorrow"];
 
@@ -191,23 +197,56 @@ export function AssistantPanel({ onClose }: { onClose: () => void }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // A bill or card to send with the next question; the API reads it and doesn't keep the file.
+  const [attachment, setAttachment] = useState<{ kind: AssistantAttachmentKind; file: File } | null>(null);
+  const [choosing, setChoosing] = useState(false);
   const end = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
+  const [pickKind, setPickKind] = useState<AssistantAttachmentKind>("bill");
 
+  type Ask = { message: string; attachment?: { kind: AssistantAttachmentKind; file: File } | null };
+  type Asked = { conversationId: string; question?: { body: string }; message: Message };
   const ask = useMutation({
     meta: { silent: true },
-    mutationFn: (message: string) => api.post<{ conversationId: string; message: Message }>("/assistant/messages", { conversationId, opportunityId: dealId, message }),
-    onMutate: (message) => {
+    mutationFn: ({ message, attachment: a }: Ask) => {
+      if (!a) return api.post<Asked>("/assistant/messages", { conversationId, opportunityId: dealId, message });
+      const form = new FormData();
+      form.append("kind", a.kind);
+      if (message) form.append("message", message);
+      if (conversationId) form.append("conversationId", conversationId);
+      if (dealId) form.append("opportunityId", dealId);
+      form.append("file", a.file);
+      return api.postForm<Asked>("/assistant/messages/upload", form);
+    },
+    onMutate: ({ message, attachment: a }) => {
       setError(null);
-      setMessages((m) => [...m, { id: `local-${m.length}`, role: "user", body: message, toolsUsed: [] }]);
+      const body = [message, a && `📎 ${ATTACH[a.kind].label}: ${a.file.name} (reading…)`].filter(Boolean).join("\n\n");
+      setMessages((m) => [...m, { id: `local-${m.length}`, role: "user", body, toolsUsed: [] }]);
       setText("");
+      setAttachment(null);
     },
     onSuccess: (r) => {
       setConversationId(r.conversationId);
-      setMessages((m) => [...m, r.message]);
+      // With a file, show what was read from it in place of the placeholder.
+      setMessages((m) => [...(r.question ? m.slice(0, -1).concat({ ...m[m.length - 1], body: r.question.body }) : m), r.message]);
     },
-    onError: (e) => setError(e instanceof ApiError ? e.message : "The assistant couldn't be reached. Try again."),
+    onError: (e, { message, attachment: a }) => {
+      setError(e instanceof ApiError ? (e.issues.length ? e.issues.join(" ") : e.message) : "The assistant couldn't be reached. Try again.");
+      // A file that couldn't be read wasn't asked about: take the placeholder back and keep the file to try again.
+      if (a) {
+        setMessages((m) => m.slice(0, -1));
+        setAttachment(a);
+        setText(message);
+      }
+    },
   });
+
+  const choose = (kind: AssistantAttachmentKind) => {
+    setPickKind(kind);
+    // The input's accept list changes with the kind; open it once React has rendered it.
+    requestAnimationFrame(() => picker.current?.click());
+  };
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
@@ -228,7 +267,7 @@ export function AssistantPanel({ onClose }: { onClose: () => void }) {
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
     const q = text.trim();
-    if (q && !ask.isPending) ask.mutate(q);
+    if ((q || attachment) && !ask.isPending) ask.mutate({ message: q, attachment });
   };
 
   return (
@@ -237,7 +276,7 @@ export function AssistantPanel({ onClose }: { onClose: () => void }) {
         <Sparkles className="size-5 text-primary" aria-hidden />
         <h2 className="flex-1 text-base font-medium">Ask the CRM</h2>
         {messages.length > 0 && (
-          <Button variant="ghost" size="icon" aria-label="New conversation" title="New conversation" onClick={() => (setConversationId(null), setMessages([]), setError(null))}>
+          <Button variant="ghost" size="icon" aria-label="New conversation" title="New conversation" onClick={() => (setConversationId(null), setMessages([]), setError(null), setAttachment(null))}>
             <SquarePen />
           </Button>
         )}
@@ -249,9 +288,10 @@ export function AssistantPanel({ onClose }: { onClose: () => void }) {
         {messages.length === 0 && (
           <div className="space-y-3">
             <p className="text-muted">Ask about {dealId ? "this deal" : "your deals"}, your tasks or how the CRM works. I can look things up and prepare changes (tasks, follow-ups, notes, emails, stage moves) that you confirm before anything is saved.</p>
+            <p className="text-muted">Attach a customer&apos;s energy bill or a business card with the paperclip, and I&apos;ll check whether we have them and suggest what to do.</p>
             <div className="flex flex-col items-start gap-2">
               {(dealId ? ON_DEAL : ELSEWHERE).map((s) => (
-                <button key={s} type="button" className="min-h-8 rounded-full border border-border px-3 py-1 text-left text-sm hover:bg-[color-mix(in_srgb,var(--md-sys-color-on-surface)_8%,transparent)]" onClick={() => ask.mutate(s)}>
+                <button key={s} type="button" className="min-h-8 rounded-full border border-border px-3 py-1 text-left text-sm hover:bg-[color-mix(in_srgb,var(--md-sys-color-on-surface)_8%,transparent)]" onClick={() => ask.mutate({ message: s })}>
                   {s}
                 </button>
               ))}
@@ -273,7 +313,7 @@ export function AssistantPanel({ onClose }: { onClose: () => void }) {
         )}
         {ask.isPending && (
           <p className="flex items-center gap-2 text-muted">
-            <Sparkles className="size-4 animate-pulse text-primary" aria-hidden /> Looking that up…
+            <Sparkles className="size-4 animate-pulse text-primary" aria-hidden /> {ask.variables?.attachment ? "Reading the file…" : "Looking that up…"}
           </p>
         )}
         {error && (
@@ -283,11 +323,55 @@ export function AssistantPanel({ onClose }: { onClose: () => void }) {
         )}
         <div ref={end} />
       </div>
+      {(attachment || choosing) && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border px-3 pt-3 text-sm">
+          {attachment ? (
+            <span className="inline-flex min-h-8 max-w-full items-center gap-2 rounded-full bg-[var(--md-sys-color-secondary-container)] py-1 pl-3 pr-1 text-[var(--md-sys-color-on-secondary-container)]">
+              {attachment.kind === "bill" ? <FileText className="size-4 shrink-0" aria-hidden /> : <CreditCard className="size-4 shrink-0" aria-hidden />}
+              <span className="truncate">
+                {ATTACH[attachment.kind].label}: {attachment.file.name}
+              </span>
+              <button type="button" className="inline-flex size-6 shrink-0 items-center justify-center rounded-full hover:bg-[color-mix(in_srgb,var(--md-sys-color-on-surface)_8%,transparent)]" aria-label="Remove attachment" onClick={() => setAttachment(null)}>
+                <X className="size-4" aria-hidden />
+              </button>
+            </span>
+          ) : (
+            <>
+              <span className="text-muted">Attach:</span>
+              {(Object.keys(ATTACH) as AssistantAttachmentKind[]).map((k) => (
+                <Button key={k} size="sm" variant="secondary" onClick={() => choose(k)}>
+                  {k === "bill" ? <FileText /> : <CreditCard />} {ATTACH[k].label}
+                </Button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+      <input
+        ref={picker}
+        type="file"
+        hidden
+        accept={ATTACH[pickKind].accept}
+        aria-label={`Choose ${ATTACH[pickKind].label.toLowerCase()}`}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (!f) return;
+          if (f.size > MAX_FILE) return setError("That file is over 10 MB. Attach a smaller copy or a photo.");
+          setError(null);
+          setChoosing(false);
+          setAttachment({ kind: pickKind, file: f });
+          input.current?.focus();
+        }}
+      />
       <form onSubmit={submit} className="flex shrink-0 items-end gap-2 border-t border-border p-3">
+        <Button type="button" variant="ghost" size="icon" aria-label="Attach a bill or business card" aria-expanded={choosing} disabled={ask.isPending} onClick={() => setChoosing((c) => !c)}>
+          <Paperclip />
+        </Button>
         <Textarea
           ref={input}
           aria-label="Your question"
-          placeholder="Ask a question…"
+          placeholder={attachment ? "Add a note, or just send…" : "Ask a question…"}
           rows={2}
           maxLength={2000}
           value={text}
@@ -297,7 +381,7 @@ export function AssistantPanel({ onClose }: { onClose: () => void }) {
           }}
           className="flex-1"
         />
-        <Button type="button" size="icon" aria-label="Send" disabled={!text.trim()} loading={ask.isPending} onClick={() => submit()}>
+        <Button type="button" size="icon" aria-label="Send" disabled={!text.trim() && !attachment} loading={ask.isPending} onClick={() => submit()}>
           <Send />
         </Button>
       </form>

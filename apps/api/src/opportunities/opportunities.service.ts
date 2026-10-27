@@ -735,6 +735,8 @@ export class OpportunitiesService {
           { customer: { legalName: { contains: term, mode: "insensitive" } } },
           { customer: { tradingName: { contains: term, mode: "insensitive" } } },
           ...(n ? [{ number: n }] : []),
+          // An MPRN or GPRN typed in full (spaces allowed).
+          ...(/^\d[\d ]{5,13}$/.test(term) ? [{ sites: { some: { meterPoints: { some: { OR: [{ mprn: term.replace(/ /g, "") }, { gprn: term.replace(/ /g, "") }] } } } } }] : []),
         ],
       });
     }
