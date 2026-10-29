@@ -46,7 +46,8 @@ export const FLOGAS_GAS_SME_AGREEMENT: FormPreset = {
     tick("Requirement: renewal", 0, 519.3, 710.4, 6.8, 6.8, "is.renewal"),
     tick("Requirement: turn on meter", 0, 394.6, 697.5, 6.8, 6.8, "is.reenergise"),
     tick("Requirement: change of supplier", 0, 480.5, 697.5, 6.8, 6.8, "is.changeOfSupplier"),
-    text("GPRN", 0, 343, 662, 166, 12, "site.gprn"),
+    // Nine character boxes (340.2–511.1 pt): one digit per box.
+    text("GPRN", 0, 340.2, 660.5, 170.9, 14.9, "site.gprn", { comb: 9 }),
     text("Meter number", 0, 377, 616, 216, 12, "site.meterNumber", U),
     text("Date of changeover", 0, 415, 590.5, 178, 12, "contract.proposedStartDate"),
     text("Duration of agreement", 0, 427, 566, 166, 12, "contract.termText", U),
@@ -79,7 +80,9 @@ export const FLOGAS_GAS_SME_AGREEMENT: FormPreset = {
     sign("Mandate signature", 1, 115, 573, 308, 18),
     signedDate("Mandate date", 1, 472, 575, 122, 13),
     text("Debtor confirmation: name", 1, 136, 311.5, 458, 12, "bank.accountName", U),
-    text("Debtor confirmation: IBAN", 1, 136, 290.5, 458, 12, "bank.iban"),
+    // Thirty character boxes (134.6–595.7 pt): one character per box. The name row has boxes too but
+    // stays plain text, because boxes drop the spaces and refuse names longer than 30 characters.
+    text("Debtor confirmation: IBAN", 1, 134.6, 289.9, 461.1, 13.5, "bank.iban", { comb: 30 }),
     sign("Debtor confirmation: signature", 1, 219, 183, 193, 14),
     signedDate("Debtor confirmation: date", 1, 463, 182.7, 90, 12.5),
   ],
