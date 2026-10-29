@@ -1,7 +1,7 @@
 /** Saved views for the opportunity list (keys match the API's `view` parameter). */
 export const VIEWS = [
-  { key: "my_open", label: "My open opportunities" },
-  { key: "all", label: "All opportunities" },
+  { key: "my_open", label: "My open leads" },
+  { key: "all", label: "All leads" },
   { key: "all_won", label: "All won" },
   { key: "energy", label: "Energy" },
   { key: "worldpay", label: "Worldpay" },

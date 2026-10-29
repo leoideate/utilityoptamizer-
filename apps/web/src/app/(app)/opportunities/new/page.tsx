@@ -27,7 +27,7 @@ import { useCan } from "@/lib/session";
 
 /** Quick capture: only a name and service are required. Everything else can come later. */
 const schema = z.object({
-  name: z.string().trim().min(1, "Give the opportunity a name, e.g. the business and service."),
+  name: z.string().trim().min(1, "Give the lead a name, e.g. the business and service."),
   serviceType: z.enum(SERVICE_TYPES),
   saleType: z.enum(SALE_TYPES),
   companyName: z.string().optional(),
@@ -80,7 +80,7 @@ function NewOpportunityForm() {
       <Card className="space-y-4 p-5">
         <h2 className="font-semibold">The deal</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Opportunity name" required error={e.name?.message} className="sm:col-span-2">
+          <Field label="Lead name" required error={e.name?.message} className="sm:col-span-2">
             {(p) => <Input {...p} placeholder="e.g. Harbour Café – electricity" autoFocus {...register("name")} />}
           </Field>
           <Field label="Service">
@@ -179,7 +179,7 @@ function NewOpportunityForm() {
           Cancel
         </Button>
         <Button type="submit" loading={create.isPending}>
-          Create opportunity
+          Create lead
         </Button>
       </div>
     </form>
@@ -189,7 +189,7 @@ function NewOpportunityForm() {
 export default function NewOpportunityPage() {
   return (
     <div className="mx-auto max-w-3xl">
-      <PageHeader title="New opportunity" description="Only the name and service are required." />
+      <PageHeader title="New lead" description="Only the name and service are required." />
       <Suspense>
         <NewOpportunityForm />
       </Suspense>

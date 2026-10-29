@@ -171,7 +171,7 @@ function GlobalSearch() {
         <div className="absolute left-0 right-0 top-14 z-50 max-h-96 overflow-y-auto rounded-[var(--md-sys-shape-corner-large)] bg-[var(--md-sys-color-surface-container-high)] p-1 shadow-[var(--md-sys-elevation-2)]" role="listbox" aria-label="Search results">
           {isFetching && !data && <p className="px-3 py-2 text-sm text-muted">Searching…</p>}
           {empty && <p className="px-3 py-2 text-sm text-muted">No matches for “{debounced}”.</p>}
-          {!!data?.opportunities.length && <p className="px-3 pb-1 pt-2 text-xs font-medium text-muted">Opportunities</p>}
+          {!!data?.opportunities.length && <p className="px-3 pb-1 pt-2 text-xs font-medium text-muted">Leads</p>}
           {data?.opportunities.map((o) => (
             <button key={o.id} role="option" aria-selected={false} onClick={() => go(`/opportunities/${o.id}`)} className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-surface-2">
               <span className="truncate">

@@ -63,7 +63,7 @@ export default function PipelinePage() {
     const card = data.columns.flatMap((c) => c.cards).find((c) => c.id === dragging);
     if (!card) return;
     if (stage === "live_won") {
-      setBlocked({ id: card.id, name: card.name, serviceType: card.serviceType, stage: "Live / Won", issues: ["Open the opportunity and use Activate to record the activation date."], linked: false });
+      setBlocked({ id: card.id, name: card.name, serviceType: card.serviceType, stage: "Live / Won", issues: ["Open the lead and use Activate to record the activation date."], linked: false });
       return;
     }
     move.mutate({ id: card.id, stage, name: card.name, serviceType: card.serviceType });
@@ -77,8 +77,8 @@ export default function PipelinePage() {
         description="Drag a card to another stage, or use its menu. Requirements are checked when you move."
         actions={
           <>
-            <Select className="w-auto" value={view} onChange={(e) => setView(e.target.value)} aria-label="Whose opportunities">
-              <option value="my_open">My opportunities</option>
+            <Select className="w-auto" value={view} onChange={(e) => setView(e.target.value)} aria-label="Whose leads">
+              <option value="my_open">My leads</option>
               <option value="all">{can("opportunity.read_all") ? "Everyone" : "Mine and unassigned"}</option>
               <option value="unassigned">Unassigned</option>
             </Select>
@@ -113,7 +113,7 @@ export default function PipelinePage() {
                 className={cn("flex w-72 shrink-0 flex-col rounded-xl border border-border bg-surface-2/60", dragging && "border-dashed")}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => drop(col.stage.key)}
-                aria-label={`${col.stage.name}: ${col.count} opportunities`}
+                aria-label={`${col.stage.name}: ${col.count} leads`}
               >
                 <div className="flex items-baseline justify-between gap-2 px-3 py-2.5">
                   <h2 className="text-sm font-semibold">{col.stage.name}</h2>
@@ -187,7 +187,7 @@ export default function PipelinePage() {
           (blocked.linked ? (
             <GateIssueList issues={blocked.issues} tabs={blockedTabs!} onGo={goTo} />
           ) : (
-            <IssueList issues={blocked.issues} title="This opportunity still needs:" />
+            <IssueList issues={blocked.issues} title="This lead still needs:" />
           ))}
       </Dialog>
     </>

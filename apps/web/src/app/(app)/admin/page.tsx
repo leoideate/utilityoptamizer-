@@ -98,7 +98,7 @@ function UsersAdmin() {
     <Card>
       <CardHeader
         title="Users"
-        description="Deactivating a user keeps their opportunities and history. Changing roles signs them out."
+        description="Deactivating a user keeps their leads and history. Changing roles signs them out."
         actions={
           <Button size="sm" onClick={() => setEditing("new")}>
             <Plus /> Add user
@@ -525,7 +525,7 @@ function RetentionAdmin() {
   if (!v) return <Skeleton className="h-48" />;
   return (
     <Card>
-      <CardHeader title="Retention policy" description="Applied weekly. The policy never deletes opportunities, customers or timelines." />
+      <CardHeader title="Retention policy" description="Applied weekly. The policy never deletes leads, customers or timelines." />
       <div className="space-y-4 p-5">
         {Object.keys(labels).map((k) => (
           <Field key={k} label={labels[k]}>
@@ -572,7 +572,7 @@ function AuditAdmin() {
             <option value="">All actions</option>
             <option value="auth">Sign-ins</option>
             <option value="sensitive">Restricted data viewed</option>
-            <option value="opportunity">Opportunities</option>
+            <option value="opportunity">Leads</option>
             <option value="customer">Customers</option>
             <option value="document">Documents</option>
             <option value="user">Users</option>

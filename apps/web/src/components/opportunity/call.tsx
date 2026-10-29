@@ -108,7 +108,7 @@ function CallDialog({ opp, onClose }: { opp: Workspace; onClose: () => void }) {
       {!callId ? (
         <div className="space-y-4">
           {!numbers.data?.length ? (
-            <p className="text-sm text-muted">There's no phone number saved for this customer yet. Add one to a contact or the opportunity.</p>
+            <p className="text-sm text-muted">There's no phone number saved for this customer yet. Add one to a contact or the lead.</p>
           ) : (
             <Field label="Number">
               {(p) => (

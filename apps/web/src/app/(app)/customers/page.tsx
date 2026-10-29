@@ -67,7 +67,7 @@ export default function CustomersPage() {
     <>
       <PageHeader
         title="Customers"
-        description="Permanent customer records. Each can have many opportunities over time."
+        description="Permanent customer records. Each can have many leads over time."
         actions={
           <Button asChild>
             <Link href="/customers/new">

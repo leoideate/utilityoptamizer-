@@ -56,7 +56,7 @@ export default function NewCustomerPage() {
                       <Link href={`/customers/${d.customer.id}`}>Open existing</Link>
                     </Button>
                     <Button size="sm" asChild>
-                      <Link href={`/opportunities/new?customerId=${d.customer.id}&company=${encodeURIComponent(d.customer.legalName)}`}>New opportunity for them</Link>
+                      <Link href={`/opportunities/new?customerId=${d.customer.id}&company=${encodeURIComponent(d.customer.legalName)}`}>New lead for them</Link>
                     </Button>
                   </div>
                 </li>

@@ -34,7 +34,7 @@ export function BulkAssignBar({ ids, label, onDone, onClear }: { ids: string[]; 
 
   if (!ids.length && !result && !issues.length) return null;
   return (
-    <div role="region" aria-label="Assign selected opportunities" className="space-y-2 rounded-lg border border-border bg-primary-soft/40 p-3">
+    <div role="region" aria-label="Assign selected leads" className="space-y-2 rounded-lg border border-border bg-primary-soft/40 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium">{ids.length} selected</span>
         <Select className="min-w-0 sm:w-56" value={owner} onChange={(e) => setOwner(e.target.value)} aria-label="Assign to">
