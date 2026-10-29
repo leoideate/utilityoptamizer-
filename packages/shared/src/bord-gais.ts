@@ -313,6 +313,18 @@ export function bordGaisConfirmationEnd(d: Pick<BordGaisElectricityData, "confir
   return d.startDate && d.commitmentMonths ? addDays(addMonths(d.startDate, d.commitmentMonths), -1) : null;
 }
 
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+/** The confirmation period end as Bord Gáis shows it: month and year only, e.g. "Oct-2028". */
+export function bordGaisMonthLabel(iso: string | null): string | null {
+  return iso ? `${MONTH_NAMES[Number(iso.slice(5, 7)) - 1]}-${iso.slice(0, 4)}` : null;
+}
+
+/** A chosen month ("2028-10") stored as the last day of that month ("2028-10-31"). */
+export function bordGaisMonthEnd(month: string): string {
+  return addDays(addMonths(`${month}-01`, 1), -1);
+}
+
 /** Splits a reading into the five boxes before the slash and the one after it. */
 export function splitReading(v: string | null | undefined): { whole: string; tenth: string } | null {
   if (!v || !BORD_GAIS_READING.test(v)) return null;
