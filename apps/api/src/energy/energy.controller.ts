@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
-import { comparisonQuoteSchema, energyContractSchema, meterPointSchema, meterReadingSchema, supplySiteSchema } from "@uo/shared";
+import { comparisonQuoteSchema, energyContractSchema, meterPointSchema, meterReadingSchema, removeWithReasonSchema, supplySiteSchema } from "@uo/shared";
 import type { z } from "zod";
 import type { Actor } from "../common/actor";
 import { CurrentUser } from "../common/decorators";
@@ -28,6 +28,13 @@ export class EnergyController {
   @HttpCode(204)
   updateSite(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(supplySiteSchema.partial())) body: Partial<z.infer<typeof supplySiteSchema>>) {
     return this.energy.updateSite(a, id, body);
+  }
+
+  /** Removes a site added by mistake, with its meters; sites other records rely on are kept. */
+  @Post("sites/:id/remove")
+  @HttpCode(204)
+  removeSite(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(removeWithReasonSchema)) body: z.infer<typeof removeWithReasonSchema>) {
+    return this.energy.removeSite(a, id, body.reason);
   }
 
   @Post("sites/:id/meters")

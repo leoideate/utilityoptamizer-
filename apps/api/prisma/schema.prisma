@@ -1018,6 +1018,10 @@ model DocumentVersion {
   scanStatus   ScanStatus   @default(pending) @map("scan_status")
   uploadedById String?      @map("uploaded_by_id") @db.Uuid
   uploadedAt   DateTime     @default(now()) @map("uploaded_at")
+  /// Set when someone removes a wrong upload: the file stays in the history but is no longer the document.
+  removedAt    DateTime?    @map("removed_at")
+  removedById  String?      @map("removed_by_id") @db.Uuid
+  removeReason String?      @map("remove_reason")
 
   @@unique([itemId, version])
   @@map("document_versions")

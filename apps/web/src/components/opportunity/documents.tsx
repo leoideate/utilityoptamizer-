@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CheckCircle2, Clock, Eye, FileText, Lock, Plus, Send, ShieldAlert, Sparkles, Upload, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Eye, FileText, Lock, Plus, Send, ShieldAlert, Sparkles, Trash2, Upload, XCircle } from "lucide-react";
 import { type DragEvent, useRef, useState } from "react";
 import { DOCUMENT_TYPES, type DocumentType } from "@uo/shared";
 import { Dialog } from "@/components/ui/overlays";
@@ -12,6 +12,7 @@ import { useCan, useUser } from "@/lib/session";
 import type { Workspace } from "@/lib/types";
 import { BillReadingDialog } from "./bill-reading";
 import { useRefreshOpportunity } from "./common";
+import { RemoveDialog } from "./remove-dialog";
 
 interface Version {
   id: string;
@@ -21,6 +22,9 @@ interface Version {
   size?: number;
   scanStatus: "pending" | "clean" | "infected" | "error" | "skipped";
   uploadedAt: string;
+  /** Set when the file was removed as a wrong upload (it stays in the history). */
+  removedAt?: string | null;
+  removeReason?: string | null;
 }
 interface Item {
   id: string;
@@ -57,6 +61,8 @@ export function DocumentsTab({ opp }: { opp: Workspace }) {
   const [adding, setAdding] = useState(false);
   const [preview, setPreview] = useState<{ url: string; mimeType: string; title: string } | null>(null);
   const [reviewing, setReviewing] = useState<Item | null>(null);
+  const [removing, setRemoving] = useState<{ item: Item; version: Version } | null>(null);
+  const [deleting, setDeleting] = useState<Item | null>(null);
   const after = () => (refresh(), refetch());
   const standard = useMutation({ mutationFn: () => api.post(`/opportunities/${opp.id}/documents/standard`), onSuccess: after });
   const request = useMutation({ mutationFn: () => api.post(`/opportunities/${opp.id}/documents/request`, { itemIds: selected }), onSuccess: () => (setSelected([]), after()) });
@@ -71,6 +77,9 @@ export function DocumentsTab({ opp }: { opp: Workspace }) {
     }
   };
   const write = opp.permissions.write;
+  // Won and lost deals keep their documents as they are.
+  const canRemove = write && opp.outcome === "open";
+  const deleteItem = useMutation({ mutationFn: (i: Item) => api.del(`/documents/${i.id}`), onSuccess: () => (setDeleting(null), after()) });
 
   if (isLoading || !data) return <Skeleton className="h-64" />;
   const outstanding = data.filter((d) => d.required && !d.received);
@@ -117,12 +126,43 @@ export function DocumentsTab({ opp }: { opp: Workspace }) {
               onReview={() => setReviewing(item)}
               onToggleRequired={() => toggleRequired.mutate(item)}
               canReview={can("document.review")}
+              canRemove={canRemove}
+              onRemove={(version) => setRemoving({ item, version })}
+              onDelete={() => setDeleting(item)}
             />
           ))}
         </ul>
       )}
       {adding && <AddDocumentDialog opp={opp} onClose={() => (setAdding(false), after())} />}
       {reviewing && <ReviewDialog item={reviewing} onClose={() => (setReviewing(null), after())} />}
+      {removing && (
+        <RemoveDialog
+          title={`Remove ${removing.item.label} v${removing.version.version}?`}
+          description="The file stops being this document, so it needs uploading again. It stays in the document's history with your reason, and can't be removed if a form, check or submission uses it."
+          confirmLabel="Remove file"
+          remove={(reason) => api.post(`/document-versions/${removing.version.id}/remove`, { reason })}
+          onDone={after}
+          onClose={() => setRemoving(null)}
+        />
+      )}
+      <Dialog
+        open={!!deleting}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        title={`Delete ${deleting?.label ?? ""} from the checklist?`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleting(null)}>
+              Cancel
+            </Button>
+            <Button variant="danger" loading={deleteItem.isPending} onClick={() => deleting && deleteItem.mutate(deleting)}>
+              Delete
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm">Nothing has been uploaded to it, so nothing is lost. The timeline records that it was removed.</p>
+      </Dialog>
+
       <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)} title={preview?.title ?? ""} description="This link expires in a few minutes." wide footer={preview && <Button asChild variant="secondary"><a href={preview.url} target="_blank" rel="noreferrer">Open in new tab</a></Button>}>
         {preview &&
           (preview.mimeType.startsWith("image/") ? (
@@ -149,6 +189,9 @@ function DocumentRow({
   onReview,
   onToggleRequired,
   canReview,
+  canRemove,
+  onRemove,
+  onDelete,
 }: {
   item: Item;
   opp: Workspace;
@@ -160,6 +203,9 @@ function DocumentRow({
   onReview: () => void;
   onToggleRequired: () => void;
   canReview: boolean;
+  canRemove: boolean;
+  onRemove: (v: Version) => void;
+  onDelete: () => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const aiReading = useUser().features.aiReading;
@@ -179,7 +225,8 @@ function DocumentRow({
     const f = e.dataTransfer.files[0];
     if (f && opp.permissions.write) upload.mutate(f);
   };
-  const latest = item.versions[0];
+  // The document's file is its newest version that hasn't been removed.
+  const latest = item.versions.find((v) => !v.removedAt);
 
   return (
     <li
@@ -220,7 +267,7 @@ function DocumentRow({
               <Eye /> View
             </Button>
           )}
-          {item.versions.length > 1 && (
+          {(item.versions.length > 1 || (item.versions.length === 1 && !latest)) && (
             <Button size="sm" variant="ghost" onClick={() => setShowVersions((s) => !s)} aria-expanded={showVersions}>
               {item.versions.length} versions
             </Button>
@@ -246,19 +293,40 @@ function DocumentRow({
               </Button>
             </>
           )}
+          {canRemove && latest && !item.restricted && (
+            <Button size="sm" variant="ghost" onClick={() => onRemove(latest)} title="Remove a wrong upload">
+              <Trash2 /> Remove file
+            </Button>
+          )}
+          {canRemove && !item.versions.length && (
+            <Button size="sm" variant="ghost" onClick={onDelete} title="Delete this row from the checklist">
+              <Trash2 /> Delete
+            </Button>
+          )}
         </div>
       </div>
       {readingBill && latest && <BillReadingDialog opp={opp} versionId={latest.id} onClose={() => setReadingBill(false)} />}
       {showVersions && (
         <ul className="ml-7 mt-2 space-y-1 border-l border-border pl-3 text-xs">
           {item.versions.map((v) => (
-            <li key={v.id} className="flex items-center gap-2">
-              <span>
+            <li key={v.id} className="flex flex-wrap items-center gap-2">
+              <span className={cn(v.removedAt && "text-muted line-through")}>
                 v{v.version} · {dateTime(v.uploadedAt)} {v.filename && `· ${v.filename}`}
               </span>
+              {v.removedAt && (
+                <span className="text-muted">
+                  Removed {date(v.removedAt)}
+                  {v.removeReason && `: ${v.removeReason}`}
+                </span>
+              )}
               {!item.restricted && v.scanStatus !== "infected" && (
-                <button className="text-primary hover:underline" onClick={() => onOpen(v)}>
+                <button className="min-h-6 text-primary hover:underline" onClick={() => onOpen(v)}>
                   View
+                </button>
+              )}
+              {canRemove && !v.removedAt && !item.restricted && v.id !== latest?.id && (
+                <button className="min-h-6 text-danger hover:underline" onClick={() => onRemove(v)}>
+                  Remove
                 </button>
               )}
             </li>

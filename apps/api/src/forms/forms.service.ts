@@ -879,7 +879,7 @@ export class FormsService {
 
   /** The latest version of the previous supplier's bill (the energy bill checklist item). */
   private async latestBill(opportunityId: string) {
-    return this.prisma.documentVersion.findFirst({ where: { item: { opportunityId, documentType: "energy_bill" } }, orderBy: [{ uploadedAt: "desc" }] });
+    return this.prisma.documentVersion.findFirst({ where: { item: { opportunityId, documentType: "energy_bill" }, removedAt: null }, orderBy: [{ uploadedAt: "desc" }] });
   }
 
   async billChecks(actor: Actor, opportunityId: string) {

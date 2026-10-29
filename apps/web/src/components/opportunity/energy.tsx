@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Flame, Gauge, MapPin, Plus, Star, Zap } from "lucide-react";
+import { Flame, Gauge, MapPin, Plus, Star, Trash2, Zap } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { type Fuel, METER_REGISTERS, METER_REGISTER_LABELS, OCCUPANCY_LABELS, OCCUPANCY_TYPES, PRICE_TYPES, PRICE_TYPE_LABELS, occupancyNeedsLandlord, READING_TYPES, needsElectricity, needsGas } from "@uo/shared";
@@ -12,6 +12,7 @@ import { ApiError, api } from "@/lib/api";
 import { date, isoDay, money, num, todayIso } from "@/lib/format";
 import type { Workspace } from "@/lib/types";
 import { blankToNull, numOrNull, useRefreshOpportunity } from "./common";
+import { RemoveDialog } from "./remove-dialog";
 
 interface MeterPoint {
   id: string;
@@ -107,6 +108,8 @@ export function EnergyTab({ opp }: { opp: Workspace }) {
   const [dialog, setDialog] = useState<null | { kind: "site"; site?: Site } | { kind: "meter"; site: Site; meter?: MeterPoint } | { kind: "reading"; meter: MeterPoint } | { kind: "contract"; contract?: Contract } | { kind: "quote" }>(null);
   const fuels: Fuel[] = [...(needsElectricity(opp.serviceType) ? (["electricity"] as const) : []), ...(needsGas(opp.serviceType) ? (["gas"] as const) : [])];
   const write = opp.permissions.write && opp.outcome !== "won";
+  const [removingSite, setRemovingSite] = useState<Site | null>(null);
+  const refresh = useRefreshOpportunity(opp.id);
 
   if (isLoading || !data) return <Skeleton className="h-64" />;
   const close = () => setDialog(null);
@@ -152,6 +155,11 @@ export function EnergyTab({ opp }: { opp: Workspace }) {
                       <Button size="sm" variant="secondary" onClick={() => setDialog({ kind: "meter", site: s })}>
                         <Plus /> Add meter
                       </Button>
+                      {opp.outcome === "open" && (
+                        <Button size="sm" variant="ghost" onClick={() => setRemovingSite(s)} title="Remove a site added by mistake">
+                          <Trash2 /> Remove site
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -287,6 +295,16 @@ export function EnergyTab({ opp }: { opp: Workspace }) {
       <ComparisonCard opp={opp} quotes={data.quotes} fuels={fuels} onAdd={() => setDialog({ kind: "quote" })} write={write} />
 
       {dialog?.kind === "site" && <SiteDialog opp={opp} site={dialog.site} onClose={close} />}
+      {removingSite && (
+        <RemoveDialog
+          title={`Remove ${removingSite.label || removingSite.line1}?`}
+          description={`The site${removingSite.meterPoints.length ? ` and its ${removingSite.meterPoints.length === 1 ? "meter" : `${removingSite.meterPoints.length} meters`}` : ""} will be removed from this deal; draft contracts on it are unlinked. The timeline keeps its name and MPRN/GPRN. A site with a live contract, a case or another deal is kept.`}
+          confirmLabel="Remove site"
+          remove={(reason) => api.post(`/sites/${removingSite.id}/remove`, { reason })}
+          onDone={refresh}
+          onClose={() => setRemovingSite(null)}
+        />
+      )}
       {dialog?.kind === "meter" && <MeterDialog opp={opp} site={dialog.site} meter={dialog.meter} fuels={fuels} onClose={close} />}
       {dialog?.kind === "reading" && <ReadingDialog opp={opp} meter={dialog.meter} onClose={close} />}
       {dialog?.kind === "contract" && <ContractDialog opp={opp} contract={dialog.contract} sites={data.sites} fuels={fuels} onClose={close} />}

@@ -76,9 +76,9 @@ export async function loadGateFacts(db: Db, opportunityId: string, crypto?: Iban
     },
   });
   const [bill, billCheck, lease, termsCheck] = await Promise.all([
-    db.documentVersion.findFirst({ where: { item: { opportunityId, documentType: "energy_bill" } }, orderBy: { uploadedAt: "desc" }, select: { id: true } }),
+    db.documentVersion.findFirst({ where: { item: { opportunityId, documentType: "energy_bill" }, removedAt: null }, orderBy: { uploadedAt: "desc" }, select: { id: true } }),
     db.billCheck.findFirst({ where: { opportunityId }, orderBy: { verifiedAt: "desc" } }),
-    db.documentVersion.findFirst({ where: { item: { opportunityId, documentType: "lease_agreement" } }, orderBy: { uploadedAt: "desc" }, select: { id: true } }),
+    db.documentVersion.findFirst({ where: { item: { opportunityId, documentType: "lease_agreement" }, removedAt: null }, orderBy: { uploadedAt: "desc" }, select: { id: true } }),
     db.termsCheck.findFirst({ where: { opportunityId }, orderBy: { verifiedAt: "desc" }, select: { snapshotHash: true } }),
   ]);
   // An approved, reviewed form with a client signature counts as the customer's signature.

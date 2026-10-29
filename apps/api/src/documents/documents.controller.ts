@@ -1,7 +1,7 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiConsumes, ApiTags } from "@nestjs/swagger";
-import { documentItemSchema, documentReviewSchema } from "@uo/shared";
+import { documentItemSchema, documentReviewSchema, removeWithReasonSchema } from "@uo/shared";
 import { memoryStorage } from "multer";
 import { z } from "zod";
 import type { Actor } from "../common/actor";
@@ -59,6 +59,20 @@ export class DocumentsController {
   @Get("document-versions/:id/url")
   url(@CurrentUser() a: Actor, @Param("id", Id) id: string) {
     return this.docs.downloadUrl(a, id);
+  }
+
+  /** Removes a wrong upload; the file stays in the document's history with the reason. */
+  @Post("document-versions/:id/remove")
+  @HttpCode(204)
+  removeVersion(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(removeWithReasonSchema)) body: z.infer<typeof removeWithReasonSchema>) {
+    return this.docs.removeVersion(a, id, body.reason);
+  }
+
+  /** Deletes a checklist row nothing was ever uploaded to. */
+  @Delete("documents/:id")
+  @HttpCode(204)
+  deleteItem(@CurrentUser() a: Actor, @Param("id", Id) id: string) {
+    return this.docs.deleteItem(a, id);
   }
 
   @Post("documents/:id/review")

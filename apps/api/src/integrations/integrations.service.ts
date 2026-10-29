@@ -190,7 +190,7 @@ export class IntegrationsService {
       case "submission.send": {
         const opp = await this.prisma.opportunity.findUniqueOrThrow({
           where: { id: p.opportunityId },
-          include: { customer: true, documents: { where: { approval: "approved" }, include: { versions: { orderBy: { version: "desc" }, take: 1 } } } },
+          include: { customer: true, documents: { where: { approval: "approved" }, include: { versions: { where: { removedAt: null }, orderBy: { version: "desc" }, take: 1 } } } },
         });
         const documents = [];
         const versionIds: string[] = [];
