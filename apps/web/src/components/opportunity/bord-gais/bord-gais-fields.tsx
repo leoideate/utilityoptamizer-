@@ -24,13 +24,14 @@ import {
   type PriceType,
   RATE_ROW_FOR,
   bordGaisConfirmationEnd,
+  bordGaisMonthEnd,
+  bordGaisMonthLabel,
   discountCell,
   needsCroNumber,
   needsHomeAddress,
   rateUnit,
 } from "@uo/shared";
 import { Button, Card, CardHeader, Checkbox, Field, Input, Select } from "@/components/ui/primitives";
-import { date } from "@/lib/format";
 import { AddressFields, Num, Section, TabSummary, Text } from "../supplier-application/fields";
 import type { BankEdit } from "../supplier-application/types";
 import type { BordGaisView } from "./draft";
@@ -225,8 +226,8 @@ export function AgreementTab({ view, d, set, err, issues, ro }: TabProps) {
             </Select>
           )}
         </Field>
-        <Field label="Confirmation period end date" hint={confirmation ? `Calculated: ${date(confirmation)}. Change it only if Bord Gáis gave a different date.` : "Calculated from the start date and commitment period when both are known."}>
-          {(p) => <Input {...p} type="date" disabled={ro} value={d.confirmationEndDate ?? ""} onChange={(e) => set({ confirmationEndDate: e.target.value || null })} />}
+        <Field label="Confirmation period end (month and year)" hint={confirmation ? `Calculated: ${bordGaisMonthLabel(confirmation)}. Change it only if Bord Gáis gave a different month.` : "Calculated from the start date and commitment period when both are known."}>
+          {(p) => <Input {...p} type="month" disabled={ro} value={d.confirmationEndDate?.slice(0, 7) ?? ""} onChange={(e) => set({ confirmationEndDate: e.target.value ? bordGaisMonthEnd(e.target.value) : null })} />}
         </Field>
       </Section>
 

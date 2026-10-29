@@ -14,6 +14,7 @@ import {
   addressText,
   bordGaisBillingAddress,
   bordGaisConfirmationEnd,
+  bordGaisMonthLabel,
   bordGaisContactName,
   needsHomeAddress,
   normalizeIdentifier,
@@ -115,7 +116,7 @@ export async function renderBordGaisElectricity(d: BordGaisElectricityData, sign
 
   // Agreement and rates
   text("agreement_pricePlan", d.pricePlan);
-  text("agreement_confirmationEndDate", fmtDate(bordGaisConfirmationEnd(d)));
+  text("agreement_confirmationEndDate", bordGaisMonthLabel(bordGaisConfirmationEnd(d)));
   for (const p of PRICE_TYPES) tick(`agreement_rateType_${p}`, d.rateType === p);
   for (const m of BORD_GAIS_COMMITMENTS) tick(`agreement_commitment_${m}`, d.commitmentMonths === m);
   for (const row of BORD_GAIS_RATE_ROWS) for (const col of BORD_GAIS_RATE_COLUMNS) text(rateFieldId(row, col), fmtCent(d.rates[row][col]));

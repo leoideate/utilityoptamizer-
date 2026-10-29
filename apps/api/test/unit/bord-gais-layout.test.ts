@@ -77,7 +77,7 @@ describe("Bord Gáis electricity: CRM values onto the form", () => {
       meter2_night_tenth: "9",
       meter1_24h_whole: "",
       agreement_pricePlan: "Business Fixed Energy 24",
-      agreement_confirmationEndDate: "31/10/2028",
+      agreement_confirmationEndDate: "Oct-2028",
       agreement_rateType_fixed: true,
       agreement_rateType_variable: false,
       agreement_commitment_24: true,

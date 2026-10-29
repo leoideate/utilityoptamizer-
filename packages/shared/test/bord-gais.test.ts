@@ -6,6 +6,8 @@ import {
   bordGaisAnswersSchema,
   bordGaisBillingAddress,
   bordGaisConfirmationEnd,
+  bordGaisMonthEnd,
+  bordGaisMonthLabel,
   bordGaisElectricityApplies,
   bordGaisElectricityIssues,
   bordGaisSaveSchema,
@@ -125,6 +127,15 @@ describe("Bord Gáis electricity: values", () => {
     expect(bordGaisConfirmationEnd({ confirmationEndDate: null, startDate: "2026-11-01", commitmentMonths: 24 })).toBe("2028-10-31");
     expect(bordGaisConfirmationEnd({ confirmationEndDate: "2028-12-31", startDate: "2026-11-01", commitmentMonths: 24 })).toBe("2028-12-31");
     expect(bordGaisConfirmationEnd({ confirmationEndDate: null, startDate: null, commitmentMonths: 24 })).toBeNull();
+  });
+
+  it("shows the confirmation period end as month and year, and stores a chosen month as its last day", () => {
+    expect(bordGaisMonthLabel("2028-10-31")).toBe("Oct-2028");
+    expect(bordGaisMonthLabel("2026-01-05")).toBe("Jan-2026");
+    expect(bordGaisMonthLabel(null)).toBeNull();
+    expect(bordGaisMonthEnd("2028-10")).toBe("2028-10-31");
+    expect(bordGaisMonthEnd("2028-02")).toBe("2028-02-29");
+    expect(bordGaisMonthEnd("2027-12")).toBe("2027-12-31");
   });
 
   it("asks a second account holder to sign only with direct debit", () => {

@@ -161,7 +161,7 @@ one digit after it (see ambiguity 1).
 | PDF field | CRM key | Value |
 | --- | --- | --- |
 | *(no field)* drawn at 100, 430 (124 × 12) | `agreement.pricePlan` | contract pricing plan |
-| *(no field)* drawn at 366, 430 (68 × 12) | `agreement.confirmationEndDate` | answer, else start + commitment − 1 day |
+| *(no field)* drawn at 366, 430 (68 × 12) | `agreement.confirmationEndDate` | month and year only ("Oct-2028"): answer (a chosen month, stored as its last day), else start + commitment − 1 day |
 | `Fixed Energy Rate` (on `On`) | `agreement.rateType = fixed` | checkbox |
 | `Variable Rate` (text) | `agreement.rateType = variable` | "X" (ambiguity 2) |
 | `Fully Fixed Rate` (text) | `agreement.rateType = fully_fixed` | "X" (ambiguity 2) |
