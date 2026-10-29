@@ -26,3 +26,20 @@ verification-loop.
 Left out on purpose: lead-intelligence (built on scraping personal LinkedIn/X profiles, which
 the lead-research rules in `docs/prompts/lead-research-agent.md` forbid), and stack skills this
 repo doesn't use (Next.js 16/Turbopack, Express-style backend patterns, Vitest component tests).
+
+## security-audit (Cloudflare)
+
+`security-audit` is Cloudflare's security audit skill (github.com/cloudflare/security-audit-skill),
+under the MIT licence; its notice is in `THIRD-PARTY-NOTICES`. Copied unchanged at commit
+`c1c8a8c1471069fb0e188eeaff69b8e8db6564a8` on 2026-10-27.
+
+Reviewed before adding: Markdown guidance, a JSON report schema and two Node validators
+(`validate-*.cjs`, with tests) that only read local files; no network calls, no fetch-and-run
+commands, no instructions to send data anywhere. It runs target code only inside an
+OS-enforced sandbox and otherwise keeps findings as "needs validation". A full audit writes its
+report outside the repo (default `~/security-audit-skill/<repo>/run-N`). ESLint skips
+`.claude/skills/**`, so the validators aren't held to this repo's lint rules.
+
+Ask for it in words ("security audit this codebase"); other security questions use only the
+relevant guidance. Its findings are leads to check, not proof; the repo's own checks
+(`pentest.test.ts`, `hardening.test.ts`, `docs/security-assessment.md`) stay the record.
