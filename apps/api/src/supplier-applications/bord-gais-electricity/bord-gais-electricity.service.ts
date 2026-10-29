@@ -32,6 +32,7 @@ import { AuditService } from "../../audit/audit.service";
 import { type Actor, actorRef } from "../../common/actor";
 import { CryptoService } from "../../common/crypto.service";
 import { Forbidden, RuleViolation } from "../../common/errors";
+import { knownSupplyAddress } from "../../common/irish-address";
 import { PrismaService } from "../../common/prisma.service";
 import { dateOnly, isoDay, num, phoneKey } from "../../common/values";
 import { fillAcroForm } from "../../forms/acroform";
@@ -161,6 +162,8 @@ export class BordGaisElectricityService {
       billing: addr("billing"),
       bank: customer?.bankAccounts[0] ?? null,
       site,
+      // Until the deal has a site, the supply address is the one the CRM already knows.
+      knownAddress: site ? null : knownSupplyAddress(opp, customer?.addresses.filter((a) => a.kind !== "home")),
       meter,
       contract: opp.contracts.find((c) => c.fuel === "electricity" && c.status !== "cancelled") ?? null,
       app,
@@ -206,7 +209,7 @@ export class BordGaisElectricityService {
     const { opp, customer: c, contact, site, meter, contract, bank, answers: a } = ctx;
     const contactName = bordGaisContactName({ contactFirstName: contact?.firstName ?? null, contactLastName: contact?.lastName ?? null }) ?? opp.contactName;
     const accountAddress = addressOf(ctx.accountAddress);
-    const supplyAddress = addressOf(site);
+    const supplyAddress = addressOf(site ?? ctx.knownAddress);
     const billingAddress = addressOf(ctx.billing);
     const telephone = contact?.phone ?? c?.phone ?? opp.phone;
     const email = contact?.email ?? c?.email ?? opp.email;
@@ -453,6 +456,8 @@ export class BordGaisElectricityService {
     if (s.siteName !== undefined && s.siteName !== (site?.label ?? null)) data.label = s.siteName;
     if (s.annualConsumptionKwh !== undefined && s.annualConsumptionKwh !== num(site?.annualConsumptionKwh)) data.annualConsumptionKwh = s.annualConsumptionKwh;
     if (data.label !== undefined || data.annualConsumptionKwh !== undefined) changed.add("site");
+    // With no site yet, saving site details or the meter creates it at the address the form showed.
+    if (!site && !data.line1 && ctx.knownAddress && (Object.keys(data).length || input.meter)) Object.assign(data, ctx.knownAddress);
     if (!Object.keys(data).length) return site?.id ?? null;
     if (site) {
       await tx.supplySite.update({ where: { id: site.id }, data });

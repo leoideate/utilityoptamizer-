@@ -166,6 +166,25 @@ describe("CSV lead import parsing", () => {
     expect(parseIrishAddress("  ")).toBeNull();
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { knownBusinessType, knownSupplyAddress } = require("../../src/common/irish-address") as typeof import("../../src/common/irish-address");
+  it("finds the address and business type the CRM already holds", () => {
+    const imported = { nextAction: "Category: Takeaway · Address: 33 Benbulbin rd Drimnagh Dublin 12 D12 CT98, Co. Dublin · Area: Dublin 12 · Opening hours: 12:30-14:00" };
+    expect(knownSupplyAddress(imported)).toEqual({ line1: "33 Benbulbin rd Drimnagh", line2: null, city: "Dublin 12", county: "Co. Dublin", postcode: "D12 CT98" });
+    expect(knownBusinessType(imported)).toBe("Takeaway");
+    // The customer's own addresses win, trading first; a home address is never used.
+    const addresses = [
+      { kind: "home", line1: "Home", line2: null, city: null, county: null, postcode: null },
+      { kind: "registered", line1: "Registered office", line2: null, city: "Dublin 2", county: null, postcode: null },
+      { kind: "trading", line1: "The shop", line2: "Main St", city: "Naas", county: "Co. Kildare", postcode: "W91 X2Y3" },
+    ];
+    expect(knownSupplyAddress(imported, addresses)).toMatchObject({ line1: "The shop", postcode: "W91 X2Y3" });
+    expect(knownSupplyAddress({}, addresses.slice(0, 2))).toMatchObject({ line1: "Registered office" });
+    expect(knownSupplyAddress({}, addresses.slice(0, 1))).toBeNull();
+    expect(knownBusinessType(imported, { businessType: "Restaurant" })).toBe("Restaurant");
+    expect(knownSupplyAddress({ nextAction: "Call back Tuesday", notes: null })).toBeNull();
+  });
+
   it("separates a contact's role in brackets", () => {
     expect(splitContact("Paul McDonald (Owner)")).toEqual({ name: "Paul McDonald", role: "Owner" });
     expect(splitContact("Geoff Lenehan / Maisha Lenehan (Co-owners)")).toEqual({ name: "Geoff Lenehan / Maisha Lenehan", role: "Co-owners" });

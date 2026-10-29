@@ -107,6 +107,35 @@ describe("Flogas electricity: when it shows", () => {
   });
 });
 
+describe("Flogas electricity: the address the CRM already knows", () => {
+  it("shows the customer's address until there's a site, and saving a meter creates the site there", async () => {
+    const s = await supplier(t, "Flogas");
+    const oppId = await createOpportunity(team.sales, "electricity", { productInterest: ["electricity"], supplyChanges: ["change_of_supplier"] });
+    const customerId = expectStatus(await team.sales.post(`/opportunities/${oppId}/customer/create`), 201).body.customerId as string;
+    await t.prisma.customerAddress.create({ data: { customerId, kind: "trading", line1: "12 Harbour Road", city: "Howth", county: "Co. Dublin", postcode: "D13 X2Y3" } });
+    expectStatus(await team.sales.patch(`/opportunities/${oppId}`, { selectedSupplierId: s.id }), 204);
+
+    const v = expectStatus(await team.sales.get(base(oppId)), 200).body;
+    expect(v.data.supplyAddress).toEqual({ line1: "12 Harbour Road", line2: null, city: "Howth", county: "Co. Dublin", postcode: "D13 X2Y3" });
+    // The Energy tab offers the same address for a new site.
+    const energy = expectStatus(await team.sales.get(`/opportunities/${oppId}/energy`), 200).body;
+    expect(energy.suggestedSite.address).toMatchObject({ line1: "12 Harbour Road", postcode: "D13 X2Y3" });
+
+    expectStatus(await team.sales.put(base(oppId), { meters: [{ mprn: "10011223344" }] }), 200);
+    const sites = await t.prisma.supplySite.findMany({ where: { opportunityId: oppId }, include: { meterPoints: true } });
+    expect(sites).toHaveLength(1);
+    expect(sites[0]).toMatchObject({ line1: "12 Harbour Road", city: "Howth", postcode: "D13 X2Y3" });
+    expect(sites[0].meterPoints.map((m) => m.mprn)).toEqual(["10011223344"]);
+  });
+
+  it("uses the address an older lead import left in Next action", async () => {
+    const oppId = await createOpportunity(team.sales, "electricity", { productInterest: ["electricity"] });
+    await t.prisma.opportunity.update({ where: { id: oppId }, data: { nextAction: "Category: Takeaway · Address: 33 Benbulbin rd Drimnagh Dublin 12 D12 CT98, Co. Dublin · Area: Dublin 12 · Opening hours: 12:30-14:00" } });
+    const energy = expectStatus(await team.sales.get(`/opportunities/${oppId}/energy`), 200).body;
+    expect(energy.suggestedSite).toEqual({ address: { line1: "33 Benbulbin rd Drimnagh", line2: null, city: "Dublin 12", county: "Co. Dublin", postcode: "D12 CT98" }, customerSector: "Takeaway" });
+  });
+});
+
 describe("Flogas electricity: prefill and drafts", () => {
   it("fills the form from the opportunity, customer, site, meter and contract", async () => {
     const { oppId, meterId } = await flogasDeal();
