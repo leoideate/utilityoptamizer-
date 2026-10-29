@@ -62,7 +62,7 @@ export function scrollToSection(id: string) {
 }
 
 /** The issues blocking a stage move, each a link to where it's fixed. */
-export function GateIssueList({ issues, tabs, onGo, title = "This opportunity still needs:" }: { issues: string[]; tabs: GateTabs; onGo: (target: string) => void; title?: string }) {
+export function GateIssueList({ issues, tabs, onGo, title = "This lead still needs:" }: { issues: string[]; tabs: GateTabs; onGo: (target: string) => void; title?: string }) {
   if (!issues.length) return null;
   return (
     <div role="alert" className="rounded-[var(--md-sys-shape-corner-small)] bg-warning-soft p-3 text-sm text-[var(--md-sys-color-on-warning-container)]">

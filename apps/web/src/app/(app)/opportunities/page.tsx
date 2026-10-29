@@ -103,12 +103,12 @@ function OpportunitiesList() {
       return next;
     });
   const tickAll = (on: boolean) => setSelected(on ? new Set(pageIds) : new Set());
-  const nameOf = (id: string) => data?.items.find((o) => o.id === id)?.name ?? "Opportunity";
+  const nameOf = (id: string) => data?.items.find((o) => o.id === id)?.name ?? "Lead";
 
   return (
     <>
       <PageHeader
-        title="Opportunities"
+        title="Leads"
         description={VIEWS.find((v) => v.key === view)?.label}
         actions={
           <>
@@ -116,7 +116,7 @@ function OpportunitiesList() {
             {can("opportunity.create") && <ImportLeadsButton />}
             <Button asChild>
               <Link href="/opportunities/new">
-                <Plus /> New opportunity
+                <Plus /> New lead
               </Link>
             </Button>
           </>
@@ -148,7 +148,7 @@ function OpportunitiesList() {
 
         <div className="min-w-0 space-y-4">
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            <Input className="col-span-2 sm:max-w-xs" type="search" placeholder="Search name, company, UO number…" aria-label="Search opportunities" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input className="col-span-2 sm:max-w-xs" type="search" placeholder="Search name, company, UO number…" aria-label="Search leads" value={search} onChange={(e) => setSearch(e.target.value)} />
             <Select className="sm:w-auto" value={filters.serviceType} onChange={(e) => setParam({ serviceType: e.target.value })} aria-label="Service">
               <option value="">All services</option>
               {SELECTABLE_SERVICE_TYPES.map((k) => (
@@ -212,7 +212,7 @@ function OpportunitiesList() {
               </div>
             ) : !data?.items.length ? (
               <EmptyState icon={<Inbox />} title="Nothing here" action={view === "my_open" ? <Button asChild><Link href="/opportunities/new">Add your first lead</Link></Button> : undefined}>
-                No opportunities match this view and filters. Try another view or reset the filters.
+                No leads match this view and filters. Try another view or reset the filters.
               </EmptyState>
             ) : (
               <>
@@ -250,7 +250,7 @@ function OpportunitiesList() {
                           <input type="checkbox" className="size-6 accent-[var(--primary)] lg:size-4" checked={allTicked} onChange={(e) => tickAll(e.target.checked)} aria-label="Select all on this page" />
                         </th>
                       )}
-                      <th className="px-4 py-2.5 font-medium">Opportunity</th>
+                      <th className="px-4 py-2.5 font-medium">Lead</th>
                       <th className="px-3 py-2.5 font-medium">Service</th>
                       <th className="px-3 py-2.5 font-medium">Stage</th>
                       <th className="px-3 py-2.5 font-medium">Salesperson</th>
@@ -297,7 +297,7 @@ function OpportunitiesList() {
           {data && data.total > 0 && (
             <div className="flex items-center justify-between text-sm text-muted">
               <span>
-                {data.total} opportunit{data.total === 1 ? "y" : "ies"}
+                {data.total} lead{data.total === 1 ? "" : "s"}
               </span>
               <div className="flex items-center gap-2">
                 <Button variant="secondary" size="sm" disabled={filters.page <= 1} onClick={() => setParam({ page: filters.page - 1 })} aria-label="Previous page">

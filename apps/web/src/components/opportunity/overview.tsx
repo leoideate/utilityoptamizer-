@@ -243,10 +243,11 @@ function DetailsCard({ opp }: { opp: Workspace }) {
         }
       />
       <fieldset disabled={ro} className="grid gap-4 p-5 sm:grid-cols-2">
-        <legend className="sr-only">Opportunity details</legend>
+        <legend className="sr-only">Lead details</legend>
         <Field label="Name" className="sm:col-span-2">
           {(p) => <Input {...p} {...register("name", { required: true })} />}
         </Field>
+        <Field label="Trading name" className="sm:col-span-2">{(p) => <Input {...p} {...register("companyName")} />}</Field>
         <Field label="Service" hint={opp.outcome === "won" ? "Can't change after activation." : undefined}>
           {(p) => (
             <Select {...p} disabled={opp.outcome === "won" || ro} {...register("serviceType", {
@@ -291,6 +292,10 @@ function DetailsCard({ opp }: { opp: Workspace }) {
         <Field label="Application status" hint="Free text, e.g. what the supplier last said.">
           {(p) => <Input {...p} {...register("applicationStatus")} />}
         </Field>
+        <Field label="Contact name">{(p) => <Input {...p} {...register("contactName")} />}</Field>
+        <Field label="Email">{(p) => <Input {...p} type="email" {...register("email")} />}</Field>
+        <Field label="Phone">{(p) => <Input {...p} type="tel" {...register("phone")} />}</Field>
+        <Field label="Contact role" hint="e.g. Owner, manager, bookkeeper">{(p) => <Input {...p} {...register("contactRole")} />}</Field>
         {isEnergyService(watch("serviceType") as ServiceType) && (
           <CheckboxGroup
             className="sm:col-span-2"
@@ -329,12 +334,6 @@ function DetailsCard({ opp }: { opp: Workspace }) {
         </Field>
         <Field label="Campaign" className="hidden">{(p) => <Input {...p} {...register("campaign")} />}</Field>
         <Field label="Source details" className="hidden">{(p) => <Input {...p} {...register("leadSourceDetail")} />}</Field>
-        <h3 className="pt-2 text-sm font-semibold sm:col-span-2">Captured contact details</h3>
-        <Field label="Business name">{(p) => <Input {...p} {...register("companyName")} />}</Field>
-        <Field label="Contact name">{(p) => <Input {...p} {...register("contactName")} />}</Field>
-        <Field label="Contact role" hint="e.g. Owner, manager, bookkeeper">{(p) => <Input {...p} {...register("contactRole")} />}</Field>
-        <Field label="Email">{(p) => <Input {...p} type="email" {...register("email")} />}</Field>
-        <Field label="Phone">{(p) => <Input {...p} type="tel" {...register("phone")} />}</Field>
       </fieldset>
       <Dialog
         open={!!hiding}
@@ -410,7 +409,7 @@ function CustomerCard({ opp }: { opp: Workspace }) {
 
   return (
     <Card>
-      <CardHeader title="Customer" description="Not linked yet. Linking never changes this opportunity's stage, salesperson or status." />
+      <CardHeader title="Customer" description="Not linked yet. Linking never changes this lead's stage, salesperson or status." />
       <div className="space-y-3 p-5">
         {!!dupes.data?.length && (
           <div className="rounded-lg bg-info-soft p-3 text-sm">

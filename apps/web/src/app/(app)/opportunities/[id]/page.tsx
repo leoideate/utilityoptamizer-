@@ -69,10 +69,10 @@ function OpportunityWorkspace() {
   if (error instanceof ApiError && error.status === 404) {
     return (
       <Card className="p-8 text-center">
-        <p className="font-medium">Opportunity not found</p>
+        <p className="font-medium">Lead not found</p>
         <p className="mt-1 text-sm text-muted">It may belong to another salesperson, or the link is wrong.</p>
         <Button className="mt-4" variant="secondary" onClick={() => router.push("/opportunities")}>
-          Back to opportunities
+          Back to leads
         </Button>
       </Card>
     );
@@ -110,7 +110,7 @@ function OpportunityWorkspace() {
   return (
     <>
       <Link href="/opportunities" className="mb-3 inline-flex min-h-6 items-center gap-1 py-1 text-sm text-muted hover:text-text">
-        <ArrowLeft className="size-4" /> Opportunities
+        <ArrowLeft className="size-4" /> Leads
       </Link>
 
       <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
@@ -187,7 +187,7 @@ function OpportunityWorkspace() {
 
       {opp.outcome === "won" && (
         <div className="mb-4 rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-sm text-success">
-          Live since {date(opp.activationDate)}. {opp.renewalDate ? `Contract ends ${date(opp.renewalDate)}; a renewal opportunity is created automatically 120 days before.` : ""}
+          Live since {date(opp.activationDate)}. {opp.renewalDate ? `Contract ends ${date(opp.renewalDate)}; a renewal lead is created automatically 120 days before.` : ""}
         </div>
       )}
       {opp.outcome === "lost" && (
@@ -299,7 +299,7 @@ function OpportunityWorkspace() {
           (blocked.linked ? (
             <GateIssueList issues={blocked.issues} tabs={gateTabs} onGo={goTo} />
           ) : (
-            <IssueList issues={blocked.issues} title="This opportunity still needs:" />
+            <IssueList issues={blocked.issues} title="This lead still needs:" />
           ))}
       </Dialog>
     </>
@@ -345,7 +345,7 @@ function LostDialog({ id, open, onClose }: { id: string; open: boolean; onClose:
       open={open}
       onOpenChange={(o) => !o && onClose()}
       title="Mark as lost"
-      description="The opportunity stays in the CRM under Lost and can be reopened."
+      description="The lead stays in the CRM under Lost and can be reopened."
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -380,7 +380,7 @@ function ActivateDialog({ id, open, onClose }: { id: string; open: boolean; onCl
       open={open}
       onOpenChange={(o) => !o && onClose()}
       title="Record activation"
-      description="The supply or service is live. The opportunity moves to Live / Won, keeps its salesperson and a renewal review is scheduled."
+      description="The supply or service is live. The lead moves to Live / Won, keeps its salesperson and a renewal review is scheduled."
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>

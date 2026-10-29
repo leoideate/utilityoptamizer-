@@ -22,7 +22,7 @@ export function ActivitiesTab({ opp }: { opp: Workspace }) {
     <Card>
       <CardHeader
         title="Tasks"
-        description="Calls, follow-ups and reminders for this opportunity. Automatic tasks are created by the system and close themselves when done."
+        description="Calls, follow-ups and reminders for this lead. Automatic tasks are created by the system and close themselves when done."
         actions={
           <>
             <Select className="w-auto" value={status} onChange={(e) => setStatus(e.target.value as typeof status)} aria-label="Show">

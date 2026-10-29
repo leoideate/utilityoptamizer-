@@ -184,7 +184,7 @@ export default function HomePage() {
 
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
-              <CardHeader title="Open opportunities by stage" description="Count and value of deals currently at each stage." />
+              <CardHeader title="Open leads by stage" description="Count and value of deals currently at each stage." />
               <div className="p-5">
                 <BarList rows={data.opportunitiesByStage.filter((s) => s.count > 0).map((s) => ({ label: s.name, value: s.count, hint: s.value ? money(s.value) : undefined, href: drill({ stage: s.key, outcome: "open" }) }))} />
               </div>

@@ -170,7 +170,7 @@ export default function CustomerPage() {
             )}
             <Button asChild>
               <Link href={`/opportunities/new?customerId=${data.id}&company=${encodeURIComponent(data.legalName)}`}>
-                <Plus /> New opportunity
+                <Plus /> New lead
               </Link>
             </Button>
           </>
@@ -228,9 +228,9 @@ export default function CustomerPage() {
             </Card>
           )}
           <Card>
-            <CardHeader title={`Opportunities (${data.opportunities.length})`} description="Every sale and renewal for this customer, including completed ones." />
+            <CardHeader title={`Leads (${data.opportunities.length})`} description="Every sale and renewal for this customer, including completed ones." />
             {!data.opportunities.length ? (
-              <EmptyState title="No opportunities yet" />
+              <EmptyState title="No leads yet" />
             ) : (
               <ul className="divide-y divide-border">
                 {data.opportunities.map((o) => (
@@ -490,7 +490,7 @@ function MergeDialog({ target, onClose }: { target: Profile; onClose: () => void
       open
       onOpenChange={(o) => !o && onClose()}
       title={`Merge a duplicate into ${target.legalName}`}
-      description="Opportunities, contacts, sites and documents move to this customer. The duplicate is kept, marked as merged."
+      description="Leads, contacts, sites and documents move to this customer. The duplicate is kept, marked as merged."
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>

@@ -123,7 +123,7 @@ export function SupplyTab({ view, d, set, err, issues, ro }: TabProps) {
     <div className="space-y-4">
       <TabSummary issues={issues} />
       <Card>
-        <CardHeader title="Actual requirement" description={answered("requirements") ? undefined : "Suggested from the opportunity's supply changes and sale type until you change it."} />
+        <CardHeader title="Actual requirement" description={answered("requirements") ? undefined : "Suggested from the lead's supply changes and sale type until you change it."} />
         <div className="p-5">
           <CheckboxGroup legend="Tick what applies" options={FLOGAS_REQUIREMENTS} labels={FLOGAS_REQUIREMENT_LABELS} value={d.requirements} disabled={ro} onChange={(v) => set({ requirements: v })} />
           {err("requirements") && (

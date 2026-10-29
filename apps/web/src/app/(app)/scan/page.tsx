@@ -154,7 +154,7 @@ export default function ScanPage() {
             </div>
           </Card>
           <Card className="flex flex-wrap items-end gap-4 p-5">
-            <Field label="Opportunity for" className="min-w-56 flex-1">
+            <Field label="Lead for" className="min-w-56 flex-1">
               {(p) => (
                 <Select {...p} value={service} onChange={(e) => setService(e.target.value as ServiceType)}>
                   {SELECTABLE_SERVICE_TYPES.map((x) => (
@@ -166,7 +166,7 @@ export default function ScanPage() {
               )}
             </Field>
             <Button loading={confirm.isPending} onClick={() => (setIssues([]), confirm.mutate())}>
-              Confirm and create opportunity
+              Confirm and create lead
             </Button>
           </Card>
           <IssueList issues={issues} title="Please check:" />

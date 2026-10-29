@@ -36,7 +36,7 @@ export default function FormTemplatesPage() {
     <>
       <PageHeader
         title="Supplier forms"
-        description="Upload a supplier's PDF once, place its fields and link them to CRM data. Forms are then filled from an opportunity's Forms tab."
+        description="Upload a supplier's PDF once, place its fields and link them to CRM data. Forms are then filled from a lead's Forms tab."
         actions={
           <Button onClick={() => setAdding(true)}>
             <Plus /> Add form
