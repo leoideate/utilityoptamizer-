@@ -438,6 +438,11 @@ export const documentReviewSchema = z.object({
   expiryDate: optDate,
 });
 
+/** Removing a wrong upload or a supply site added by mistake: the reason is kept with the record. */
+export const removeWithReasonSchema = z.object({
+  reason: z.string().trim().min(3, "Say why it's being removed.").max(300, "Keep the reason under 300 characters."),
+});
+
 export const signatureRequestSchema = z.object({
   templateId: id.nullable().optional(),
   documentItemId: id.nullable().optional(),

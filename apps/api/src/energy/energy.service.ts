@@ -96,6 +96,46 @@ export class EnergyService {
     await this.audit.log(actor, { action: "site.update", entityType: "supply_site", entityId: siteId, summary: "Updated supply site" });
   }
 
+  /**
+   * Removes a supply site added by mistake, with its meters and readings (the timeline and audit keep
+   * its name and MPRN/GPRNs). Draft contracts on it are unlinked. A site that a live or ended contract,
+   * another deal, a workflow case or an occupancy record relies on is kept.
+   */
+  async removeSite(actor: Actor, siteId: string, reason: string) {
+    const site = await this.prisma.supplySite.findUnique({
+      where: { id: siteId },
+      include: { meterPoints: { select: { mprn: true, gprn: true } }, contracts: { select: { opportunityId: true, status: true } }, _count: { select: { cases: true, occupancies: true } } },
+    });
+    if (!site) throw new NotFound("Supply site");
+    if (!site.opportunityId) throw new RuleViolation(["This site comes from an earlier contract and is kept as history."]);
+    const opp = await this.energyOpp(actor, site.opportunityId);
+    if (opp.outcome !== "open") throw new RuleViolation(["Won and lost deals keep their supply sites."]);
+    const issues: string[] = [];
+    if (site.contracts.some((c) => HISTORICAL.has(c.status))) issues.push("A live or ended contract is on this site, so it's kept as history.");
+    if (site.contracts.some((c) => c.opportunityId !== site.opportunityId)) issues.push("Another deal's contract uses this site.");
+    if (site._count.cases || site._count.occupancies) issues.push("A workflow case or occupancy record uses this site, so it's kept as evidence.");
+    if (issues.length) throw new RuleViolation(issues);
+
+    const name = site.label ?? site.line1;
+    const identifiers = site.meterPoints.map((m) => m.mprn ?? m.gprn).filter((x): x is string => !!x);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.energyContract.updateMany({ where: { siteId }, data: { siteId: null } });
+      await tx.supplySite.delete({ where: { id: siteId } });
+      await this.audit.record(
+        actor,
+        {
+          action: "site.remove",
+          entityType: "supply_site",
+          entityId: siteId,
+          summary: `Removed supply site ${name}`,
+          data: { meterIdentifiers: identifiers, reason },
+        },
+        { opportunityId: opp.id, customerId: opp.customerId, kind: "system", body: `Supply site removed: ${name}${identifiers.length ? ` (${identifiers.join(", ")})` : ""}. ${reason}` },
+        tx,
+      );
+    });
+  }
+
   // --- Meter points ------------------------------------------------------------
 
   private cleanMeter(input: MeterPointInput) {

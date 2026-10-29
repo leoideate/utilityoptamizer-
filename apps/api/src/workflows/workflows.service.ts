@@ -107,12 +107,12 @@ export class WorkflowsService {
         where: { opportunityId },
         include: { site: { include: { meterPoints: true, customer: { select: { id: true, legalName: true } } } }, outgoingCustomer: { select: { id: true, legalName: true } } },
       }),
-      this.prisma.documentVersion.findMany({ where: { item: { opportunityId, documentType: "lease_agreement" } }, orderBy: { uploadedAt: "desc" } }),
+      this.prisma.documentVersion.findMany({ where: { item: { opportunityId, documentType: "lease_agreement" }, removedAt: null }, orderBy: { uploadedAt: "desc" } }),
       this.prisma.leaseCheck.findMany({ where: { opportunityId }, orderBy: { verifiedAt: "desc" } }),
       this.prisma.energyContract.findMany({ where: { opportunityId } }),
       this.prisma.termsCheck.findMany({ where: { opportunityId }, orderBy: { verifiedAt: "desc" } }),
       this.prisma.submission.findMany({ where: { opportunityId }, orderBy: { recordedAt: "desc" }, include: { responses: { orderBy: { recordedAt: "asc" } } } }),
-      this.prisma.documentItem.findMany({ where: { opportunityId }, include: { versions: { orderBy: { version: "desc" }, take: 1 } }, orderBy: { createdAt: "asc" } }),
+      this.prisma.documentItem.findMany({ where: { opportunityId }, include: { versions: { where: { removedAt: null }, orderBy: { version: "desc" }, take: 1 } }, orderBy: { createdAt: "asc" } }),
       this.prisma.generatedForm.findMany({ where: { opportunityId, status: { not: "superseded" } }, include: { template: { select: { name: true } } } }),
       opp.selectedSupplierId ? this.prisma.supplier.findUnique({ where: { id: opp.selectedSupplierId } }) : null,
     ]);
@@ -329,7 +329,7 @@ export class WorkflowsService {
     if (!can(actor, "document.review")) throw new Forbidden("Only reviewers can check a lease.");
     const opp = await this.access.readable(actor, opportunityId);
     WorkflowsService.energy(opp);
-    const lease = await this.prisma.documentVersion.findFirst({ where: { item: { opportunityId, documentType: "lease_agreement" } }, orderBy: { uploadedAt: "desc" } });
+    const lease = await this.prisma.documentVersion.findFirst({ where: { item: { opportunityId, documentType: "lease_agreement" }, removedAt: null }, orderBy: { uploadedAt: "desc" } });
     if (!lease) throw new RuleViolation(["Upload the lease under Documents first."]);
     const passed = leaseCheckPassed(input);
     const check = await this.prisma.$transaction(async (tx) => {
@@ -414,6 +414,7 @@ export class WorkflowsService {
     const issues: string[] = [];
     if (versions.length !== ids.length || versions.some((v) => v.item.opportunityId !== opportunityId)) issues.push("Choose files from this opportunity.");
     for (const v of versions) if (v.scanStatus === "infected") issues.push(`${v.filename} failed its virus scan and can't be sent.`);
+    for (const v of versions) if (v.removedAt) issues.push(`${v.filename} was removed from the documents and can't be sent.`);
     const sentAt = input.sentAt ?? today();
     if (sentAt > today()) issues.push("The sent date can't be in the future.");
 
@@ -430,7 +431,7 @@ export class WorkflowsService {
       }
     }
     const kind = caseKind(opp);
-    const latestOf = async (documentType: string) => this.prisma.documentVersion.findFirst({ where: { item: { opportunityId, documentType } }, orderBy: { uploadedAt: "desc" }, select: { id: true } });
+    const latestOf = async (documentType: string) => this.prisma.documentVersion.findFirst({ where: { item: { opportunityId, documentType }, removedAt: null }, orderBy: { uploadedAt: "desc" }, select: { id: true } });
     if (kind === "change_of_entity") {
       const lease = await latestOf("lease_agreement");
       if (lease && !sent.has(lease.id)) issues.push("Include the signed lease agreement.");

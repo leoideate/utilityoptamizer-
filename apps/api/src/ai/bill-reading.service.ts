@@ -30,6 +30,7 @@ export class BillReadingService {
     // Reading costs money and leads to edits, so it needs write access to the deal.
     await this.access.writable(actor, v.item.opportunityId);
     if (v.item.documentType !== "energy_bill") throw new RuleViolation(["Only energy bills can be read this way."]);
+    if (v.removedAt) throw new RuleViolation(["This file was removed from the documents."]);
     if (!this.reader.configured) throw new RuleViolation(["Reading bills with AI isn't set up yet. An administrator needs to add the Anthropic API key."]);
     if (v.scanStatus === "infected" || v.scanStatus === "error") throw new RuleViolation(["This file failed the virus scan."]);
     if (v.scanStatus === "pending" && this.env.VIRUS_SCAN_DRIVER !== "none") throw new RuleViolation(["This file is still being scanned. Try again in a moment."]);

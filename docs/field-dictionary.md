@@ -27,8 +27,6 @@ Generated from `apps/api/prisma/schema.prisma` (`node scripts/gen-field-dictiona
 
 ## email_signatures
 
-A person's email signature, added to email they send from the CRM. Starts from the company template.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | user_id | UUID | ✓ | Primary key |
@@ -47,9 +45,6 @@ A person's email signature, added to email they send from the CRM. Starts from t
 | updated_at | DateTime | ✓ |  |
 
 ## email_images
-
-Pictures used in email signatures (company logo, people's own pictures). Served publicly by an
-unguessable id so recipients' mail apps can load them; they are never documents.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -186,8 +181,6 @@ Permanent customer record. Merged duplicates are kept with merged_into_id set.
 
 ## bank_accounts
 
-Restricted (bank.read). Values encrypted; only the IBAN's last four digits are stored in clear.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -256,8 +249,6 @@ One sale (new or renewal). Permanent: can't be deleted or archived (database tri
 | updated_at | DateTime | ✓ |  |
 
 ## stage_history
-
-One row per stage visit; drives "average time in each stage".
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -434,7 +425,7 @@ Live/ended contracts are read-only history; renewals create new rows.
 
 ## principals
 
-Restricted. Date of birth and nationality are encrypted; presence flags let rules run without decrypting. Restricted. Personal values are encrypted; has_* flags let validation run without decrypting.
+Restricted. Personal values are encrypted; has_* flags let validation run without decrypting.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -455,8 +446,6 @@ Restricted. Date of birth and nationality are encrypted; presence flags let rule
 | created_at | DateTime | ✓ | Default now() |
 
 ## principal_addresses
-
-Residential address history (restricted, address encrypted).
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -511,7 +500,7 @@ Residential address history (restricted, address encrypted).
 
 ## document_versions
 
-Every upload is a new version; nothing is overwritten. Every upload is a new version; nothing is overwritten.
+Every upload is a new version; nothing is overwritten.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -526,10 +515,11 @@ Every upload is a new version; nothing is overwritten. Every upload is a new ver
 | scan_status | Enum: pending, clean, infected, error, skipped | ✓ | Default pending |
 | uploaded_by_id | UUID |  |  |
 | uploaded_at | DateTime | ✓ | Default now() |
+| removed_at | DateTime |  | Set when someone removes a wrong upload: the file stays in the history but is no longer the document |
+| removed_by_id | UUID |  |  |
+| remove_reason | String |  |  |
 
 ## FormTemplate
-
-A supplier PDF with positioned fields. Field layout changes bump `version`; generated forms keep a snapshot.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -543,8 +533,6 @@ A supplier PDF with positioned fields. Field layout changes bump `version`; gene
 | sha256 | String | ✓ |  |
 
 ## generated_forms
-
-One filled copy of a template for an opportunity. Never edited; regenerating supersedes it.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -576,8 +564,6 @@ One filled copy of a template for an opportunity. Never edited; regenerating sup
 
 ## form_signatures
 
-An uploaded signature image, authorised for one generated form only.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -600,8 +586,6 @@ An uploaded signature image, authorised for one generated form only.
 
 ## signing_links
 
-An emailed link that lets one signer sign one generated form online. Only the token's hash is stored.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -622,10 +606,6 @@ An emailed link that lets one signer sign one generated form online. Only the to
 
 ## SupplierApplication
 
-A supplier's own application on an opportunity (e.g. the Flogas electricity agreement). Customer,
-site, meter, contract and bank details stay on their CRM records; this keeps only the answers the
-supplier's form asks for that have no other home. Never deleted.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -634,8 +614,6 @@ supplier's form asks for that have no other home. Never deleted.
 | answers | Json | ✓ | Supplier-specific answers (see @uo/shared flogasAnswersSchema) |
 
 ## supplier_application_versions
-
-One generated document of an application and the exact data it was made from. Append-only.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -650,8 +628,6 @@ One generated document of an application and the exact data it was made from. Ap
 | created_at | DateTime | ✓ | Default now() |
 
 ## bill_checks
-
-Verification of the previous supplier's bill for a change of supplier.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -670,9 +646,6 @@ Verification of the previous supplier's bill for a change of supplier.
 | verified_at | DateTime | ✓ | Default now() |
 
 ## workflow_cases
-
-The back-office case on an opportunity: how the request came in, the customer and supply
-paths, and for a change of entity the supply point taken over and the outgoing account.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -699,8 +672,6 @@ paths, and for a change of entity the supply point taken over and the outgoing a
 
 ## lease_checks
 
-A check of one lease version. Append-only: a draft and the signed copy are separate rows.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -723,8 +694,6 @@ A check of one lease version. Append-only: a draft and the signed copy are separ
 
 ## terms_checks
 
-Admin's verification of the proposed terms. Only counts while the terms are unchanged (hash).
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -736,8 +705,6 @@ Admin's verification of the proposed terms. Only counts while the terms are unch
 
 ## Submission
 
-What was sent to the external party: recipient, channel, the exact file versions and proof of delivery.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -747,8 +714,6 @@ What was sent to the external party: recipient, channel, the exact file versions
 | sent_at | Date | ✓ |  |
 
 ## submission_responses
-
-The external party's answer to a submission. Append-only.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -767,8 +732,6 @@ The external party's answer to a submission. Append-only.
 | recorded_at | DateTime | ✓ | Default now() |
 
 ## supply_occupancies
-
-Who occupies a supply point from when. Append-only, so the outgoing customer's history is kept.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -845,7 +808,7 @@ Who occupies a supply point from when. Append-only, so the outgoing customer's h
 
 ## timeline_entries
 
-Append-only (a database trigger blocks UPDATE and DELETE). Corrections are new entries with `correctsId`. Append-only (trigger). Corrections are new entries with corrects_id.
+Append-only (trigger). Corrections are new entries with corrects_id.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -863,7 +826,7 @@ Append-only (a database trigger blocks UPDATE and DELETE). Corrections are new e
 
 ## audit_logs
 
-Append-only security/audit log (trigger-protected). Never contains sensitive values. Append-only (trigger). Never contains restricted values.
+Append-only (trigger). Never contains restricted values.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -890,8 +853,6 @@ Append-only security/audit log (trigger-protected). Never contains sensitive val
 | created_at | DateTime | ✓ | Default now() |
 
 ## AttentionDigest
-
-One morning summary per user per Irish day: the unique key makes the job safe to run twice.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -934,9 +895,6 @@ One morning summary per user per Irish day: the unique key makes the job safe to
 
 ## integration_jobs
 
-Outbound integration work (supplier/Worldpay submission, email, WhatsApp, accounting).
-Executed by BullMQ with retries; jobs that exhaust retries become `dead` (dead-letter).
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -953,8 +911,6 @@ Executed by BullMQ with retries; jobs that exhaust retries become `dead` (dead-l
 | updated_at | DateTime | ✓ |  |
 
 ## webhook_events
-
-Inbound webhooks, recorded once per provider event id (idempotency).
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -976,8 +932,6 @@ Inbound webhooks, recorded once per provider event id (idempotency).
 | updated_at | DateTime | ✓ |  |
 
 ## chat_channels
-
-A conversation: a direct message between two users, a team channel, or the internal discussion on one opportunity.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -1017,8 +971,6 @@ A conversation: a direct message between two users, a team channel, or the inter
 | created_at | DateTime | ✓ | Default now() |
 
 ## chat_message_revisions
-
-Previous text of edited or deleted messages (append-only), for administrators and disputes.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -1074,8 +1026,6 @@ Previous text of edited or deleted messages (append-only), for administrators an
 
 ## Mailbox
 
-A user's connected mailbox. Tokens are encrypted; the address always equals the user's CRM email.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -1084,8 +1034,6 @@ A user's connected mailbox. Tokens are encrypted; the address always equals the 
 | address | String | ✓ |  |
 
 ## email_messages
-
-One email from a connected mailbox (inbox or sent). Kept after a mailbox is disconnected; never deleted.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -1113,8 +1061,6 @@ One email from a connected mailbox (inbox or sent). Kept after a mailbox is disc
 
 ## assistant_conversations
 
-A conversation with the CRM assistant. Only its owner reads it; purged after 90 days.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -1123,8 +1069,6 @@ A conversation with the CRM assistant. Only its owner reads it; purged after 90 
 | created_at | DateTime | ✓ | Default now() |
 
 ## assistant_messages
-
-Append-only (trigger-protected). Bodies hold no restricted values: the assistant's tools never return them.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -1140,8 +1084,6 @@ Append-only (trigger-protected). Bodies hold no restricted values: the assistant
 
 ## assistant_feedback
 
-Thumbs up or down on an answer (append-only); the unhelpful ones are reviewed to improve the instructions.
-
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
 | id | UUID | ✓ | Primary key. Default uuid() |
@@ -1152,10 +1094,6 @@ Thumbs up or down on an answer (append-only); the unhelpful ones are reviewed to
 | created_at | DateTime | ✓ | Default now() |
 
 ## AssistantAction
-
-A change the assistant prepared (see ASSISTANT_ACTION_KINDS). Nothing happens until the user
-confirms it; the change is then made through the usual services as that user. A trigger allows
-only the status moves pending → confirming → done | failed and pending → dismissed.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|
@@ -1170,9 +1108,6 @@ only the status moves pending → confirming → done | failed and pending → d
 | error | String |  | Why it couldn't be done (user-facing), when status is failed |
 
 ## import_runs
-
-A customer import from the master sheet run from Administration (dry run or real). The sheet is
-kept in storage so a dry run can be imported without uploading it again; purged after 90 days.
 
 | Column | Type | Required | Notes |
 |---|---|:-:|---|

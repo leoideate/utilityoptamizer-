@@ -79,7 +79,7 @@ export class DocumentsService {
       label: label(i.documentType),
       restricted: i.sensitive && !seeSensitive,
       // Restricted users see that a file exists, not its name or details.
-      versions: i.sensitive && !seeSensitive ? i.versions.map((v) => ({ id: v.id, version: v.version, uploadedAt: v.uploadedAt, scanStatus: v.scanStatus })) : i.versions,
+      versions: i.sensitive && !seeSensitive ? i.versions.map((v) => ({ id: v.id, version: v.version, uploadedAt: v.uploadedAt, scanStatus: v.scanStatus, removedAt: v.removedAt })) : i.versions,
     }));
   }
 
@@ -176,8 +176,12 @@ export class DocumentsService {
     if (issues.length) throw new RuleViolation(issues);
 
     const sha256 = CryptoService.sha256(file.buffer);
-    const last = await this.prisma.documentVersion.findFirst({ where: { itemId }, orderBy: { version: "desc" } });
-    if (last?.sha256 === sha256) throw new RuleViolation(["This file is identical to the current version."]);
+    const [last, current] = await Promise.all([
+      this.prisma.documentVersion.findFirst({ where: { itemId }, orderBy: { version: "desc" } }),
+      this.prisma.documentVersion.findFirst({ where: { itemId, removedAt: null }, orderBy: { version: "desc" } }),
+    ]);
+    if (current?.sha256 === sha256) throw new RuleViolation(["This file is identical to the current version."]);
+    // Removed versions keep their numbers, so a new upload always gets the next one.
     const version = (last?.version ?? 0) + 1;
     const storageKey = `documents/${item.opportunityId}/${itemId}/v${version}-${randomUUID()}${ext}`;
     await this.storage.put(storageKey, file.buffer, file.mimetype);
@@ -208,7 +212,7 @@ export class DocumentsService {
     await this.prisma.$transaction(async (tx) => {
       await tx.documentVersion.update({ where: { id: versionId }, data: { scanStatus: result } });
       if (result === "infected") {
-        const hasOther = await tx.documentVersion.count({ where: { itemId: v.itemId, id: { not: versionId }, scanStatus: { in: ["clean", "skipped"] } } });
+        const hasOther = await tx.documentVersion.count({ where: { itemId: v.itemId, id: { not: versionId }, removedAt: null, scanStatus: { in: ["clean", "skipped"] } } });
         if (!hasOther) await tx.documentItem.update({ where: { id: v.itemId }, data: { received: false, receivedAt: null, approval: "pending" } });
         await this.audit.record(
           SYSTEM,
@@ -235,13 +239,76 @@ export class DocumentsService {
     return { url: await this.storage.signedUrl(v.storageKey, v.filename, this.env.DOWNLOAD_URL_TTL_SECONDS), mimeType: v.mimeType, expiresInSeconds: this.env.DOWNLOAD_URL_TTL_SECONDS };
   }
 
+  /**
+   * Removes a wrong upload. The version stays in the history (who removed it, when and why) but is no
+   * longer the document's file; evidence other records point at (forms, checks, submissions) can't be removed.
+   */
+  async removeVersion(actor: Actor, versionId: string, reason: string) {
+    const v = await this.prisma.documentVersion.findUnique({ where: { id: versionId }, include: { item: true } });
+    if (!v) throw new NotFound("Document");
+    const opp = await this.access.writable(actor, v.item.opportunityId);
+    if (v.item.sensitive && !can(actor, "document.read_sensitive")) throw new Forbidden("This document is restricted.");
+    if (opp.outcome !== "open") throw new RuleViolation(["Won and lost deals keep their documents as they are."]);
+    if (v.removedAt) throw new RuleViolation(["This file has already been removed."]);
+    const [forms, billChecks, leaseChecks, signatures, submissions] = await Promise.all([
+      this.prisma.generatedForm.count({ where: { OR: [{ versionId }, { signedVersionId: versionId }, { monoVersionId: versionId }] } }),
+      this.prisma.billCheck.count({ where: { documentVersionId: versionId } }),
+      this.prisma.leaseCheck.count({ where: { documentVersionId: versionId } }),
+      this.prisma.signatureRequest.count({ where: { signedVersionId: versionId } }),
+      this.prisma.submission.count({ where: { opportunityId: opp.id, files: { array_contains: [{ documentVersionId: versionId }] } } }),
+    ]);
+    const usedBy = [forms && "a generated supplier form", billChecks && "a bill check", leaseChecks && "a lease check", signatures && "a signature request", submissions && "a submission to the supplier"].filter(Boolean);
+    if (usedBy.length) throw new RuleViolation([`This file is kept as evidence because ${usedBy.join(", ")} uses it. Upload a new version instead.`]);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.documentVersion.update({ where: { id: versionId }, data: { removedAt: new Date(), removedById: actorRef(actor), removeReason: reason } });
+      const current = await tx.documentVersion.findFirst({ where: { itemId: v.itemId, removedAt: null, scanStatus: { not: "infected" } }, orderBy: { version: "desc" } });
+      if (!current) {
+        await tx.documentItem.update({ where: { id: v.itemId }, data: { received: false, receivedAt: null, approval: "pending", reviewerId: null, reviewedAt: null } });
+      } else if (current.version < v.version) {
+        // An earlier file is the document again, and needs a fresh review.
+        await tx.documentItem.update({ where: { id: v.itemId }, data: { approval: "pending", reviewerId: null, reviewedAt: null } });
+      }
+      await this.audit.record(
+        actor,
+        { action: "document.remove_version", entityType: "document_item", entityId: v.itemId, summary: `Removed ${label(v.item.documentType)} v${v.version}`, data: { versionId, sha256: v.sha256 } },
+        { opportunityId: opp.id, customerId: opp.customerId, kind: "document", body: `Removed ${label(v.item.documentType)} version ${v.version}${v.item.sensitive ? "." : `: ${reason}`}` },
+        tx,
+      );
+    });
+  }
+
+  /** Deletes a checklist row nothing was ever uploaded to (added by mistake). Rows with files are kept. */
+  async deleteItem(actor: Actor, itemId: string) {
+    const item = await this.item(itemId);
+    const opp = await this.access.writable(actor, item.opportunityId);
+    if (opp.outcome !== "open") throw new RuleViolation(["Won and lost deals keep their documents as they are."]);
+    const [versions, readings, forms, signatures] = await Promise.all([
+      this.prisma.documentVersion.count({ where: { itemId } }),
+      this.prisma.meterReading.count({ where: { documentItemId: itemId } }),
+      this.prisma.generatedForm.count({ where: { documentItemId: itemId } }),
+      this.prisma.signatureRequest.count({ where: { documentItemId: itemId } }),
+    ]);
+    if (versions) throw new RuleViolation(["Files have been uploaded to this document, so it stays on the checklist. Remove the wrong file, or make the document optional."]);
+    if (readings || forms || signatures) throw new RuleViolation(["Other records refer to this document, so it stays on the checklist. Make it optional instead."]);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.documentItem.delete({ where: { id: itemId } });
+      await this.audit.record(
+        actor,
+        { action: "document.delete_item", entityType: "document_item", entityId: itemId, summary: `Deleted ${label(item.documentType)} from the checklist (nothing uploaded)` },
+        { opportunityId: opp.id, customerId: opp.customerId, kind: "document", body: `Removed "${label(item.documentType)}" from the checklist.` },
+        tx,
+      );
+    });
+  }
+
   async review(actor: Actor, itemId: string, input: z.infer<typeof documentReviewSchema>) {
     if (!can(actor, "document.review")) throw new Forbidden("Only Operations, Compliance or a manager can review documents.");
     const item = await this.item(itemId);
     const opp = await this.access.readable(actor, item.opportunityId);
     if (!item.received) throw new RuleViolation(["Upload the document before reviewing it."]);
     if (input.approval === "approved") {
-      const latest = await this.prisma.documentVersion.findFirst({ where: { itemId }, orderBy: { version: "desc" } });
+      const latest = await this.prisma.documentVersion.findFirst({ where: { itemId, removedAt: null }, orderBy: { version: "desc" } });
       if (!latest || latest.scanStatus === "infected" || (latest.scanStatus === "pending" && this.scanner.name !== "none")) {
         throw new RuleViolation(["The latest file hasn't passed the virus scan yet."]);
       }
