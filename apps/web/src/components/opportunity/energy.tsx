@@ -98,6 +98,8 @@ interface EnergyWorkspace {
   contracts: Contract[];
   quotes: Quote[];
   previousContracts: Contract[];
+  /** The address and sector the CRM already holds, used to start a new site. */
+  suggestedSite: { address: { line1: string; line2: string | null; city: string | null; county: string | null; postcode: string | null }; customerSector: string | null } | null;
 }
 
 const FuelIcon = ({ fuel }: { fuel: Fuel }) => (fuel === "gas" ? <Flame className="size-4 text-warning" aria-hidden /> : <Zap className="size-4 text-primary" aria-hidden />);
@@ -294,7 +296,7 @@ export function EnergyTab({ opp }: { opp: Workspace }) {
 
       <ComparisonCard opp={opp} quotes={data.quotes} fuels={fuels} onAdd={() => setDialog({ kind: "quote" })} write={write} />
 
-      {dialog?.kind === "site" && <SiteDialog opp={opp} site={dialog.site} onClose={close} />}
+      {dialog?.kind === "site" && <SiteDialog opp={opp} site={dialog.site} suggested={dialog.site ? null : data.suggestedSite} onClose={close} />}
       {removingSite && (
         <RemoveDialog
           title={`Remove ${removingSite.label || removingSite.line1}?`}
@@ -415,21 +417,23 @@ function DialogFooter({ onClose, saving, onSave, label = "Save" }: { onClose: ()
   );
 }
 
-function SiteDialog({ opp, site, onClose }: { opp: Workspace; site?: Site; onClose: () => void }) {
+function SiteDialog({ opp, site, suggested, onClose }: { opp: Workspace; site?: Site; suggested?: EnergyWorkspace["suggestedSite"]; onClose: () => void }) {
   const { save, saving, issues } = useSave(opp, onClose);
   const s = site;
+  // A new site starts with the address already on the customer (or the imported lead).
+  const known = suggested?.address;
   const { register, handleSubmit, watch } = useForm({
     defaultValues: {
       label: s?.label ?? "",
-      line1: s?.line1 ?? "",
-      line2: s?.line2 ?? "",
-      city: s?.city ?? "",
-      county: s?.county ?? "",
-      postcode: s?.postcode ?? "",
+      line1: s?.line1 ?? known?.line1 ?? "",
+      line2: s?.line2 ?? known?.line2 ?? "",
+      city: s?.city ?? known?.city ?? "",
+      county: s?.county ?? known?.county ?? "",
+      postcode: s?.postcode ?? known?.postcode ?? "",
       occupancyType: s?.occupancyType ?? "",
       landlordName: s?.landlordName ?? "",
       landlordContact: s?.landlordContact ?? "",
-      customerSector: s?.customerSector ?? "",
+      customerSector: s?.customerSector ?? suggested?.customerSector ?? "",
       annualConsumptionKwh: s?.annualConsumptionKwh?.toString() ?? "",
       occupiedSince: isoDay(s?.occupiedSince),
       leaseTerms: s?.leaseTerms ?? "",
@@ -452,7 +456,14 @@ function SiteDialog({ opp, site, onClose }: { opp: Workspace; site?: Site; onClo
     save(() => (s ? api.patch(`/sites/${s.id}`, body) : api.post(`/opportunities/${opp.id}/sites`, body)));
   });
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()} title={s ? "Edit supply site" : "Add supply site"} wide footer={<DialogFooter onClose={onClose} saving={saving} onSave={submit} />}>
+    <Dialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title={s ? "Edit supply site" : "Add supply site"}
+      description={!s && known ? "The address is filled in from what the CRM already knows. Change it if this site is somewhere else." : undefined}
+      wide
+      footer={<DialogFooter onClose={onClose} saving={saving} onSave={submit} />}
+    >
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Site name" hint="e.g. Main shop, Warehouse">{(p) => <Input {...p} {...register("label")} />}</Field>
         <Field label="Address line 1" required>{(p) => <Input {...p} {...register("line1")} />}</Field>

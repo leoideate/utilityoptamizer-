@@ -25,6 +25,7 @@ import { AuditService } from "../../audit/audit.service";
 import { type Actor, actorRef } from "../../common/actor";
 import { CryptoService } from "../../common/crypto.service";
 import { Forbidden, RuleViolation } from "../../common/errors";
+import { knownSupplyAddress } from "../../common/irish-address";
 import { PrismaService } from "../../common/prisma.service";
 import { dateOnly, isoDay, num, phoneKey } from "../../common/values";
 import { fillPdf } from "../../forms/pdf";
@@ -154,6 +155,8 @@ export class FlogasElectricityService {
       billing: customer?.addresses.find((a) => a.kind === "billing") ?? null,
       bank: customer?.bankAccounts[0] ?? null,
       site,
+      // Until the deal has a site, the supply address is the one the CRM already knows.
+      knownAddress: site ? null : knownSupplyAddress(opp, customer?.addresses.filter((a) => a.kind !== "home")),
       allMeters,
       meters,
       contract,
@@ -175,7 +178,7 @@ export class FlogasElectricityService {
   /** The application as the form shows and prints it. Bank values are decrypted only when `reveal` is set. */
   private assemble(ctx: Context, reveal: boolean): FlogasElectricityData {
     const { opp, customer: c, contact, billing, bank, site, contract, answers: a } = ctx;
-    const supplyAddress = addressOf(site);
+    const supplyAddress = addressOf(site ?? ctx.knownAddress);
     const billingAddress = addressOf(billing);
     const rows: FlogasMeterRow[] = ctx.meters.map((m) => {
       const latest = (regs: string[]) => m.readings.find((r) => regs.includes(register(r.register) ?? ""));
@@ -404,6 +407,8 @@ export class FlogasElectricityService {
         changed.add(k);
       }
     }
+    // With no site yet, saving premises or meters creates it at the address the form showed.
+    if (!site && !data.line1 && ctx.knownAddress && (Object.keys(data).length || input.meters?.length)) Object.assign(data, ctx.knownAddress);
     if (!Object.keys(data).length) return site?.id ?? null;
     if (site) {
       await tx.supplySite.update({ where: { id: site.id }, data });

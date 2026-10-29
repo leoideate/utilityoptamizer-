@@ -9,6 +9,7 @@ import { ENV, type Env } from "../config/env";
 import { AuditService } from "../audit/audit.service";
 import { type Actor, SYSTEM } from "../common/actor";
 import { CurrentUser, Public, SkipCsrf } from "../common/decorators";
+import { parseIrishAddress } from "../common/irish-address";
 import { Forbidden, RuleViolation } from "../common/errors";
 import { PrismaService } from "../common/prisma.service";
 import { ZodPipe } from "../common/zod.pipe";
@@ -51,37 +52,7 @@ export function parseCsv(text: string): string[][] {
 
 type Address = z.infer<typeof addressSchema>;
 
-const EIRCODE = /\b([AC-FHKNPRTV-Y]\d{2}|D6W)\s?([0-9AC-FHKNPRTV-Y]{4})\b/i;
-
-/**
- * Splits a one-line Irish address ("157 Drimnagh Road Dublin 12 D12 CX84, Co. Dublin") into
- * address fields: the Eircode, the county ("Co. Dublin"), the Dublin postal district as the city
- * (or `area` when the file gives one), and the rest as the first and second lines.
- */
-export function parseIrishAddress(text: string, area?: string): Address | null {
-  let rest = text.replace(/\s+/g, " ").trim();
-  if (!rest) return null;
-  const eircode = EIRCODE.exec(rest);
-  rest = rest.replace(EIRCODE, " ");
-  const county = /\bCo\.?\s+([A-Za-z]+)/i.exec(rest);
-  rest = rest.replace(/\bCo\.?\s+[A-Za-z]+/i, " ");
-  const district = /\bDublin\s+(\d{1,2}w?)\b/i.exec(rest);
-  rest = rest.replace(/\bDublin\s+\d{1,2}w?\b/i, " ");
-  const parts = rest
-    .split(",")
-    .map((x) => x.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-  const city = area?.trim() || (district ? `Dublin ${district[1].toUpperCase()}` : undefined);
-  return {
-    kind: "trading",
-    line1: parts[0] ?? city ?? text.trim(),
-    line2: parts.slice(1).join(", ") || undefined,
-    city: parts[0] ? city : undefined,
-    county: county ? `Co. ${county[1][0].toUpperCase()}${county[1].slice(1).toLowerCase()}` : undefined,
-    postcode: eircode ? `${eircode[1]} ${eircode[2]}`.toUpperCase() : undefined,
-    country: "IE",
-  };
-}
+export { parseIrishAddress };
 
 /** "Paul McDonald (Owner)" → the name and the role in brackets. */
 export function splitContact(text: string): { name: string; role?: string } {

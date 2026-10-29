@@ -28,6 +28,7 @@ import { AuditService } from "../audit/audit.service";
 import { type Actor, actorRef } from "../common/actor";
 import { CryptoService } from "../common/crypto.service";
 import { Forbidden, NotFound, RuleViolation } from "../common/errors";
+import { knownBusinessType, knownSupplyAddress } from "../common/irish-address";
 import { PrismaService } from "../common/prisma.service";
 import { dateOnly, isoDay, num } from "../common/values";
 import { ENV, type Env } from "../config/env";
@@ -212,6 +213,8 @@ export class FormsService {
     // The deal's own site, else the supply point the case matched, else the site its contracts renew.
     const sites = opp.sites.length ? opp.sites : opp.workflowCase?.site ? [opp.workflowCase.site] : opp.contracts.flatMap((k) => (k.site ? [k.site] : [])).filter((x, i, all) => all.findIndex((y) => y.id === x.id) === i);
     const site = sites[0];
+    // Until the deal has a site, its address fields use the address the CRM already knows.
+    const place = site ?? knownSupplyAddress(opp, c?.addresses.filter((a) => a.kind !== "home"));
     const meters = sites.flatMap((s) => s.meterPoints);
     const elec = meters.find((m) => m.fuel === "electricity");
     const gas = meters.find((m) => m.fuel === "gas");
@@ -253,7 +256,7 @@ export class FormsService {
       "customer.tradingName": c?.tradingName ?? null,
       "customer.companyRegNumber": c?.companyRegNumber ?? null,
       "customer.vatNumber": c?.vatNumber ?? null,
-      "customer.businessType": c?.businessType ?? null,
+      "customer.businessType": knownBusinessType(opp, c),
       "customer.phone": c?.phone ?? opp.phone,
       "customer.email": c?.email ?? opp.email,
       "contact.fullName": fullName,
@@ -268,12 +271,12 @@ export class FormsService {
       "billing.city": billing?.city ?? null,
       "billing.county": billing?.county ?? null,
       "billing.postcode": billing?.postcode ?? null,
-      "site.full": full(site),
-      "site.line1": site?.line1 ?? null,
-      "site.line2": site?.line2 ?? null,
-      "site.city": site?.city ?? null,
-      "site.county": site?.county ?? null,
-      "site.postcode": site?.postcode ?? null,
+      "site.full": full(place),
+      "site.line1": place?.line1 ?? null,
+      "site.line2": place?.line2 ?? null,
+      "site.city": place?.city ?? null,
+      "site.county": place?.county ?? null,
+      "site.postcode": place?.postcode ?? null,
       "site.mprn": elec?.mprn ?? null,
       "site.gprn": gas?.gprn ?? null,
       "site.meterNumber": (elec ?? gas)?.meterNumber ?? null,
@@ -366,8 +369,8 @@ export class FormsService {
       "contract.rate24hCent": contract && num(contract.nightRate) === null ? cent(contract.dayRate) : null,
       "contract.rateDayCent": contract && num(contract.nightRate) !== null ? cent(contract.dayRate) : null,
       "contract.standingChargeCent": cent(contract?.standingCharge),
-      "site.street": site ? [site.line1, site.line2].filter(Boolean).join(", ") : null,
-      "site.locality": site ? [site.city, site.county, site.postcode].filter(Boolean).join(", ") || null : null,
+      "site.street": place ? [place.line1, place.line2].filter(Boolean).join(", ") : null,
+      "site.locality": place ? [place.city, place.county, place.postcode].filter(Boolean).join(", ") || null : null,
       "billing.street": billing ? [billing.line1, billing.line2].filter(Boolean).join(", ") : null,
       "billing.locality": billing ? [billing.city, billing.county, billing.postcode].filter(Boolean).join(", ") || null : null,
       "contract.tariff": contract ? (num(contract.nightRate) !== null ? "night_saver" : "24h") : null,

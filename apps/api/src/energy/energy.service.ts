@@ -10,6 +10,7 @@ import type { comparisonQuoteSchema, meterReadingSchema } from "@uo/shared";
 import type { z } from "zod";
 import { AuditService } from "../audit/audit.service";
 import { type Actor, actorRef } from "../common/actor";
+import { knownBusinessType, knownSupplyAddress } from "../common/irish-address";
 import { NotFound, RuleViolation, assertRules } from "../common/errors";
 import { PrismaService } from "../common/prisma.service";
 import { dateOnly, defined } from "../common/values";
@@ -46,7 +47,11 @@ export class EnergyService {
     const history = contracts.some((c) => c.previousContractId)
       ? await this.prisma.energyContract.findMany({ where: { id: { in: contracts.map((c) => c.previousContractId).filter((x): x is string => !!x) } }, include: { selectedSupplier: true } })
       : [];
-    return { serviceType: opp.serviceType, sites, contracts, quotes, previousContracts: history };
+    // What a new site starts with: the address and business type the CRM already holds.
+    const customer = opp.customerId ? await this.prisma.customer.findUnique({ where: { id: opp.customerId }, select: { businessType: true, addresses: { where: { kind: { not: "home" } } } } }) : null;
+    const address = knownSupplyAddress(opp, customer?.addresses);
+    const suggestedSite = address ? { address, customerSector: knownBusinessType(opp, customer) } : null;
+    return { serviceType: opp.serviceType, sites, contracts, quotes, previousContracts: history, suggestedSite };
   }
 
   // --- Sites ---------------------------------------------------------------
