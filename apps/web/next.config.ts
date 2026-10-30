@@ -5,6 +5,8 @@ const API_ORIGIN = process.env.API_ORIGIN ?? "http://127.0.0.1:4000";
 const PROD = process.env.NODE_ENV === "production";
 /** Where signed document links point (S3 / MinIO), so previews can load. Space-separated; set at build time. */
 const STORAGE_ORIGIN = process.env.STORAGE_ORIGIN ?? "http://127.0.0.1:8333 http://localhost:8333";
+/** The RingCentral phone panel (src/lib/browser-phone.tsx): framed, never run as a script in our page. */
+const PHONE_ORIGIN = "https://apps.ringcentral.com";
 
 /**
  * Content-Security-Policy. Next.js inlines its hydration scripts, so scripts need 'unsafe-inline'
@@ -17,7 +19,7 @@ const CSP = [
   `img-src 'self' data: blob: ${STORAGE_ORIGIN}`,
   "font-src 'self' data:",
   `connect-src 'self'${PROD ? "" : " ws: wss:"}`,
-  `frame-src 'self' blob: ${STORAGE_ORIGIN}`,
+  `frame-src 'self' blob: ${STORAGE_ORIGIN} ${PHONE_ORIGIN}`,
   "media-src 'self' blob:",
   "worker-src 'self' blob:",
   "object-src 'none'",
@@ -40,9 +42,11 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
+          // The phone panel needs the microphone for headset calls; nothing else may use it.
+          { key: "Permissions-Policy", value: `camera=(self), microphone=("${PHONE_ORIGIN}"), geolocation=()` },
           { key: "Content-Security-Policy", value: CSP },
-          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          // "allow-popups": the phone panel's RingCentral sign-in window reports back to the panel that opened it.
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
           // Browsers ignore HSTS over plain HTTP, so it's safe to always send in production builds.
           ...(PROD ? [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }] : []),
         ],

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Module, Param, ParseUUIDPipe, Post, Put } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
-import { callOutcomeSchema, callbackPhoneSchema, startCallSchema, toE164 } from "@uo/shared";
+import { browserCallStatusSchema, callOutcomeSchema, callbackPhoneSchema, startCallSchema, toE164 } from "@uo/shared";
 import type { z } from "zod";
 import { ENV, type Env } from "../config/env";
 import type { Actor } from "../common/actor";
@@ -48,6 +48,12 @@ export class CallsController {
   @Get("calls/:id")
   get(@CurrentUser() a: Actor, @Param("id", Id) id: string) {
     return this.calls.get(a, id);
+  }
+
+  /** The phone panel reports a call it dialled: answered, or ended. */
+  @Post("calls/:id/browser-status")
+  browserStatus(@CurrentUser() a: Actor, @Param("id", Id) id: string, @Body(new ZodPipe(browserCallStatusSchema)) body: z.infer<typeof browserCallStatusSchema>) {
+    return this.calls.browserStatus(a, id, body);
   }
 
   @Post("calls/:id/cancel")

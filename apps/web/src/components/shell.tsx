@@ -1,13 +1,14 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, BookOpen, Sparkles, Building2, CalendarCheck, ClipboardList, FileSignature, MessagesSquare, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Mail, Menu as MenuIcon, ScanLine, Search, Settings } from "lucide-react";
+import { Bell, BookOpen, Sparkles, Building2, CalendarCheck, ClipboardList, FileSignature, MessagesSquare, KanbanSquare, LayoutDashboard, ListChecks, LogOut, Mail, Menu as MenuIcon, Phone, ScanLine, Search, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { type Capability, ROLE_LABELS } from "@uo/shared";
 import { api } from "@/lib/api";
 import { cn, ref, relative } from "@/lib/format";
+import { useBrowserPhone } from "@/lib/browser-phone";
 import { useChannels } from "@/lib/chat";
 import { useUnreadEmail } from "@/lib/email";
 import { useUser } from "@/lib/session";
@@ -40,6 +41,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const isAdmin = user.capabilities.some((c) => c.startsWith("admin.") || (c === "assistant.review" && user.features.assistant));
   const unread = useChannels(user.features.chat).data?.totalUnread ?? 0;
   const unreadEmail = useUnreadEmail().data ?? 0;
+  const phone = useBrowserPhone();
   useEffect(() => setOpen(false), [pathname]);
 
   const nav = (
@@ -100,6 +102,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             {canAsk && (
               <Button variant="ghost" size="icon" aria-label="Ask the CRM" title="Ask the CRM" aria-expanded={assistant} onClick={() => setAssistant((a) => !a)}>
                 <Sparkles />
+              </Button>
+            )}
+            {phone.available && (
+              <Button variant="ghost" size="icon" aria-label="Phone" title="Phone" aria-expanded={phone.open} onClick={() => phone.setOpen(!phone.open)}>
+                <Phone />
               </Button>
             )}
             <Notifications />
