@@ -75,6 +75,7 @@ export class OpportunitiesService {
       const opp = await tx.opportunity.create({
         data: {
           name: input.name,
+          notes: input.notes ?? null,
           serviceType: input.serviceType,
           saleType: input.saleType,
           customerId: input.customerId ?? null,

@@ -21,12 +21,13 @@ import {
   isEnergyService,
 } from "@uo/shared";
 import { UserSelect } from "@/components/domain";
-import { Button, Card, CheckboxGroup, Field, Input, PageHeader, Select } from "@/components/ui/primitives";
+import { Button, Card, CardHeader, CheckboxGroup, Field, Input, PageHeader, Select, Textarea } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import { useCan } from "@/lib/session";
 
 /** Quick capture: only a name and service are required. Everything else can come later. */
 const schema = z.object({
+  notes: z.string().trim().max(10000, "Keep notes within 10,000 characters.").optional(),
   name: z.string().trim().min(1, "Give the lead a name, e.g. the business and service."),
   serviceType: z.enum(SERVICE_TYPES),
   saleType: z.enum(SALE_TYPES),
@@ -56,12 +57,13 @@ function NewOpportunityForm() {
   const can = useCan();
   const { register, handleSubmit, formState, setValue, watch } = useForm<z.input<typeof schema>, unknown, Values>({
     resolver: zodResolver(schema),
-    defaultValues: { serviceType: "electricity", saleType: "new_sale", productInterest: [], supplyChanges: [], leadSource: "manual", customerId: params.get("customerId") ?? undefined, companyName: params.get("company") ?? "" },
+    defaultValues: { notes: "", serviceType: "electricity", saleType: "new_sale", productInterest: [], supplyChanges: [], leadSource: "manual", customerId: params.get("customerId") ?? undefined, companyName: params.get("company") ?? "" },
   });
   const create = useMutation({
     mutationFn: (v: Values) =>
       api.post<{ id: string }>("/opportunities", {
         ...v,
+        notes: v.notes?.trim() || null,
         expectedRevenue: v.expectedRevenue === "" || v.expectedRevenue === undefined ? null : v.expectedRevenue,
         followUpDate: v.followUpDate || null,
         expectedCloseDate: v.expectedCloseDate || null,
@@ -76,7 +78,8 @@ function NewOpportunityForm() {
   const e = formState.errors;
 
   return (
-    <form onSubmit={handleSubmit((v) => create.mutate(v))} noValidate className="space-y-6">
+    <form onSubmit={handleSubmit((v) => create.mutate(v))} noValidate className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="min-w-0 space-y-6">
       <Card className="space-y-4 p-5">
         <h2 className="font-semibold">The deal</h2>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -174,7 +177,19 @@ function NewOpportunityForm() {
         </div>
       </Card>
 
-      <div className="flex justify-end gap-2">
+      </div>
+
+      <Card className="min-w-0">
+        <CardHeader title="Notes" description="Optional. Saved when you create the lead." />
+        <div className="p-5">
+          <Field label="Notes" error={e.notes?.message}>
+            {(p) => <Textarea {...p} {...register("notes")} rows={8} maxLength={10000} placeholder="Add useful details about this lead…" />}
+          </Field>
+        </div>
+      </Card>
+
+      <div className="flex flex-wrap justify-end gap-2 lg:col-span-2">
+        {create.isError && <p role="alert" className="w-full text-sm text-danger">The lead could not be created. Your details and notes are still here. Please try again.</p>}
         <Button type="button" variant="secondary" onClick={() => router.back()}>
           Cancel
         </Button>
@@ -188,7 +203,7 @@ function NewOpportunityForm() {
 
 export default function NewOpportunityPage() {
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-6xl">
       <PageHeader title="New lead" description="Only the name and service are required." />
       <Suspense>
         <NewOpportunityForm />
