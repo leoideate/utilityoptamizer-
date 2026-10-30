@@ -28,6 +28,7 @@ import { AuditService } from "../audit/audit.service";
 import { type Actor, actorRef } from "../common/actor";
 import { CryptoService } from "../common/crypto.service";
 import { Conflict, Forbidden, NotFound, RuleViolation, assertRules } from "../common/errors";
+import { knownBusinessType, knownSupplyAddress } from "../common/irish-address";
 import type { Tx } from "../common/prisma.service";
 import { PrismaService } from "../common/prisma.service";
 import { type Page, dateOnly, defined, isoDay, opportunityNumber, pageArgs, phoneKey } from "../common/values";
@@ -669,8 +670,19 @@ export class OpportunitiesService {
   private async createCustomerFromCapture(tx: Tx, actor: Actor, opp: OppWithStage): Promise<string> {
     const legalName = opp.companyName?.trim() || opp.contactName?.trim();
     if (!legalName) throw new RuleViolation(["Enter a company or contact name on the opportunity first."]);
+    // The business's address and type as the deal already knows them (its site, else the lead's imported text).
+    const site = await tx.supplySite.findFirst({ where: { opportunityId: opp.id }, orderBy: { createdAt: "asc" }, select: { line1: true, line2: true, city: true, county: true, postcode: true } });
+    const address = site ?? knownSupplyAddress(opp);
     const customer = await tx.customer.create({
-      data: { legalName, email: opp.email, phone: opp.phone, phoneKey: phoneKey(opp.phone), createdById: actorRef(actor) },
+      data: {
+        legalName,
+        email: opp.email,
+        phone: opp.phone,
+        phoneKey: phoneKey(opp.phone),
+        businessType: knownBusinessType(opp),
+        createdById: actorRef(actor),
+        ...(address ? { addresses: { create: { kind: "trading", line1: address.line1, line2: address.line2, city: address.city, county: address.county, postcode: address.postcode } } } : {}),
+      },
     });
     if (opp.contactName) {
       const [first, ...rest] = opp.contactName.trim().split(/\s+/);
