@@ -150,6 +150,7 @@ export const bankDetailsSchema = z.object({
 // --- Opportunities ---------------------------------------------------------
 
 export const createOpportunitySchema = z.object({
+  notes: optText(10000),
   name: text(200).min(1, "Give the opportunity a name."),
   serviceType: z.enum(SERVICE_TYPES),
   saleType: z.enum(SALE_TYPES).default("new_sale"),
