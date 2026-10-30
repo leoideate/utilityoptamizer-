@@ -1,18 +1,18 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Save, ShieldCheck, Sparkles, UserPlus } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, Save, Sparkles, UserPlus } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
   APPLICATION_STATUS_LABELS,
   type ApplicationStatus,
   BORD_GAIS_TABS,
   BORD_GAIS_TAB_LABELS,
   type BordGaisElectricityData,
+  type BordGaisIssue,
   type BordGaisTab,
   type FormSignerRole,
   bordGaisContactName,
-  bordGaisElectricityIssues,
   bordGaisFillSave,
   bordGaisFillSuggestions,
 } from "@uo/shared";
@@ -27,7 +27,7 @@ import { TabSummary } from "../supplier-application/fields";
 import { BILL_FILLABLE, FillFromBillDialog } from "../supplier-application/fill-from-bill";
 import type { BankEdit } from "../supplier-application/types";
 import { AccountTab, AgreementTab, DebitTab, DeclarationTab, PremisesTab, SupplyTab } from "./bord-gais-fields";
-import { type BordGaisView, forValidation, isEmptyPayload, savePayload } from "./draft";
+import { type BordGaisView, isEmptyPayload, savePayload } from "./draft";
 
 const STATUS_TONE: Record<ApplicationStatus, Tone> = { draft: "neutral", ready: "info", sent: "info", viewed: "warning", signed: "warning", declined: "danger", expired: "neutral", completed: "success", rejected: "danger" };
 const issuesOf = (e: unknown) => ((e as ApiError).issues?.length ? (e as ApiError).issues : [(e as ApiError).message]);
@@ -65,7 +65,8 @@ export function BordGaisTab({ opp }: { opp: Workspace }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only new server data should reset an unchanged draft
   }, [view.data]);
 
-  const issues = useMemo(() => (draft ? bordGaisElectricityIssues(forValidation(draft, bank)) : []), [draft, bank]);
+  // No mandatory fields: the team asked for the form to be generated with whatever is filled in.
+  const issues: BordGaisIssue[] = [];
   const byTab = (t: BordGaisTab) => issues.filter((i) => i.tab === t);
   const refresh = () => (qc.invalidateQueries({ queryKey: key }), refreshOpp());
 
@@ -146,9 +147,6 @@ export function BordGaisTab({ opp }: { opp: Workspace }) {
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone={STATUS_TONE[v.status]}>{APPLICATION_STATUS_LABELS[v.status]}</Badge>
               {dirty && <Badge tone="warning">Unsaved changes</Badge>}
-              <Button size="sm" variant="secondary" onClick={validate}>
-                <ShieldCheck /> Validate application
-              </Button>
               {!ro && aiReading && (
                 <Button size="sm" variant="secondary" disabled={dirty} title={dirty ? "Save or undo your changes first" : undefined} onClick={() => setFilling(true)}>
                   <Sparkles /> Fill from bill
@@ -207,7 +205,7 @@ export function BordGaisTab({ opp }: { opp: Workspace }) {
               missingTemplate="The Bord Gáis electricity form hasn't been set up yet. An administrator needs to upload the Bord Gáis Business Electricity Customer Agreement Form under Admin → Supplier forms."
               view={v}
               dirty={dirty}
-              hasIssues={issues.length > 0 || v.issues.length > 0}
+              hasIssues={issues.length > 0}
               onInvalid={validate}
               refresh={refresh}
               signerDefaults={signerDefaults}

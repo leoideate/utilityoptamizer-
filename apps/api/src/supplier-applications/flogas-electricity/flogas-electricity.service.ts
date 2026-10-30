@@ -504,9 +504,8 @@ export class FlogasElectricityService {
     const ctx = await this.context(opportunityId);
     this.assertApplies(ctx);
     if (!ctx.customer) throw new RuleViolation(["Create or link the customer first, so the application is filled from their record."]);
+    // Missing details don't stop the form (the team asked to drop the mandatory rule): blanks print blank.
     const data = this.assemble(ctx, true);
-    const issues = flogasElectricityIssues(data);
-    if (issues.length) throw new RuleViolation(issues.map((i) => i.message));
     return this.docs.generate(actor, INFO, {
       opp: ctx.opp,
       appId: ctx.app?.id ?? null,

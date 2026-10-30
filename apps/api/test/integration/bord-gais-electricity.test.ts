@@ -239,10 +239,10 @@ describe("Bord Gáis electricity: prefill and drafts", () => {
 });
 
 describe("Bord Gáis electricity: generating and signing", () => {
-  it("refuses to generate until the required details are there", async () => {
+  it("generates even when details are missing (they print blank)", async () => {
     const { oppId } = await bordGaisDeal();
-    const res = expectStatus(await team.sales.post(`${base(oppId)}/versions`, {}), 422).body;
-    expect(res.issues).toEqual(["Enter the IBAN.", "Enter the BIC.", "Enter the bank account holder's name."]);
+    expect(expectStatus(await team.sales.get(base(oppId)), 200).body.issues.map((i: { message: string }) => i.message)).toEqual(["Enter the IBAN.", "Enter the BIC.", "Enter the bank account holder's name."]);
+    expect(expectStatus(await team.sales.post(`${base(oppId)}/versions`, {}), 201).body).toMatchObject({ version: 1 });
   });
 
   it("fills the PDF's own fields in a stored, sensitive, fillable version", async () => {

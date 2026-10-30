@@ -49,7 +49,7 @@ export function DocumentsTab({ view, d, set, err, issues, ro, opportunityId, dir
         missingTemplate="The Flogas electricity form hasn't been set up yet. An administrator needs to upload the Flogas Commercial Agreement PDF under Admin → Supplier forms."
         view={view}
         dirty={dirty}
-        hasIssues={issues.length > 0 || view.issues.length > 0}
+        hasIssues={issues.length > 0}
         onInvalid={onInvalid}
         refresh={refresh}
         signerDefaults={(role: FormSignerRole) =>

@@ -246,14 +246,13 @@ describe("Flogas electricity: prefill and drafts", () => {
 });
 
 describe("Flogas electricity: validation and generation", () => {
-  it("lists missing details by field and refuses to generate until they're given", async () => {
+  it("lists missing details by field but still generates the form with them blank", async () => {
     const { oppId } = await flogasDeal();
     expectStatus(await team.sales.put(base(oppId), { premises: { occupancyType: "rented" }, answers: { sector: "gp_24h", signatoryPosition: null } }), 200);
     const v = expectStatus(await team.sales.get(base(oppId)), 200).body;
     expect(v.issues.map((i: { path: string; tab: string }) => `${i.tab}:${i.path}`)).toEqual(["customer:landlordName", "customer:landlordContact", "debit:debtorName", "debit:iban", "documents:signatoryPosition"]);
-    const res = expectStatus(await team.sales.post(`${base(oppId)}/versions`, {}), 422).body;
-    expect(res.issues).toContain("Enter the landlord or agent's name.");
-    expect(await t.prisma.supplierApplicationVersion.count({ where: { application: { opportunityId: oppId } } })).toBe(0);
+    expect(expectStatus(await team.sales.post(`${base(oppId)}/versions`, {}), 201).body).toMatchObject({ version: 1 });
+    expect(await t.prisma.supplierApplicationVersion.count({ where: { application: { opportunityId: oppId } } })).toBe(1);
   });
 
   it("generates an immutable, sensitive version on the Flogas template and doesn't duplicate an unchanged one", async () => {
