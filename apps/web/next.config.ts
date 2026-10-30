@@ -42,8 +42,9 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          // The phone panel needs the microphone for headset calls; nothing else may use it.
-          { key: "Permissions-Policy", value: `camera=(self), microphone=("${PHONE_ORIGIN}"), geolocation=()` },
+          // The phone panel needs the microphone for headset calls. Browsers only pass a feature to a frame
+          // when the page itself has it, so "self" is listed too; no other frame may use it.
+          { key: "Permissions-Policy", value: `camera=(self), microphone=(self "${PHONE_ORIGIN}"), geolocation=()` },
           { key: "Content-Security-Policy", value: CSP },
           // "allow-popups": the phone panel's RingCentral sign-in window reports back to the panel that opened it.
           { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
