@@ -13,10 +13,10 @@ export function DocumentsTab({ view, d, set, err, issues, ro, opportunityId, dir
       <Card>
         <CardHeader title="Customer agreement" description="Who signs for the customer. Their signature and the date are added when they sign." />
         <div className="grid gap-4 p-5 sm:grid-cols-2">
-          <Field label="Signatory name (block capitals on the form)" required error={err("signatoryName")} hint={view.answered.includes("signatoryName") ? undefined : "From the account contact until you change it."}>
+          <Field label="Signatory name (block capitals on the form)" error={err("signatoryName")} hint={view.answered.includes("signatoryName") ? undefined : "From the account contact until you change it."}>
             {(p) => <Input {...p} maxLength={120} disabled={ro} value={d.signatoryName ?? ""} onChange={(e) => set({ signatoryName: e.target.value || null })} />}
           </Field>
-          <Field label="Position held at company" required error={err("signatoryPosition")}>
+          <Field label="Position held at company" error={err("signatoryPosition")}>
             {(p) => <Input {...p} maxLength={80} disabled={ro} value={d.signatoryPosition ?? ""} onChange={(e) => set({ signatoryPosition: e.target.value || null })} />}
           </Field>
         </div>

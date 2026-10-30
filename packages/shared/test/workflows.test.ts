@@ -79,15 +79,14 @@ describe("change of entity", () => {
     );
     const missing = caseChecklist(f).filter((i) => !i.done).map((i) => i.key);
     expect(missing).toEqual(["meter_ids", "contact_name", "contact_reach", "iban", "landlord_name", "landlord_contact"]);
-    const issues = stageGateIssues(f, "documents_prepared");
-    expect(issues).toContain("Add the incoming customer's own bank account (IBAN).");
-    expect(issues).toContain("Enter the MPRN/GPRN for every meter at the supply point.");
+    // Guidance only: missing details never block a move.
+    expect(stageGateIssues(f, "documents_prepared")).toEqual([]);
   });
 
   it("a new supply point needs the source of its details", () => {
     const f = entity({ supplyPath: "new_supply_point" });
-    expect(stageGateIssues(f, "documents_prepared")).toContain("Record where the MPRN/GPRN and address came from (the lease alone doesn't prove the meter).");
-    expect(stageGateIssues(entity({ supplyPath: "new_supply_point", supplySourceVerified: true }), "documents_prepared")).toEqual([]);
+    expect(caseChecklist(f).find((i) => i.key === "supply_source")).toMatchObject({ done: false });
+    expect(caseChecklist(entity({ supplyPath: "new_supply_point", supplySourceVerified: true })).find((i) => i.key === "supply_source")).toMatchObject({ done: true });
   });
 
   it("the outgoing customer, or their IBAN, can't stand in for the incoming customer", () => {
@@ -151,7 +150,7 @@ describe("existing-supplier renewal", () => {
 
   it("a renewal created from a previous deal is an existing client; a manual one needs the customer path", () => {
     expect(stageGateIssues(renewal({ customerPath: null, renewalOfPrevious: true }), "documents_prepared")).toEqual([]);
-    expect(stageGateIssues(renewal({ customerPath: null }), "documents_prepared")).toContain("Choose whether the customer is an existing client or new to us.");
+    expect(caseChecklist(renewal({ customerPath: null })).find((i) => i.key === "customer_path")).toMatchObject({ done: false });
   });
 
   it("a customer new to us can proceed on the checklist without a bill", () => {
@@ -159,7 +158,8 @@ describe("existing-supplier renewal", () => {
     expect(caseChecklist(f).find((i) => i.key === "bill")).toMatchObject({ done: false, issue: undefined });
     expect(stageGateIssues(f, "documents_prepared")).toEqual([]);
     const gaps = renewal({ customerPath: "new_to_us", currentSupplier: false, contractEndDate: false, incoming: { contactName: false, contactReach: true, billingAddress: true, iban: false } });
-    expect(stageGateIssues(gaps, "documents_prepared")).toEqual(["Add the customer's contact name.", "Enter the current supplier on the contract.", "Enter the current contract end date."]);
+    expect(caseChecklist(gaps).filter((i) => !i.done && i.issue).map((i) => i.key)).toEqual(["contact_name", "current_supplier", "contract_end"]);
+    expect(stageGateIssues(gaps, "documents_prepared")).toEqual([]);
   });
 
   it("terms must be verified before documents", () => {

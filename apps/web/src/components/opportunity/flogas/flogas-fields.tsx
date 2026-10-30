@@ -45,9 +45,9 @@ export function CustomerTab({ view, d, set, err, issues, ro }: TabProps) {
       <TabSummary issues={issues} />
       {!ro && noCustomerWrite && <p className="text-sm text-muted">You can't change customer details; ask someone who can edit customers.</p>}
       <Section title="The customer" description="Saved to the customer record, so every form and quote uses the same details.">
-        <Text label="Legal entity name" required value={d.legalName} onChange={(v) => set({ legalName: v })} error={err("legalName")} disabled={noCustomerWrite} />
+        <Text label="Legal entity name" value={d.legalName} onChange={(v) => set({ legalName: v })} error={err("legalName")} disabled={noCustomerWrite} />
         <Text label="Trading name" value={d.tradingName} onChange={(v) => set({ tradingName: v })} disabled={noCustomerWrite} />
-        <Field label="Legal entity type" required error={err("legalEntity")} hint={d.legalEntity ? `Ticks "${FLOGAS_ENTITY_BOX_LABELS[flogasEntityBox(d.legalEntity)!]}" on the form.` : undefined}>
+        <Field label="Legal entity type" error={err("legalEntity")} hint={d.legalEntity ? `Ticks "${FLOGAS_ENTITY_BOX_LABELS[flogasEntityBox(d.legalEntity)!]}" on the form.` : undefined}>
           {(p) => (
             <Select {...p} disabled={noCustomerWrite} value={d.legalEntity ?? ""} onChange={(e) => set({ legalEntity: (e.target.value || null) as LegalEntity | null })}>
               <option value="">Choose…</option>
@@ -59,11 +59,11 @@ export function CustomerTab({ view, d, set, err, issues, ro }: TabProps) {
             </Select>
           )}
         </Field>
-        <Text label="Business type" required value={d.businessType} maxLength={100} onChange={(v) => set({ businessType: v })} error={err("businessType")} disabled={noCustomerWrite} hint="e.g. Bakery, hotel, office" />
-        <Text label="Company registration (CRO) number" value={d.companyRegNumber} maxLength={30} onChange={(v) => set({ companyRegNumber: v })} error={err("companyRegNumber")} disabled={noCustomerWrite} required={flogasEntityBox(d.legalEntity) === "company" && !d.vatNumber} />
+        <Text label="Business type" value={d.businessType} maxLength={100} onChange={(v) => set({ businessType: v })} error={err("businessType")} disabled={noCustomerWrite} hint="e.g. Bakery, hotel, office" />
+        <Text label="Company registration (CRO) number" value={d.companyRegNumber} maxLength={30} onChange={(v) => set({ companyRegNumber: v })} error={err("companyRegNumber")} disabled={noCustomerWrite} />
         <Text label="VAT number" value={d.vatNumber} maxLength={30} onChange={(v) => set({ vatNumber: v })} disabled={noCustomerWrite} />
         <YesNo label="VAT exempt" value={d.vatExempt} onChange={(v) => set({ vatExempt: v })} disabled={noCustomerWrite} />
-        {d.vatExempt && <Text label="VAT exempt number" required maxLength={40} value={d.vatExemptNumber} onChange={(v) => set({ vatExemptNumber: v })} error={err("vatExemptNumber")} disabled={noCustomerWrite} />}
+        {d.vatExempt && <Text label="VAT exempt number" maxLength={40} value={d.vatExemptNumber} onChange={(v) => set({ vatExemptNumber: v })} error={err("vatExemptNumber")} disabled={noCustomerWrite} />}
         <YesNo
           label="Priority / special needs"
           value={d.priorityCustomer}
@@ -74,25 +74,24 @@ export function CustomerTab({ view, d, set, err, issues, ro }: TabProps) {
       </Section>
 
       <Section title="Addresses">
-        <AddressFields legend="Supply address" required value={d.supplyAddress} onChange={(a) => set({ supplyAddress: a })} error={err("supplyAddress")} disabled={ro} />
+        <AddressFields legend="Supply address" value={d.supplyAddress} onChange={(a) => set({ supplyAddress: a })} error={err("supplyAddress")} disabled={ro} />
         <div className="sm:col-span-2">
           <Checkbox label="Bills go to the supply address" checked={d.billingSameAsSupply} disabled={ro} onChange={(e) => set({ billingSameAsSupply: e.target.checked })} />
         </div>
-        {!d.billingSameAsSupply && <AddressFields legend="Billing address" required value={d.billingAddress} onChange={(a) => set({ billingAddress: a })} error={err("billingAddress")} disabled={noCustomerWrite} />}
+        {!d.billingSameAsSupply && <AddressFields legend="Billing address" value={d.billingAddress} onChange={(a) => set({ billingAddress: a })} error={err("billingAddress")} disabled={noCustomerWrite} />}
       </Section>
 
       <Section title="Account contact" description="The customer's primary contact.">
-        <Text label="First name" required value={d.contactFirstName} maxLength={100} onChange={(v) => set({ contactFirstName: v })} error={err("contactName")} disabled={noCustomerWrite} autoComplete="off" />
+        <Text label="First name" value={d.contactFirstName} maxLength={100} onChange={(v) => set({ contactFirstName: v })} error={err("contactName")} disabled={noCustomerWrite} autoComplete="off" />
         <Text label="Surname" value={d.contactLastName} maxLength={100} onChange={(v) => set({ contactLastName: v })} disabled={noCustomerWrite} />
         <Text label="Telephone" type="tel" inputMode="tel" maxLength={40} value={d.telephone} onChange={(v) => set({ telephone: v })} disabled={noCustomerWrite} />
         <Text label="Mobile" type="tel" inputMode="tel" maxLength={40} value={d.mobile} onChange={(v) => set({ mobile: v })} disabled={noCustomerWrite} />
-        <Text label="Email" required type="email" inputMode="email" value={d.email} onChange={(v) => set({ email: v })} error={err("email")} disabled={noCustomerWrite} />
+        <Text label="Email" type="email" inputMode="email" value={d.email} onChange={(v) => set({ email: v })} error={err("email")} disabled={noCustomerWrite} />
       </Section>
 
       <Section title="The supply premises">
         <YesNo
           label="Does the customer own the supply premises?"
-          required
           value={owns}
           error={err("occupancyType")}
           disabled={ro}
@@ -104,8 +103,8 @@ export function CustomerTab({ view, d, set, err, issues, ro }: TabProps) {
         {owns === false && (
           <>
             <Text label="Terms of lease" value={d.leaseTerms} maxLength={40} onChange={(v) => set({ leaseTerms: v })} disabled={ro} hint="Short, e.g. 10 years: the box on the form is small." />
-            <Text label="Landlord / agent name" required value={d.landlordName} onChange={(v) => set({ landlordName: v })} error={err("landlordName")} disabled={ro} />
-            <Text label="Landlord / agent contact number" required type="tel" inputMode="tel" value={d.landlordContact} onChange={(v) => set({ landlordContact: v })} error={err("landlordContact")} disabled={ro} />
+            <Text label="Landlord / agent name" value={d.landlordName} onChange={(v) => set({ landlordName: v })} error={err("landlordName")} disabled={ro} />
+            <Text label="Landlord / agent contact number" type="tel" inputMode="tel" value={d.landlordContact} onChange={(v) => set({ landlordContact: v })} error={err("landlordContact")} disabled={ro} />
           </>
         )}
       </Section>
@@ -158,7 +157,7 @@ export function SupplyTab({ view, d, set, err, issues, ro }: TabProps) {
                 )}
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Text label="MPRN" required inputMode="numeric" maxLength={20} value={m.mprn} onChange={(v) => updateMeter(i, { mprn: v })} error={err(`meters.${i}.mprn`)} disabled={ro} hint="11 digits, starting 10" />
+                <Text label="MPRN" inputMode="numeric" maxLength={20} value={m.mprn} onChange={(v) => updateMeter(i, { mprn: v })} error={err(`meters.${i}.mprn`)} disabled={ro} hint="11 digits, starting 10" />
                 <Text label="MCC code" maxLength={10} value={m.mccCode} onChange={(v) => updateMeter(i, { mccCode: v })} disabled={ro} />
                 <Num label={dayLabel} step="1" value={m.day} onChange={(v) => updateMeter(i, { day: v })} disabled={ro} />
                 {d.sector !== "gp_24h" && <Num label="Night reading" step="1" value={m.night} onChange={(v) => updateMeter(i, { night: v })} disabled={ro} />}
@@ -296,10 +295,10 @@ export function DebitTab({ view, d, set, err, issues, ro, bank, setBank, confirm
               )}
               {bank && (
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <Field label="Debtor (account holder) name" required error={err("debtorName")}>
+                  <Field label="Debtor (account holder) name" error={err("debtorName")}>
                     {(p) => <Input {...p} autoComplete="off" maxLength={200} value={bank.accountName} onChange={(e) => setBank({ ...bank, accountName: e.target.value })} />}
                   </Field>
-                  <Field label="IBAN" required error={err("iban")}>
+                  <Field label="IBAN" error={err("iban")}>
                     {(p) => <Input {...p} autoComplete="off" spellCheck={false} maxLength={42} value={bank.iban} onChange={(e) => setBank({ ...bank, iban: e.target.value.toUpperCase() })} />}
                   </Field>
                   <Field label="BIC">{(p) => <Input {...p} autoComplete="off" maxLength={11} value={bank.bic} onChange={(e) => setBank({ ...bank, bic: e.target.value.toUpperCase() })} />}</Field>
@@ -318,7 +317,7 @@ export function DebitTab({ view, d, set, err, issues, ro, bank, setBank, confirm
             <div className="sm:col-span-2">
               <Checkbox label={`The debtor address is ${billing}`} checked={d.debtorAddressSameAsBilling} disabled={!canWrite} onChange={(e) => set({ debtorAddressSameAsBilling: e.target.checked })} />
             </div>
-            {!d.debtorAddressSameAsBilling && <AddressFields legend="Debtor address (restricted)" required value={d.debtorAddress} onChange={(a) => set({ debtorAddress: a })} error={err("debtorAddress")} disabled={!canWrite} />}
+            {!d.debtorAddressSameAsBilling && <AddressFields legend="Debtor address (restricted)" value={d.debtorAddress} onChange={(a) => set({ debtorAddress: a })} error={err("debtorAddress")} disabled={!canWrite} />}
             <Field label="Payment type">{(p) => <Input {...p} value="Recurrent" disabled />}</Field>
             <Text label="Unique mandate reference" maxLength={35} value={d.mandateReference} onChange={(v) => set({ mandateReference: v })} disabled={ro} hint="For Flogas office use: normally left blank." />
           </Section>
@@ -334,8 +333,8 @@ export function DebitTab({ view, d, set, err, issues, ro, bank, setBank, confirm
               />
               {d.secondAccountHolder && (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Text label="Second account holder's name" required maxLength={120} value={d.secondAccountHolder.name} onChange={(v) => set({ secondAccountHolder: { ...d.secondAccountHolder!, name: v } })} error={err("secondAccountHolder.name")} disabled={ro} />
-                  <Text label="Their email (for the signing link)" required type="email" inputMode="email" value={d.secondAccountHolder.email} onChange={(v) => set({ secondAccountHolder: { ...d.secondAccountHolder!, email: v } })} error={err("secondAccountHolder.email")} disabled={ro} />
+                  <Text label="Second account holder's name" maxLength={120} value={d.secondAccountHolder.name} onChange={(v) => set({ secondAccountHolder: { ...d.secondAccountHolder!, name: v } })} error={err("secondAccountHolder.name")} disabled={ro} />
+                  <Text label="Their email (for the signing link)" type="email" inputMode="email" value={d.secondAccountHolder.email} onChange={(v) => set({ secondAccountHolder: { ...d.secondAccountHolder!, email: v } })} error={err("secondAccountHolder.email")} disabled={ro} />
                 </div>
               )}
             </div>

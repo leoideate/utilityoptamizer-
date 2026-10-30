@@ -105,12 +105,10 @@ test("salesperson captures an electricity lead and sees electricity-only fields"
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("10098765432")).toBeVisible();
 
-  // Stage gate: a proposal needs nothing more for energy once there's a site, but Supplier Selected needs a supplier.
+  // Missing details never block a move: Supplier Selected doesn't need the supplier chosen yet.
   await page.getByRole("button", { name: "More" }).click();
   await page.getByRole("menuitem", { name: "Supplier or Product Selected" }).click();
-  // The dialog's message is slotted content, so check it on the page while the dialog is open.
-  await expect(page.getByRole("alertdialog", { name: /Can't move to Supplier or Product Selected yet/ })).toBeVisible();
-  await expect(page.getByText("Select the supplier.")).toBeVisible();
+  await expect(page.getByRole("alertdialog", { name: /Can't move to Supplier or Product Selected yet/ })).toHaveCount(0);
 });
 
 test("a change of entity case shows its status and guided checklist, and records where the supply details came from", async ({ page }) => {

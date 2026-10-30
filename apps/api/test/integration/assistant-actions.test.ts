@@ -138,7 +138,7 @@ describe("changes the assistant prepares", () => {
   });
 
   it("moves stages only through the stage gates, and never to Live / Won", async () => {
-    const blocked = await propose(sales, "propose_move_stage", { deal: number, stage: "proposal_sent" });
+    const blocked = await propose(sales, "propose_move_stage", { deal: number, stage: "submitted" });
     expect(blocked.result).toMatchObject({ is_error: true, content: expect.stringMatching(/^Can't prepare that: /) });
     expect(blocked.actions).toEqual([]);
     const won = await propose(sales, "propose_move_stage", { deal: number, stage: "live_won" });
