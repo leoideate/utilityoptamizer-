@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Module, Param, ParseUUIDPipe, Post, Put } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
-import { callOutcomeSchema, callbackPhoneSchema, startCallSchema } from "@uo/shared";
+import { callOutcomeSchema, callbackPhoneSchema, startCallSchema, toE164 } from "@uo/shared";
 import type { z } from "zod";
 import { ENV, type Env } from "../config/env";
 import type { Actor } from "../common/actor";
@@ -82,7 +82,8 @@ export class CallsController {
               clientId: env.RINGCENTRAL_CLIENT_ID!,
               clientSecret: env.RINGCENTRAL_CLIENT_SECRET!,
               jwt: env.RINGCENTRAL_JWT!,
-              callerId: env.RINGCENTRAL_CALLER_ID,
+              // RingCentral wants +353…; accept the number as written locally, e.g. "(01) 576 4122".
+              callerId: env.RINGCENTRAL_CALLER_ID ? (toE164(env.RINGCENTRAL_CALLER_ID) ?? env.RINGCENTRAL_CALLER_ID) : undefined,
               playPrompt: env.RINGCENTRAL_PLAY_PROMPT,
             })
           : new ManualTelephony(),
