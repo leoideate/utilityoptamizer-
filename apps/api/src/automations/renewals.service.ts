@@ -155,6 +155,7 @@ export class RenewalsService {
         customerId: orig.customerId,
         contactName: orig.contactName,
         companyName: orig.companyName,
+        businessCategory: orig.businessCategory,
         email: orig.email,
         phone: orig.phone,
         phoneKey: orig.phoneKey,

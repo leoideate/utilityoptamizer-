@@ -20,6 +20,7 @@ export interface OpportunityRow {
   renewalDate: string | null;
   updatedAt: string;
   companyName: string | null;
+  businessCategory: import("@uo/shared").BusinessCategory | null;
   contactName: string | null;
   stage: { key: StageKey; name: string };
   owner: { id: string; name: string } | null;

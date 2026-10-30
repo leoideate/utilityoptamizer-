@@ -1,3 +1,4 @@
+import { parseBusinessCategory, inferBusinessCategory, BUSINESS_CATEGORIES } from "@uo/shared";
 import { Body, Controller, Headers, HttpCode, Inject, Injectable, Post, Query, Req, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { ApiConsumes, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
@@ -97,6 +98,11 @@ const COLUMN_ALIASES: Record<string, string> = {
   "owner / manager": "contactName",
   "owner / manager name": "contactName",
   "owner/manager name": "contactName",
+  niche: "businessCategory",
+  "business category": "businessCategory",
+  businesscategory: "businessCategory",
+  business_category: "businessCategory",
+  industry: "industry",
   category: "businessType",
   "business type": "businessType",
   address: "address",
@@ -128,6 +134,7 @@ export const importQuerySchema = z.object({
 });
 
 export const leadPayloadSchema = z.object({
+  businessCategory: z.enum(BUSINESS_CATEGORIES).optional(),
   /** Unique per lead from the sending system; the same id is never imported twice. */
   externalId: z.string().min(1).max(200),
   name: z.string().trim().max(200).optional(),
@@ -193,11 +200,17 @@ export class LeadIntakeService {
         errors.push({ line, issues: ["No service: fill in the Service column or choose the services to create."] });
         continue;
       }
+      const category = rec.businessCategory ? parseBusinessCategory(rec.businessCategory) : inferBusinessCategory(rec.businessType, rec.industry);
+      if (rec.businessCategory && !category) {
+        errors.push({ line, issues: [`Unknown Business Category "${rec.businessCategory}".`] });
+        continue;
+      }
       const contact = rec.contactName ? splitContact(rec.contactName) : undefined;
       const hours = rec.hours && !NO_HOURS.has(rec.hours.toLowerCase()) ? `Opening hours: ${rec.hours}` : undefined;
       const leads = rowServices.map((service) =>
         createOpportunitySchema.safeParse({
           ...rec,
+          businessCategory: category,
           name: rec.name || [rec.companyName || contact?.name, service ? (service === "merchant_services" ? "Worldpay" : SERVICE_TYPE_LABELS[service]) : rec.serviceType].filter(Boolean).join(" – "),
           serviceType: service,
           contactName: contact?.name,
@@ -233,7 +246,7 @@ export class LeadIntakeService {
   private async customerFor(actor: Actor, rec: Record<string, string>, address: Address | null, contact: { name: string; role?: string } | undefined, line: number, warnings: { line: number; issues: string[] }[]) {
     const legalName = rec.companyName || contact?.name;
     if (!legalName) return undefined;
-    const res = await this.customers.create(actor, { legalName, businessType: rec.businessType, phone: rec.phone, email: rec.email, addresses: address ? [address] : undefined });
+    const res = await this.customers.create(actor, { legalName, businessType: rec.businessType, industry: rec.industry, phone: rec.phone, email: rec.email, addresses: address ? [address] : undefined });
     if (!res.id) {
       const match = res.duplicates![0];
       warnings.push({ line, issues: [`${legalName} may already be in the CRM as ${match.customer.legalName} (${match.reasons.join(", ").toLowerCase()}). Its leads were created without a customer, so link or create one from the deal.`] });
@@ -259,6 +272,7 @@ export class LeadIntakeService {
       serviceType: payload.serviceType,
       saleType: "new_sale",
       companyName: payload.companyName ?? null,
+      businessCategory: payload.businessCategory ?? null,
       contactName: payload.contactName ?? null,
       email: payload.email ?? null,
       phone: payload.phone ?? null,

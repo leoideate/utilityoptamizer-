@@ -3,9 +3,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, MoreHorizontal, Plus } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { SELECTABLE_SERVICE_TYPES, SERVICE_TYPE_LABELS, STAGES, type ServiceType, type StageKey } from "@uo/shared";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
+import { BUSINESS_CATEGORY_LABELS, type BusinessCategory, SELECTABLE_SERVICE_TYPES, SERVICE_TYPE_LABELS, STAGES, type ServiceType, type StageKey } from "@uo/shared";
+import { businessCategoryOptions } from "@/components/business-category";
 import { ServiceBadge } from "@/components/domain";
 import { GateIssueList, gateIssueTarget } from "@/components/opportunity/gate-issues";
 import { Dialog, Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from "@/components/ui/overlays";
@@ -24,6 +25,7 @@ interface Card {
   expectedRevenue: number | null;
   stageEnteredAt: string;
   companyName: string | null;
+  businessCategory: BusinessCategory | null;
   owner: { id: string; name: string } | null;
   customer: { legalName: string } | null;
 }
@@ -31,15 +33,22 @@ interface Board {
   columns: { stage: { id: string; key: StageKey; name: string }; count: number; value: number; cards: Card[] }[];
 }
 
-export default function PipelinePage() {
+function PipelineBoard() {
   const can = useCan();
   const router = useRouter();
   const qc = useQueryClient();
-  const [view, setView] = useState(can("opportunity.read_all") ? "all" : "my_open");
-  const [service, setService] = useState("");
+  const params = useSearchParams();
+  const view = params.get("view") ?? (can("opportunity.read_all") ? "all" : "my_open");
+  const service = params.get("serviceType") ?? "";
+  const businessCategory = params.get("businessCategory") ?? "";
+  const setFilter = (key: string, value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value); else next.delete(key);
+    router.replace(`/pipeline?${next.toString()}`, { scroll: false });
+  };
   const [dragging, setDragging] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<{ id: string; name: string; serviceType: ServiceType; stage: string; issues: string[]; linked: boolean } | null>(null);
-  const query = qs({ view, serviceType: service });
+  const query = qs({ view, serviceType: service, businessCategory });
   const { data, isLoading } = useQuery({ queryKey: ["board", query], queryFn: () => api.get<Board>(`/opportunities/board${query}`) });
 
   const move = useMutation({
@@ -77,12 +86,15 @@ export default function PipelinePage() {
         description="Drag a card to another stage, or use its menu. Requirements are checked when you move."
         actions={
           <>
-            <Select className="w-auto" value={view} onChange={(e) => setView(e.target.value)} aria-label="Whose leads">
+            <div className="w-full sm:w-44">
+            <Select className="w-auto" value={view} onChange={(e) => setFilter("view", e.target.value)} aria-label="Whose leads">
               <option value="my_open">My leads</option>
               <option value="all">{can("opportunity.read_all") ? "Everyone" : "Mine and unassigned"}</option>
               <option value="unassigned">Unassigned</option>
             </Select>
-            <Select className="w-auto" value={service} onChange={(e) => setService(e.target.value)} aria-label="Service">
+            </div>
+            <div className="w-full sm:w-44">
+            <Select className="w-auto" value={service} onChange={(e) => setFilter("serviceType", e.target.value)} aria-label="Service">
               <option value="">All services</option>
               {SELECTABLE_SERVICE_TYPES.map((k) => (
                 <option key={k} value={k}>
@@ -90,6 +102,12 @@ export default function PipelinePage() {
                 </option>
               ))}
             </Select>
+            </div>
+            <div className="w-full sm:w-60">
+            <Select className="w-auto" value={businessCategory} onChange={(e) => setFilter("businessCategory", e.target.value)} aria-label="Business Category">
+              {businessCategoryOptions(true)}
+            </Select>
+            </div>
             <Button asChild>
               <Link href="/opportunities/new">
                 <Plus /> New
@@ -141,6 +159,7 @@ export default function PipelinePage() {
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <ServiceBadge service={c.serviceType} short />
+                        <Badge>{c.businessCategory ? BUSINESS_CATEGORY_LABELS[c.businessCategory] : "Uncategorized"}</Badge>
                         {c.saleType === "renewal" && <Badge tone="accent">Renewal</Badge>}
                         {c.outcome === "won" && <Badge tone="success">Live</Badge>}
                       </div>
@@ -152,7 +171,7 @@ export default function PipelinePage() {
                   ))}
                   {col.count > col.cards.length && (
                     <li className="px-1 text-center text-xs text-muted">
-                      <Link className="inline-flex min-h-6 items-center hover:underline" href={`/opportunities?view=${view}&stage=${col.stage.key}`}>
+                      <Link className="inline-flex min-h-6 items-center hover:underline" href={`/opportunities${qs({ view, serviceType: service, businessCategory, stage: col.stage.key })}`}>
                         +{col.count - col.cards.length} more
                       </Link>
                     </li>
@@ -212,4 +231,8 @@ function MoveMenu({ card, current, onMove }: { card: Card; current: StageKey; on
       </MenuContent>
     </Menu>
   );
+}
+
+export default function PipelinePage() {
+  return <Suspense fallback={<Skeleton className="h-96" />}><PipelineBoard /></Suspense>;
 }

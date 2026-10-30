@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BUSINESS_CATEGORIES } from "./business-categories";
 import {
   ACTIVITY_TYPES,
   APPROVAL_STATES,
@@ -150,6 +151,7 @@ export const bankDetailsSchema = z.object({
 // --- Opportunities ---------------------------------------------------------
 
 export const createOpportunitySchema = z.object({
+  businessCategory: z.enum(BUSINESS_CATEGORIES).nullable().optional(),
   notes: optText(10000),
   name: text(200).min(1, "Give the opportunity a name."),
   serviceType: z.enum(SERVICE_TYPES),
@@ -175,6 +177,7 @@ export const createOpportunitySchema = z.object({
 });
 
 export const updateOpportunitySchema = z.object({
+  businessCategory: z.enum(BUSINESS_CATEGORIES).nullable().optional(),
   notes: optText(10000),
   name: text(200).min(1).optional(),
   serviceType: z.enum(SERVICE_TYPES).optional(),
@@ -234,6 +237,7 @@ export const purgeLeadsSchema = leadPurgeFilterSchema.extend({
 export const activateSchema = z.object({ activationDate: isoDate, supplierReference: optText(100) });
 
 export const opportunityListQuerySchema = z.object({
+  businessCategory: z.enum([...BUSINESS_CATEGORIES, "uncategorized"]).optional(),
   view: z
     .enum([
       "my_open",

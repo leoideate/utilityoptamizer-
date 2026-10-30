@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { LEAD_SOURCE_LABELS, type LeadSource, SELECTABLE_SERVICE_TYPES, SERVICE_TYPE_LABELS, STAGES } from "@uo/shared";
+import { businessCategoryOptions } from "@/components/business-category";
 import { OutcomeBadge, ServiceBadge, UserSelect, useSuppliers } from "@/components/domain";
 import { BulkAssignBar } from "@/components/bulk-assign-bar";
 import { CloseLeadBatchButton } from "@/components/close-lead-batch";
@@ -50,6 +51,7 @@ function OpportunitiesList() {
     view,
     q: params.get("q") ?? "",
     serviceType: params.get("serviceType") ?? "",
+    businessCategory: params.get("businessCategory") ?? "",
     stage: params.get("stage") ?? "",
     ownerId: params.get("ownerId") ?? "",
     // Set by the dashboard's figures; shown as one line above the list.
@@ -147,9 +149,9 @@ function OpportunitiesList() {
         </nav>
 
         <div className="min-w-0 space-y-4">
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+          <div className="grid grid-cols-2 gap-2">
             <Input className="col-span-2 sm:max-w-xs" type="search" placeholder="Search name, company, UO number…" aria-label="Search leads" value={search} onChange={(e) => setSearch(e.target.value)} />
-            <Select className="sm:w-auto" value={filters.serviceType} onChange={(e) => setParam({ serviceType: e.target.value })} aria-label="Service">
+            <Select className="min-w-0" value={filters.serviceType} onChange={(e) => setParam({ serviceType: e.target.value })} aria-label="Service">
               <option value="">All services</option>
               {SELECTABLE_SERVICE_TYPES.map((k) => (
                 <option key={k} value={k}>
@@ -157,7 +159,8 @@ function OpportunitiesList() {
                 </option>
               ))}
             </Select>
-            <Select className="sm:w-auto" value={filters.stage} onChange={(e) => setParam({ stage: e.target.value })} aria-label="Stage">
+            <Select className="min-w-0" value={filters.businessCategory} onChange={(e) => setParam({ businessCategory: e.target.value })} aria-label="Business Category">{businessCategoryOptions(true)}</Select>
+            <Select className="min-w-0" value={filters.stage} onChange={(e) => setParam({ stage: e.target.value })} aria-label="Stage">
               <option value="">All stages</option>
               {STAGES.map((s) => (
                 <option key={s.key} value={s.key}>
@@ -166,16 +169,17 @@ function OpportunitiesList() {
               ))}
             </Select>
             {seesAll && (
-              <div className="col-span-2 sm:w-auto">
+              <div className="min-w-0">
                 <UserSelect value={filters.ownerId} onChange={(v) => setParam({ ownerId: v })} />
               </div>
             )}
-            {(filters.q || filters.serviceType || filters.stage || filters.ownerId || drilled.length > 0) && (
+            {(filters.q || filters.serviceType || filters.businessCategory || filters.stage || filters.ownerId || drilled.length > 0) && (
               <Button
                 variant="ghost"
+                className="col-span-2 justify-self-start"
                 onClick={() => {
                   setSearch("");
-                  setParam({ q: "", serviceType: "", stage: "", ownerId: "", supplierId: "", outcome: "", leadSource: "", dated: "", from: "", to: "" });
+                  setParam({ q: "", serviceType: "", businessCategory: "", stage: "", ownerId: "", supplierId: "", outcome: "", leadSource: "", dated: "", from: "", to: "" });
                 }}
               >
                 Reset filters

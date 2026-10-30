@@ -43,7 +43,7 @@ export function ImportLeadsButton() {
       <Dialog open={open} onOpenChange={setOpen} title="Import leads from CSV" description="One lead per row. Leads arrive unassigned and are shared out automatically.">
         <div className="space-y-4 text-sm">
           <p>
-            Columns (first row): <strong>Service</strong> (Electricity, Gas or Worldpay), or choose the services below. Optional: Name, Company or Business name, Contact or Owner / Manager name, Email, Phone, Campaign, Source, Notes, Expected revenue, Category, Address, Area, Opening hours.
+            Columns (first row): <strong>Service</strong> (Electricity, Gas or Worldpay), or choose the services below. Optional: Name, Company or Business name, Contact or Owner / Manager name, Email, Phone, Campaign, Source, Notes, Expected revenue, Business Category (or Niche), Category, Industry, Address, Area, Opening hours.
           </p>
           <p className="text-muted">With an Address or Category, a customer is created for each business (a possible duplicate is listed instead, never merged), and energy leads get a supply site at the address.</p>
           <CheckboxGroup

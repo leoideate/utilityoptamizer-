@@ -37,6 +37,7 @@ async function liveDualFuel(daysToEnd: number) {
 describe("renewals (scenarios 15–17)", () => {
   it("creates one linked renewal per deal, copies only reusable data, and never duplicates", async () => {
     const original = await liveDualFuel(100);
+    await t.prisma.opportunity.update({ where: { id: original }, data: { businessCategory: "cafe" } });
     const before = await t.prisma.energyContract.findMany({ where: { opportunityId: original }, orderBy: { fuel: "asc" } });
     const origOpp = await t.prisma.opportunity.findUniqueOrThrow({ where: { id: original } });
     const renewals = t.app.get(RenewalsService);
@@ -48,6 +49,7 @@ describe("renewals (scenarios 15–17)", () => {
       saleType: "renewal",
       serviceType: "dual_fuel",
       previousOpportunityId: original,
+      businessCategory: "cafe",
       ownerId: team.salesId,
       customerId: origOpp.customerId,
       outcome: "open",

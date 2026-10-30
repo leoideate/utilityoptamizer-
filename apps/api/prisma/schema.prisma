@@ -603,6 +603,7 @@ model Opportunity {
   // Captured before a Customer exists.
   contactName           String?           @map("contact_name")
   companyName           String?           @map("company_name")
+  businessCategory      String?           @map("business_category")
   email                 String?
   phone                 String?
   /// phoneKey(phone): matches calls from a lead's number before a customer exists.
@@ -687,6 +688,7 @@ model Opportunity {
   @@index([serviceType])
   @@index([renewalDate])
   @@index([phoneKey])
+  @@index([businessCategory, stageId])
   @@map("opportunities")
 }
 
