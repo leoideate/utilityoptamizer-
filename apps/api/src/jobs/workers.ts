@@ -12,7 +12,7 @@ import { DocumentsService } from "../documents/documents.service";
 import { IntegrationsService } from "../integrations/integrations.service";
 import { MailboxesService } from "../mailboxes/mailboxes.service";
 import { redisConnection } from "./jobs.module";
-import { DEFAULT_ATTEMPTS, QUEUES } from "./queue";
+import { BACKOFF, DEFAULT_ATTEMPTS, QUEUES } from "./queue";
 
 const TZ = "Europe/Dublin";
 
@@ -31,10 +31,12 @@ export async function registerSchedules(env: Env) {
   await q.upsertJobScheduler("mailbox-sync", { pattern: "*/2 * * * *", tz: TZ }, { name: "mail-sync", data: {} });
   // Calls from the RingCentral call log (inbound, missed, desk phones and the app) every five minutes.
   if (env.TELEPHONY_PROVIDER === "ringcentral") await q.upsertJobScheduler("call-log-sync", { pattern: "*/5 * * * *", tz: TZ }, { name: "call-log", data: {} });
-  // Incoming-call pop-ups: keep the RingCentral webhook subscription alive (and set it up now, on start).
+  // Incoming-call pop-ups: keep the RingCentral webhook subscription alive (and set it up soon after start).
+  // RingCentral checks the webhook address while subscribing, which fails until the platform routes
+  // traffic to this new instance, so the first attempt waits a minute and retries with backoff.
   if (env.TELEPHONY_PROVIDER === "ringcentral" && env.RINGCENTRAL_WEBHOOK_TOKEN) {
     await q.upsertJobScheduler("ringcentral-subscription", { pattern: "17 */6 * * *", tz: TZ }, { name: "rc-subscription", data: {} });
-    await q.add("rc-subscription", {}, { jobId: `rc-subscription-start-${Date.now()}`, removeOnComplete: true });
+    await q.add("rc-subscription", {}, { jobId: `rc-subscription-start-${Date.now()}`, delay: 60_000, attempts: DEFAULT_ATTEMPTS, backoff: BACKOFF, removeOnComplete: true });
   }
   await q.close();
 }
