@@ -42,6 +42,6 @@ describe("the CRM assistant", () => {
 
   it("links each blocking issue to the tab that fixes it", () => {
     expect(issueTab("All required documents must be received and approved.", true)).toBe("documents");
-    expect(issueTab("Enter an MPRN for each electricity meter.", true)).toBe("energy");
+    expect(issueTab("Internal approval must be granted before submission.", true)).toBe("overview");
   });
 });
