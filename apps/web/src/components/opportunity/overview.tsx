@@ -24,6 +24,8 @@ import {
   isEnergyService,
   serviceTypeChoices,
 } from "@uo/shared";
+import { businessCategoryOptions } from "@/components/business-category";
+import { type BusinessCategory } from "@uo/shared";
 import { useSuppliers } from "@/components/domain";
 import { CollectCard } from "./collect";
 import { Dialog } from "@/components/ui/overlays";
@@ -44,10 +46,10 @@ const GATE_LABELS: Record<keyof Workspace["gates"], string> = {
 export function OverviewTab({ opp, onGoTo }: { opp: Workspace; onGoTo: (tab: string) => void }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="order-2 min-w-0 lg:order-1">
+      <div className="min-w-0">
         <DetailsCard opp={opp} />
       </div>
-      <div className="order-1 min-w-0 space-y-6 lg:order-2">
+      <div className="min-w-0 space-y-6">
         <NotesCard key={opp.id} opp={opp} />
         <CustomerCard opp={opp} />
         {opp.serviceType !== "merchant_services" && <CollectCard opp={opp} />}
@@ -136,6 +138,7 @@ function NotesCard({ opp }: { opp: Workspace }) {
 }
 
 interface DetailValues {
+  businessCategory: BusinessCategory | "";
   name: string;
   serviceType: string;
   saleType: string;
@@ -161,6 +164,7 @@ interface DetailValues {
 function toValues(o: Workspace): DetailValues {
   return {
     name: o.name,
+    businessCategory: o.businessCategory ?? "",
     serviceType: o.serviceType,
     saleType: o.saleType,
     leadSource: o.leadSource,
@@ -193,6 +197,7 @@ function DetailsCard({ opp }: { opp: Workspace }) {
     mutationFn: (v: DetailValues) =>
       api.patch(`/opportunities/${opp.id}`, {
         name: v.name,
+        businessCategory: v.businessCategory || null,
         serviceType: v.serviceType,
         saleType: v.saleType,
         leadSource: v.leadSource,
@@ -244,10 +249,11 @@ function DetailsCard({ opp }: { opp: Workspace }) {
       />
       <fieldset disabled={ro} className="grid gap-4 p-5 sm:grid-cols-2">
         <legend className="sr-only">Lead details</legend>
-        <Field label="Name" className="sm:col-span-2">
+        <Field label="Lead name" className="sm:col-span-2">
           {(p) => <Input {...p} {...register("name", { required: true })} />}
         </Field>
-        <Field label="Trading name" className="sm:col-span-2">{(p) => <Input {...p} {...register("companyName")} />}</Field>
+        <Field label="Trading name">{(p) => <Input {...p} {...register("companyName")} />}</Field>
+        <Field label="Business Category">{(p) => <Select {...p} {...register("businessCategory")}>{businessCategoryOptions()}</Select>}</Field>
         <Field label="Service" hint={opp.outcome === "won" ? "Can't change after activation." : undefined}>
           {(p) => (
             <Select {...p} disabled={opp.outcome === "won" || ro} {...register("serviceType", {

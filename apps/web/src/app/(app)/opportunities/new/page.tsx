@@ -7,6 +7,7 @@ import { Suspense } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import {
+  BUSINESS_CATEGORIES,
   LEAD_SOURCES,
   LEAD_SOURCE_LABELS,
   PRODUCT_INTERESTS,
@@ -20,6 +21,7 @@ import {
   SUPPLY_CHANGE_LABELS,
   isEnergyService,
 } from "@uo/shared";
+import { businessCategoryOptions } from "@/components/business-category";
 import { UserSelect } from "@/components/domain";
 import { Button, Card, CardHeader, CheckboxGroup, Field, Input, PageHeader, Select, Textarea } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
@@ -27,6 +29,7 @@ import { useCan } from "@/lib/session";
 
 /** Quick capture: only a name and service are required. Everything else can come later. */
 const schema = z.object({
+  businessCategory: z.union([z.enum(BUSINESS_CATEGORIES), z.literal("")]).optional(),
   notes: z.string().trim().max(10000, "Keep notes within 10,000 characters.").optional(),
   name: z.string().trim().min(1, "Give the lead a name, e.g. the business and service."),
   serviceType: z.enum(SERVICE_TYPES),
@@ -57,12 +60,13 @@ function NewOpportunityForm() {
   const can = useCan();
   const { register, handleSubmit, formState, setValue, watch } = useForm<z.input<typeof schema>, unknown, Values>({
     resolver: zodResolver(schema),
-    defaultValues: { notes: "", serviceType: "electricity", saleType: "new_sale", productInterest: [], supplyChanges: [], leadSource: "manual", customerId: params.get("customerId") ?? undefined, companyName: params.get("company") ?? "" },
+    defaultValues: { businessCategory: "", notes: "", serviceType: "electricity", saleType: "new_sale", productInterest: [], supplyChanges: [], leadSource: "manual", customerId: params.get("customerId") ?? undefined, companyName: params.get("company") ?? "" },
   });
   const create = useMutation({
     mutationFn: (v: Values) =>
       api.post<{ id: string }>("/opportunities", {
         ...v,
+        businessCategory: v.businessCategory || null,
         notes: v.notes?.trim() || null,
         expectedRevenue: v.expectedRevenue === "" || v.expectedRevenue === undefined ? null : v.expectedRevenue,
         followUpDate: v.followUpDate || null,
@@ -86,6 +90,8 @@ function NewOpportunityForm() {
           <Field label="Lead name" required error={e.name?.message} className="sm:col-span-2">
             {(p) => <Input {...p} placeholder="e.g. Harbour Café – electricity" autoFocus {...register("name")} />}
           </Field>
+          <Field label="Trading name">{(p) => <Input {...p} autoComplete="organization" {...register("companyName")} />}</Field>
+          <Field label="Business Category">{(p) => <Select {...p} {...register("businessCategory")}>{businessCategoryOptions()}</Select>}</Field>
           <Field label="Service">
             {(p) => (
               <Select {...p} {...register("serviceType")}>
@@ -108,6 +114,12 @@ function NewOpportunityForm() {
               </Select>
             )}
           </Field>
+          <Field label="Contact name">{(p) => <Input {...p} autoComplete="name" {...register("contactName")} />}</Field>
+          <Field label="Email" error={e.email?.message}>
+            {(p) => <Input {...p} type="email" autoComplete="email" {...register("email")} />}
+          </Field>
+          <Field label="Phone">{(p) => <Input {...p} type="tel" autoComplete="tel" {...register("phone")} />}</Field>
+          <Field label="Contact role" hint="e.g. Owner, manager, bookkeeper">{(p) => <Input {...p} autoComplete="organization-title" {...register("contactRole")} />}</Field>
           <Field label="Lead source">
             {(p) => (
               <Select {...p} {...register("leadSource")}>
@@ -141,21 +153,6 @@ function NewOpportunityForm() {
         </div>
       </Card>
 
-      <Card className="space-y-4 p-5">
-        <div>
-          <h2 className="font-semibold">Who is it?</h2>
-          <p className="text-sm text-muted">Just capture what you know. You can create or link the full customer record later.</p>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Business name">{(p) => <Input {...p} autoComplete="organization" {...register("companyName")} />}</Field>
-          <Field label="Contact name">{(p) => <Input {...p} autoComplete="name" {...register("contactName")} />}</Field>
-          <Field label="Contact role" hint="e.g. Owner, manager, bookkeeper">{(p) => <Input {...p} autoComplete="organization-title" {...register("contactRole")} />}</Field>
-          <Field label="Email" error={e.email?.message}>
-            {(p) => <Input {...p} type="email" autoComplete="email" {...register("email")} />}
-          </Field>
-          <Field label="Phone">{(p) => <Input {...p} type="tel" autoComplete="tel" {...register("phone")} />}</Field>
-        </div>
-      </Card>
 
       <Card className="space-y-4 p-5">
         <h2 className="font-semibold">Next steps</h2>

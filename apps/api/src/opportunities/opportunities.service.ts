@@ -81,6 +81,7 @@ export class OpportunitiesService {
           customerId: input.customerId ?? null,
           contactName: input.contactName ?? null,
           companyName: input.companyName ?? null,
+          businessCategory: input.businessCategory ?? null,
           email: input.email ?? null,
           phone: input.phone ?? null,
           phoneKey: phoneKey(input.phone),
@@ -720,6 +721,7 @@ export class OpportunitiesService {
       lost: { outcome: "lost" },
     };
     const and: Prisma.OpportunityWhereInput[] = [this.access.visibleWhere(actor), views[q.view]];
+    if (q.businessCategory) and.push({ businessCategory: q.businessCategory === "uncategorized" ? null : q.businessCategory });
     if (q.ownerId) and.push({ ownerId: q.ownerId });
     if (q.serviceType) and.push({ serviceType: q.serviceType });
     if (q.stage) and.push({ stage: { key: q.stage } });
@@ -798,6 +800,7 @@ export class OpportunitiesService {
             followUpDate: true,
             stageEnteredAt: true,
             companyName: true,
+            businessCategory: true,
             owner: { select: { id: true, name: true } },
             customer: { select: { legalName: true } },
           },

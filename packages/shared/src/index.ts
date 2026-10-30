@@ -1,4 +1,5 @@
 export * from "./enums";
+export * from "./business-categories";
 export * from "./stages";
 export * from "./permissions";
 export * from "./rules";
