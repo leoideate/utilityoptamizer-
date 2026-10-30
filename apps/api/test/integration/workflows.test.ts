@@ -174,16 +174,8 @@ describe("change of entity on a supply point already in our records", () => {
     expect(value("outgoing.legalName")).toBe("Test Trading Ltd");
     expect(value("site.mprn")).toBe("10012345678");
 
-    // The checklist flags the missing IBAN, landlord details and occupancy date.
-    const issues = await gate(caseOpp, "documents_prepared");
-    expect(issues).toEqual(
-      expect.arrayContaining([
-        "Add the incoming customer's own bank account (IBAN).",
-        "Enter the landlord's name on the supply site.",
-        "Enter the landlord's contact details on the supply site.",
-        "Enter the incoming customer's proposed occupancy date.",
-      ]),
-    );
+    // The checklist lists the missing IBAN, landlord details and occupancy date, but doesn't block a move.
+    expect(await gate(caseOpp, "documents_prepared")).toEqual([]);
   });
 
   it("an IBAN copied from the outgoing customer blocks documents", async () => {
@@ -466,7 +458,7 @@ describe("renewal with the existing supplier", () => {
     expectStatus(await team.sales.patch(`/opportunities/${oppId}`, { saleType: "renewal", selectedSupplierId: card.id }), 204);
     const customer = (await t.prisma.opportunity.findUniqueOrThrow({ where: { id: oppId } })).customerId!;
     expectStatus(await team.sales.patch(`/customers/${customer}`, { addresses: [{ kind: "billing", line1: "1 Main Street" }] }), 204);
-    expect(await gate(oppId, "documents_prepared")).toContain("Choose whether the customer is an existing client or new to us.");
+    expect(await gate(oppId, "documents_prepared")).not.toContain("Choose whether the customer is an existing client or new to us.");
     expectStatus(await team.sales.put(`/opportunities/${oppId}/case`, { customerPath: "new_to_us", requestChannel: "email" }), 204);
     const contract = await t.prisma.energyContract.findFirstOrThrow({ where: { opportunityId: oppId } });
     expectStatus(await team.sales.patch(`/contracts/${contract.id}`, { proposedActivationDate: addDays(today(), 60), gasRate: null, dayRate: 0.28 }), 204);

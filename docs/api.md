@@ -31,7 +31,7 @@ Every `POST`/`PUT`/`PATCH`/`DELETE` must send:
 Every error has the same shape:
 
 ```json
-{ "statusCode": 422, "message": "Please fix the following.", "issues": ["Enter an MPRN for every electricity meter.", "Internal approval must be granted before submission."] }
+{ "statusCode": 422, "message": "Please fix the following.", "issues": ["The customer must sign before submission.", "Internal approval must be granted before submission."] }
 ```
 
 | Status | Meaning |

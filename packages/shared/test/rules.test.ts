@@ -87,26 +87,14 @@ describe("stage gates", () => {
     expect(stageGateIssues(readyMerchant(), "submitted")).toEqual([]);
   });
 
-  it("requires MPRN for electricity and dual fuel, GPRN for gas and dual fuel", () => {
-    const noMprn = readyEnergy("electricity");
-    noMprn.sites[0].meterPoints[0].mprn = null;
-    expect(stageGateIssues(noMprn, "submitted")).toContain("Enter an MPRN for every electricity meter.");
-
-    const dualNoGas = readyEnergy("dual_fuel");
-    dualNoGas.sites[0].meterPoints = dualNoGas.sites[0].meterPoints.filter((m) => m.fuel === "electricity");
-    expect(stageGateIssues(dualNoGas, "submitted")).toContain("Enter a GPRN for every gas meter.");
-
-    const gas = readyEnergy("gas");
-    expect(stageGateIssues(gas, "submitted").some((i) => i.includes("MPRN"))).toBe(false);
-    gas.sites[0].meterPoints[0].gprn = null;
-    expect(stageGateIssues(gas, "submitted")).toContain("Enter a GPRN for every gas meter.");
-  });
-
-  it("MPRN/GPRN are only enforced at submission", () => {
-    const f = readyEnergy("electricity");
-    f.sites[0].meterPoints = [];
-    f.internalApproval = "pending";
-    expect(stageGateIssues(f, "documents_prepared")).toEqual([]);
+  it("never blocks a move for missing details", () => {
+    const bareEnergy = facts({ serviceType: "dual_fuel", internalApproval: "approved", signatures: [{ status: "completed", hasCustomerSigner: true }], customer: { vatRegistered: "yes", vatNumber: null, website: null }, sites: [{ label: "Main St", occupancyType: "rented", hasLandlord: false, meterPoints: [{ fuel: "electricity", mprn: null, gprn: null }] }] });
+    expect(stageGateIssues(bareEnergy, "submitted")).toEqual([]);
+    const m = readyMerchant();
+    Object.assign(m.merchantApps[0], { cardTurnoverPct: null, website: null, productCount: 0, legalEntity: "partnership" });
+    Object.assign(m.merchantApps[0].risk!, { depositsAccepted: true });
+    m.customerId = null;
+    expect(stageGateIssues(m, "submitted")).toEqual([]);
   });
 
   it("blocks submission without internal approval, signature or approved documents", () => {
@@ -121,63 +109,6 @@ describe("stage gates", () => {
     expect(issues).toContain("Internal approval must be granted before submission.");
     expect(issues).toContain("The customer must sign before submission.");
     expect(issues).toContain("These required documents must be received and approved: Recent energy bill.");
-  });
-
-  it("requires the supplier from Supplier Selected onwards", () => {
-    const f = readyEnergy("gas");
-    f.selectedSupplierId = null;
-    expect(stageGateIssues(f, "client_reviewing")).toEqual([]);
-    expect(stageGateIssues(f, "supplier_selected")).toEqual(["Select the supplier."]);
-  });
-
-  it("requires landlord details for rented premises", () => {
-    const f = readyEnergy("electricity");
-    f.sites[0].occupancyType = "rented";
-    expect(stageGateIssues(f, "documents_prepared")).toContain("Main St is rented: enter the landlord's details.");
-    f.sites[0].hasLandlord = true;
-    expect(stageGateIssues(f, "documents_prepared")).toEqual([]);
-  });
-
-  it("requires a VAT number when VAT registered", () => {
-    const f = readyEnergy("electricity");
-    f.customer = { vatRegistered: "yes", vatNumber: null, website: null };
-    expect(stageGateIssues(f, "documents_prepared")).toContain("Enter the VAT number: the customer is VAT registered.");
-  });
-
-  it("requires Worldpay turnover details before a proposal", () => {
-    const f = readyMerchant();
-    f.merchantApps[0].cardTurnoverPct = null;
-    expect(stageGateIssues(f, "client_reviewing")).toContain("Enter the percentage of turnover taken by card.");
-    expect(stageGateIssues(f, "comparison_prepared")).toEqual([]);
-  });
-
-  it("requires deposit and prepayment details only when accepted", () => {
-    const f = readyMerchant();
-    const risk = f.merchantApps[0].risk!;
-    risk.depositsAccepted = true;
-    risk.fullPrepaymentAccepted = true;
-    const issues = stageGateIssues(f, "documents_prepared");
-    expect(issues.filter((i) => i.startsWith("Deposits are accepted"))).toHaveLength(4);
-    expect(issues.filter((i) => i.startsWith("Full payment in advance"))).toHaveLength(2);
-    Object.assign(risk, { depositTxnPct: 20, depositValuePct: 25, depositLeadDays: 30, balanceLeadDays: 0, fullPrepaymentPct: 5, fullPaymentLeadDays: 14 });
-    expect(stageGateIssues(f, "documents_prepared")).toEqual([]);
-  });
-
-  it("requires principals according to legal entity", () => {
-    const f = readyMerchant();
-    f.merchantApps[0].legalEntity = "partnership";
-    f.merchantApps[0].principals = [{ name: "A", role: "partner", hasDateOfBirth: true, hasNationality: true, addressHistoryYears: 3 }];
-    expect(stageGateIssues(f, "documents_prepared")).toContain("A partnership needs principal details for at least two partners.");
-    f.merchantApps[0].principals.push({ name: "B", role: "partner", hasDateOfBirth: false, hasNationality: true, addressHistoryYears: 1 });
-    expect(stageGateIssues(f, "documents_prepared")).toEqual(["Principal B is missing date of birth, 3 years of address history."]);
-  });
-
-  it("requires an advertising method when there is no website", () => {
-    const f = readyMerchant();
-    f.merchantApps[0].website = null;
-    expect(stageGateIssues(f, "documents_prepared")[0]).toMatch(/no website/);
-    f.merchantApps[0].advertisingMethod = "Facebook page";
-    expect(stageGateIssues(f, "documents_prepared")).toEqual([]);
   });
 
   it("requires compliance approval for Worldpay submission", () => {
@@ -215,10 +146,6 @@ describe("where each gate issue is fixed", () => {
       "submitted",
     );
     expect(issues.map((i) => [i, gateIssueArea(i)])).toEqual([
-      ["Main St is rented: enter the landlord's details.", { area: "supply" }],
-      ["Enter an MPRN for every electricity meter.", { area: "supply" }],
-      ["Enter a GPRN for every gas meter.", { area: "supply" }],
-      ["Add the energy contract details.", { area: "supply" }],
       [expect.stringMatching(/^These required documents/), { area: "documents" }],
       ["The customer must sign before submission.", { area: "signatures" }],
       ["Check the previous supplier's bill (readable, and the customer, MPRN/GPRN and supplier match).", { area: "case" }],
@@ -227,10 +154,8 @@ describe("where each gate issue is fixed", () => {
     ]);
   });
 
-  it("sends Worldpay, customer and case issues to their places", () => {
+  it("sends Worldpay and case issues to their places", () => {
     expect(gateIssueArea("Compliance must approve the Worldpay risk review before submission.")).toEqual({ area: "worldpay" });
-    expect(gateIssueArea("Principal Aoife Byrne is missing date of birth.")).toEqual({ area: "worldpay" });
-    expect(gateIssueArea("Link or create the customer.")).toEqual({ area: "details" });
     expect(gateIssueArea("Upload the lease agreement under Documents: a signed lease is needed before submission.")).toEqual({ area: "documents" });
     expect(gateIssueArea("Record the external party's acceptance and reference: a sent submission is not an accepted one.")).toEqual({ area: "case" });
   });

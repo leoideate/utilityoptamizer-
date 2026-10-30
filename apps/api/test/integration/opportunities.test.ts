@@ -96,19 +96,21 @@ describe("onboarding fields", () => {
 });
 
 describe("stage validation (scenarios 6–9)", () => {
-  it("early stages need nothing; later stages list what's missing", async () => {
+  it("missing details never block a move; sign-off steps do", async () => {
     const opp = await createOpportunity(team.sales, "dual_fuel");
     for (const stage of ["call_scheduled", "contacted", "interested", "details_requested", "details_received", "comparison_prepared"]) {
       expectStatus(await team.sales.post(`/opportunities/${opp}/stage`, { stage }), 204);
     }
-    const res = expectStatus(await team.sales.post(`/opportunities/${opp}/stage`, { stage: "proposal_sent" }), 422);
-    expect(res.body.message).toBe("Add at least one supply site before sending a proposal.");
+    // No site, supplier or customer yet: still free to move up to Documents Prepared.
+    for (const stage of ["proposal_sent", "client_reviewing", "supplier_selected", "documents_prepared"]) {
+      expectStatus(await team.ops.post(`/opportunities/${opp}/stage`, { stage }), 204);
+    }
     // Moving to Details Requested added the standard document checklist.
     const docs = expectStatus(await team.sales.get(`/opportunities/${opp}/documents`), 200).body;
     expect(docs.map((d: { documentType: string }) => d.documentType)).toEqual(expect.arrayContaining(["energy_bill", "letter_of_authority"]));
   });
 
-  it("submission requires MPRN/GPRN, approved documents, signature and internal approval (7, 8)", async () => {
+  it("submission requires approved documents, signature and internal approval, not MPRN/GPRN or contract (7, 8)", async () => {
     const s = await supplier(t);
     const opp = await createOpportunity(team.sales, "gas");
     expectStatus(await team.sales.post(`/opportunities/${opp}/customer/create`), 201);
@@ -118,14 +120,12 @@ describe("stage validation (scenarios 6–9)", () => {
     const res = expectStatus(await team.ops.post(`/opportunities/${opp}/stage`, { stage: "submitted" }), 422);
     expect(res.body.issues).toEqual(
       expect.arrayContaining([
-        "Enter a GPRN for every gas meter.",
-        "Add the energy contract details.",
         "The customer must sign before submission.",
         "Internal approval must be granted before submission.",
         expect.stringMatching(/^These required documents must be received and approved: Recent energy bill, Letter of authority, Signed supplier contract\.$/),
       ]),
     );
-    expect(res.body.issues.join(" ")).not.toMatch(/MPRN/);
+    expect(res.body.issues.join(" ")).not.toMatch(/MPRN|GPRN|contract details/);
   });
 
   it("only managers can grant internal approval (8)", async () => {
@@ -149,20 +149,13 @@ describe("stage validation (scenarios 6–9)", () => {
     expect(expectStatus(await team.sales.put(`/merchant-applications/${app}/risk`, { depositTxnPct: 120 }), 400).body.issues[0]).toBe("depositTxnPct: Deposit transaction percentage must be between 0 and 100.");
     expectStatus(await team.sales.post(`/merchant-applications/${app}/pricing`, { product: "Terminal", debitRate: 101 }), 400);
     expectStatus(await team.sales.put(`/merchant-applications/${app}/risk`, { depositsAccepted: true, fullPrepaymentAccepted: true }), 204);
-    expectStatus(await team.sales.post(`/opportunities/${opp}/stage`, { stage: "comparison_prepared" }), 204);
-    const blocked = expectStatus(await team.sales.post(`/opportunities/${opp}/stage`, { stage: "proposal_sent" }), 422);
-    expect(blocked.body.issues).toContain("Enter the estimated annual turnover.");
-    await team.sales.patch(`/merchant-applications/${app}`, { estimatedAnnualTurnover: 90000, cardTurnoverPct: 50, averageTransactionValue: 40, advertisingMethod: "Instagram" });
-    await team.sales.post(`/merchant-applications/${app}/pricing`, { product: "Terminal" });
-    expectStatus(await team.sales.post(`/opportunities/${opp}/customer/create`), 201);
-    const docs = expectStatus(await team.sales.post(`/opportunities/${opp}/stage`, { stage: "documents_prepared" }), 422).body.issues as string[];
-    expect(docs.filter((i) => i.startsWith("Deposits are accepted"))).toHaveLength(4);
-    expect(docs.filter((i) => i.startsWith("Full payment in advance"))).toHaveLength(2);
-    expect(docs).toContain("A sole trader needs principal details for the owner.");
-    // Turning deposits off clears the requirement (and the stale numbers).
-    await team.sales.put(`/merchant-applications/${app}/risk`, { depositsAccepted: false, fullPrepaymentAccepted: false });
-    const after = expectStatus(await team.sales.post(`/opportunities/${opp}/stage`, { stage: "documents_prepared" }), 422).body.issues as string[];
-    expect(after.some((i) => i.startsWith("Deposits") || i.startsWith("Full payment"))).toBe(false);
+    // Missing turnover, deposit, principal and advertising details don't block a move.
+    expectStatus(await team.sales.post(`/opportunities/${opp}/stage`, { stage: "proposal_sent" }), 204);
+    expectStatus(await team.ops.post(`/opportunities/${opp}/stage`, { stage: "documents_prepared" }), 204);
+    // Submission still needs compliance to approve the risk review.
+    const blocked = expectStatus(await team.ops.post(`/opportunities/${opp}/stage`, { stage: "submitted" }), 422).body.issues as string[];
+    expect(blocked).toContain("Compliance must approve the Worldpay risk review before submission.");
+    expect(blocked.some((i) => i.startsWith("Deposits") || i.startsWith("Full payment") || i.includes("principal details"))).toBe(false);
   });
 
   it("a complete Worldpay deal passes every gate", async () => {

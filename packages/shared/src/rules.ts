@@ -161,56 +161,18 @@ export function tradingIssues(app: GateFacts["merchantApps"][number]): string[] 
 // ---------------------------------------------------------------------------
 
 /**
- * Everything that must be true before an opportunity can enter `target`. Gates are
- * cumulative, and the first ten stages have none, so capturing a lead stays quick.
+ * Everything that must be true before an opportunity can enter `target`. Gates are cumulative.
+ * Missing details (sites, supplier, customer, VAT, landlord, MPRN/GPRN, contract, Worldpay
+ * figures, the case checklist) never block a move: the team fills them in as they go. Only
+ * sign-off steps do: approved documents, the customer's signature, form checks, approvals,
+ * the bill, lease and consent checks, and the submission evidence.
  */
 export function stageGateIssues(f: GateFacts, target: StageKey): string[] {
   const issues: string[] = [];
   const merchant = f.serviceType === "merchant_services";
   const at = (gate: StageKey) => isAtOrAfter(target, gate);
 
-  if (at("proposal_sent")) {
-    if (merchant) {
-      if (f.merchantApps.length === 0) issues.push("Create the Worldpay application before sending a proposal.");
-      for (const app of f.merchantApps) issues.push(...tradingIssues(app));
-    } else if (f.sites.length === 0) {
-      issues.push("Add at least one supply site before sending a proposal.");
-    }
-  }
-
-  if (at("supplier_selected")) {
-    if (merchant) {
-      if (!f.merchantApps.some((a) => a.productCount > 0)) issues.push("Select the Worldpay product or terminal (add a pricing line).");
-    } else if (!f.selectedSupplierId) {
-      issues.push("Select the supplier.");
-    }
-  }
-
-  if (at("documents_prepared")) {
-    if (!f.customerId) issues.push("Link or create the customer.");
-    if (f.customer) issues.push(...vatIssues(f.customer));
-    if (merchant) {
-      for (const app of f.merchantApps) {
-        issues.push(...advertisingIssues(app));
-        issues.push(...principalIssues(app));
-        if (!app.risk) issues.push("Answer the underwriting and risk questions.");
-        else issues.push(...depositIssues(app.risk));
-      }
-    } else {
-      for (const s of f.sites) issues.push(...landlordIssues(s));
-    }
-  }
-
   if (at("submitted")) {
-    if (needsElectricity(f.serviceType)) {
-      const pts = f.sites.flatMap((s) => s.meterPoints).filter((m) => m.fuel === "electricity");
-      if (pts.length === 0 || pts.some((m) => !m.mprn)) issues.push("Enter an MPRN for every electricity meter.");
-    }
-    if (needsGas(f.serviceType)) {
-      const pts = f.sites.flatMap((s) => s.meterPoints).filter((m) => m.fuel === "gas");
-      if (pts.length === 0 || pts.some((m) => !m.gprn)) issues.push("Enter a GPRN for every gas meter.");
-    }
-    if (!merchant && f.contracts.filter((c) => c.status !== "cancelled").length === 0) issues.push("Add the energy contract details.");
     const outstanding = f.documents.filter((d) => d.required && !(d.received && d.approval === "approved"));
     if (outstanding.length) issues.push(`These required documents must be received and approved: ${outstanding.map((d) => docLabel(d.documentType)).join(", ")}.`);
     if (!f.signatures.some((s) => s.status === "completed" && s.hasCustomerSigner)) issues.push("The customer must sign before submission.");
@@ -234,7 +196,8 @@ export function stageGateIssues(f: GateFacts, target: StageKey): string[] {
   if (w && !merchant) {
     const kind = caseKind({ serviceType: f.serviceType, saleType: f.saleType, supplyChanges: f.supplyChanges });
     if (at("documents_prepared")) {
-      for (const item of caseChecklist(f)) if (!item.done && item.issue) issues.push(item.issue);
+      // The case checklist (caseChecklist) is guidance only; these catch wrong details, not missing ones.
+      if (kind === "change_of_entity" && w.incomingIsOutgoing) issues.push("Link the incoming customer: the outgoing account holder can't be the incoming customer.");
       if (kind === "change_of_entity" && w.sharedIban) issues.push("The incoming customer's IBAN is the same as the outgoing customer's. Record the incoming customer's own bank account.");
       if (kind === "renewal" && !w.terms.verified) issues.push(w.terms.complete ? "Verify the renewal terms (rates, term, start date and supplier)." : "Enter the renewal terms (rates, term, start date and supplier), then verify them.");
     }
@@ -281,12 +244,10 @@ export type GateIssueArea = "details" | "approval" | "supply" | "worldpay" | "do
 
 const GATE_ISSUE_AREAS: [RegExp, GateIssueArea][] = [
   [/^Internal approval/, "approval"],
-  [/^(Link or create the customer|Select the supplier)\./, "details"],
-  [/^(Create the Worldpay application|Select the Worldpay product|Answer the underwriting|Compliance must approve|Enter the (estimated annual turnover|percentage of turnover|average transaction value))|^(Deposits|Full payment in advance) are accepted|^Principal |needs principal details/, "worldpay"],
+  [/^Compliance must approve/, "worldpay"],
   [/^"[^"]+" (failed|still needs|was rejected)|^Review the signatures on "/, "form"],
   [/^The customer must sign/, "signatures"],
   [/required documents must be received|under Documents|lease|signed rate card/i, "documents"],
-  [/^(Add at least one supply site|Enter an? (MPRN|GPRN)|Add the energy contract details)|is rented: enter the landlord/, "supply"],
 ];
 
 export function gateIssueArea(issue: string): { area: GateIssueArea; form?: string } {

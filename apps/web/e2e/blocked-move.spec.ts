@@ -23,7 +23,7 @@ async function newLead(page: Page): Promise<string> {
   return res.body.id as string;
 }
 
-test("a blocked stage move takes you to where the first missing item is fixed", async ({ page }) => {
+test("a blocked stage move links each sign-off step to where it's done", async ({ page }) => {
   await signIn(page, "admin@demo.utilityoptimizer.ie");
   const id = await newLead(page);
   await page.goto(`/opportunities/${id}`);
@@ -31,12 +31,11 @@ test("a blocked stage move takes you to where the first missing item is fixed", 
   await page.getByRole("button", { name: "More" }).click();
   await page.getByRole("menuitem", { name: "Submitted", exact: true }).click();
   await expect(page.getByRole("alertdialog", { name: /Can't move to Submitted yet/ })).toBeVisible();
-  // The first thing a lead without a site needs is a supply site, added on the Energy tab.
-  await expect(page.getByRole("button", { name: "Add at least one supply site before sending a proposal." })).toBeVisible();
-
-  await page.getByRole("button", { name: "Take me there" }).click();
+  // Missing details never block a move; sign-off steps do. The customer's signature is on the Signatures tab.
+  await expect(page.getByRole("button", { name: "Add at least one supply site before sending a proposal." })).toHaveCount(0);
+  await page.getByRole("button", { name: "The customer must sign before submission." }).click();
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
-  await expect(page).toHaveURL(/tab=energy/);
+  await expect(page).toHaveURL(/tab=signatures/);
 });
 
 test("a link to the case's submissions lands on Record submission", async ({ page }) => {
