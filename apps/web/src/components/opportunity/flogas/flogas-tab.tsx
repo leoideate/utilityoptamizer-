@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Save, ShieldCheck, Sparkles, UserPlus } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { FLOGAS_STATUS_LABELS, FLOGAS_TAB_LABELS, type FlogasElectricityData, type FlogasStatus, type FlogasTab, flogasElectricityIssues, flogasFillSave, flogasFillSuggestions } from "@uo/shared";
+import { CheckCircle2, Save, Sparkles, UserPlus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { FLOGAS_STATUS_LABELS, FLOGAS_TAB_LABELS, type FlogasElectricityData, type FlogasIssue, type FlogasStatus, type FlogasTab, flogasFillSave, flogasFillSuggestions } from "@uo/shared";
 import { TabPanel, Tabs } from "@/components/ui/overlays";
 import { Badge, Button, Card, CardHeader, IssueList, Skeleton, type Tone } from "@/components/ui/primitives";
 import { type ApiError, api } from "@/lib/api";
@@ -11,7 +11,7 @@ import { useUser } from "@/lib/session";
 import type { Workspace } from "@/lib/types";
 import { useRefreshOpportunity } from "../common";
 import { BILL_FILLABLE, FillFromBillDialog } from "../supplier-application/fill-from-bill";
-import { type BankEdit, type FlogasView, forValidation, isEmptyPayload, savePayload } from "./draft";
+import { type BankEdit, type FlogasView, isEmptyPayload, savePayload } from "./draft";
 import { DocumentsTab } from "./flogas-documents";
 import { CustomerTab, DebitTab, PricingTab, SupplyTab, TAB_ORDER } from "./flogas-fields";
 
@@ -50,7 +50,8 @@ export function FlogasTab({ opp }: { opp: Workspace }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only new server data should reset an unchanged draft
   }, [view.data]);
 
-  const issues = useMemo(() => (draft ? flogasElectricityIssues(forValidation(draft, bank)) : []), [draft, bank]);
+  // No mandatory fields: the team asked for the form to be generated with whatever is filled in.
+  const issues: FlogasIssue[] = [];
   const byTab = (t: FlogasTab) => issues.filter((i) => i.tab === t);
   const refresh = () => (qc.invalidateQueries({ queryKey: key }), refreshOpp());
 
@@ -129,9 +130,6 @@ export function FlogasTab({ opp }: { opp: Workspace }) {
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone={STATUS_TONE[v.status]}>{FLOGAS_STATUS_LABELS[v.status]}</Badge>
               {dirty && <Badge tone="warning">Unsaved changes</Badge>}
-              <Button size="sm" variant="secondary" onClick={validate}>
-                <ShieldCheck /> Validate application
-              </Button>
               {!ro && aiReading && (
                 <Button size="sm" variant="secondary" disabled={dirty} title={dirty ? "Save or undo your changes first" : undefined} onClick={() => setFilling(true)}>
                   <Sparkles /> Fill from bill
