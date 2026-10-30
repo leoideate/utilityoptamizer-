@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { CallLog, CallStatus } from "@prisma/client";
 import { can, toE164, today } from "@uo/shared";
-import type { callOutcomeSchema, startCallSchema } from "@uo/shared";
+import type { browserCallStatusSchema, callOutcomeSchema, startCallSchema } from "@uo/shared";
 import type { z } from "zod";
 import { ActivitiesService } from "../activities/activities.service";
 import { ENV, type Env } from "../config/env";
@@ -76,7 +76,15 @@ export class CallsService {
   ) {}
 
   info(actorPhone: string | null) {
-    return { provider: this.provider.name, bridged: this.provider.bridged, myPhone: actorPhone };
+    return { provider: this.provider.name, bridged: this.provider.bridged, myPhone: actorPhone, browserPhone: this.browserPhone() };
+  }
+
+  /** The in-CRM phone panel (RingCentral Embeddable): set up when its own browser app is configured. */
+  private browserPhone() {
+    const clientId = this.env.RINGCENTRAL_BROWSER_CLIENT_ID;
+    if (this.provider.name !== "ringcentral" || !clientId) return null;
+    const callerId = this.env.RINGCENTRAL_CALLER_ID ? (toE164(this.env.RINGCENTRAL_CALLER_ID) ?? null) : null;
+    return { clientId, appServer: this.env.RINGCENTRAL_SERVER_URL.replace(/\/$/, ""), callerId };
   }
 
   async myPhone(actor: Actor) {
@@ -124,8 +132,10 @@ export class CallsService {
     const match = allowed.find((n) => n.number === target);
     if (!target || !match) throw new RuleViolation(["Choose one of the numbers saved for this customer."]);
 
+    const browser = input.via === "browser";
+    if (browser && !this.browserPhone()) throw new RuleViolation(["The CRM phone panel isn't set up. Ask an administrator to connect it."]);
     let agentNumber: string | null = null;
-    if (this.provider.bridged) {
+    if (this.provider.bridged && !browser) {
       agentNumber = await this.myPhone(actor);
       if (!agentNumber) throw new RuleViolation(["Add your own phone number first (Account → Security & phone), so we know which phone to ring."]);
     }
@@ -138,8 +148,11 @@ export class CallsService {
         toNumber: target,
         agentNumber,
         provider: this.provider.name,
+        ...(browser ? { status: "ringing_customer" as const } : {}),
       },
     });
+    // The phone panel dials; it reports progress through browserStatus, and the call log confirms it.
+    if (browser) return { call, mode: "browser" as const };
     if (!this.provider.bridged) return { call, mode: "manual" as const, telUri: `tel:${target}` };
 
     try {
@@ -173,6 +186,29 @@ export class CallsService {
     if (call.providerCallId) await this.provider.cancel(call.providerCallId).catch(() => undefined);
     const updated = await this.prisma.callLog.update({ where: { id }, data: { status: "canceled", endedAt: new Date() } });
     await this.finalise(updated);
+    return updated;
+  }
+
+  /**
+   * Progress of a call dialled from the phone panel, reported by the user's browser. Only that call's
+   * own outbound rows qualify (not RingOut calls or imported records); an ended call is logged once.
+   */
+  async browserStatus(actor: Actor, id: string, input: z.infer<typeof browserCallStatusSchema>) {
+    const call = await this.owned(actor, id);
+    if (call.provider !== "ringcentral" || call.direction !== "outbound" || call.providerCallId || call.rcRecordId || call.agentNumber) throw new RuleViolation(["This call wasn't dialled from the CRM phone panel."]);
+    if (FINAL_STATUSES.includes(call.status)) return call;
+    const now = new Date();
+    const data: Partial<CallLog> = { status: input.status };
+    if (input.status === "in_progress") data.answeredAt = call.answeredAt ?? now;
+    else {
+      // Hanging up before the customer answered isn't a completed call.
+      if (input.status === "completed" && !call.answeredAt) data.status = "no_answer";
+      data.endedAt = now;
+      if (data.status === "completed" && call.answeredAt) data.durationSec = Math.max(1, Math.round((now.getTime() - call.answeredAt.getTime()) / 1000));
+    }
+    const updated = await this.prisma.callLog.update({ where: { id }, data });
+    await this.realtime.publish([actor.id], { type: "call.updated", data: { callId: id, opportunityId: call.opportunityId, status: updated.status } });
+    if (FINAL_STATUSES.includes(updated.status)) await this.finalise(updated);
     return updated;
   }
 
@@ -379,7 +415,19 @@ export class CallsService {
         .filter((c) => phoneKey(c.toNumber) === key)
         .sort((a, b) => Math.abs(a.startedAt.getTime() - r.startedAt.getTime()) - Math.abs(b.startedAt.getTime() - r.startedAt.getTime()))[0];
       if (same) {
-        await this.prisma.callLog.update({ where: { id: same.id }, data: { rcRecordId: r.id, rcSessionId: r.sessionId, ...(r.durationSec ? { durationSec: r.durationSec } : {}), ...this.recordingFields(r) } });
+        // A panel call whose tab was closed mid-call never reported its end: the record settles it.
+        const open = !FINAL_STATUSES.includes(same.status);
+        const settled = await this.prisma.callLog.update({
+          where: { id: same.id },
+          data: {
+            rcRecordId: r.id,
+            rcSessionId: r.sessionId,
+            ...(r.durationSec ? { durationSec: r.durationSec } : {}),
+            ...(open ? { status: r.durationSec ? ("completed" as const) : ("no_answer" as const), answeredAt: r.durationSec ? (same.answeredAt ?? r.startedAt) : null, endedAt } : {}),
+            ...this.recordingFields(r),
+          },
+        });
+        if (open) await this.finalise(settled);
         await this.queueRecording(same.id, r);
         return "matched";
       }

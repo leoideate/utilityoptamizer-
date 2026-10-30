@@ -526,7 +526,11 @@ export const startCallSchema = z.object({
   /** One of the numbers listed for the opportunity (customer, contacts or captured phone). */
   number: z.string().trim().min(6).max(40),
   contactId: id.nullable().optional(),
+  /** "browser": the salesperson dials from the CRM's phone panel (headset); otherwise RingCentral rings their phone first. */
+  via: z.enum(["bridged", "browser"]).optional(),
 });
+/** What the phone panel reports about a call it is dialling. */
+export const browserCallStatusSchema = z.object({ status: z.enum(["in_progress", "completed", "no_answer", "canceled", "failed"]) });
 export const CALL_OUTCOMES = ["answered", "no_answer", "busy", "voicemail", "wrong_number", "call_back_requested"] as const;
 export const callOutcomeSchema = z.object({
   outcome: z.enum(CALL_OUTCOMES),

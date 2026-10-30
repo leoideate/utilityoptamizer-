@@ -79,7 +79,7 @@ Run: `npm run test:integration -w @uo/api -- pentest hardening`
 
 ## Production checks on the web app
 
-The production web build (`npm run build -w @uo/web`, served by `npm run start`) returns on every page: `Content-Security-Policy` (as above), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (camera for card scanning only), `Cross-Origin-Opener-Policy: same-origin` and `Strict-Transport-Security`. The Playwright suite (including real-time chat, document upload and call logging) runs under this policy without CSP violations.
+The production web build (`npm run build -w @uo/web`, served by `npm run start`) returns on every page: `Content-Security-Policy` (as above), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (camera for card scanning only; microphone only for the RingCentral phone panel, `https://apps.ringcentral.com`, which is also the only third-party origin allowed in `frame-src` and never runs as a script in the CRM page), `Cross-Origin-Opener-Policy: same-origin-allow-popups` (so the phone panel's RingCentral sign-in window can report back to it) and `Strict-Transport-Security`. The Playwright suite (including real-time chat, document upload and call logging) runs under this policy without CSP violations.
 
 ## Dependency evidence in CI
 

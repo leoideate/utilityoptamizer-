@@ -27,6 +27,7 @@ beforeAll(async () => {
     RINGCENTRAL_RECORDINGS: "true",
     RINGCENTRAL_WEBHOOK_TOKEN: "rc-webhook-token-0123456789",
     RINGCENTRAL_WEBHOOK_URL: "https://crm.example.ie/api/webhooks/ringcentral",
+    RINGCENTRAL_BROWSER_CLIENT_ID: "browser-client-id-123",
   });
   support = require("../support/app") as AppSupport;
   fx = require("../support/fixtures") as Fixtures;
@@ -79,7 +80,7 @@ describe("click-to-call with RingCentral", () => {
     const ok = support.expectStatus(await sales.client.put("/telephony/my-phone", { phone: "01 555 1234" }), 200).body;
     expect(ok.phone).toBe("+35315551234");
     const info = support.expectStatus(await sales.client.get("/telephony"), 200).body;
-    expect(info).toEqual({ provider: "ringcentral", bridged: true, myPhone: "+35315551234" });
+    expect(info).toEqual({ provider: "ringcentral", bridged: true, myPhone: "+35315551234", browserPhone: { clientId: "browser-client-id-123", appServer: rc.url, callerId: "+35315550000" } });
   });
 
   it("rings the salesperson, connects the customer, and logs the call once", async () => {
@@ -214,6 +215,65 @@ describe("RingCentral call-log sync", () => {
     const stranger = await t.prisma.callLog.findUniqueOrThrow({ where: { rcRecordId: unknown } });
     expect(stranger).toMatchObject({ opportunityId: null, customerId: null, toNumber: "+447700900123" });
     expect(await t.prisma.timelineEntry.count({ where: { data: { path: ["callId"], equals: stranger.id } } })).toBe(0);
+  });
+});
+
+describe("headset calls from the phone panel", () => {
+  const callTimeline = (opportunityId: string) => t.prisma.timelineEntry.findMany({ where: { opportunityId, kind: "call" }, orderBy: { createdAt: "asc" } });
+  beforeAll(() => {
+    rc.extensions = [{ id: "101", email: sales.user.email }];
+  });
+
+  it("dials from the panel without RingOut, logs the call once when it ends, and takes the length from the call log", async () => {
+    const oppId = await opportunityWithContact();
+    const ringOuts = rc.ringOuts.length;
+    const started = support.expectStatus(await sales.client.post(`/opportunities/${oppId}/calls`, { number: "087 123 4567", via: "browser" }), 201).body;
+    expect(started).toMatchObject({ mode: "browser", call: { status: "ringing_customer", toNumber: "+353871234567", agentNumber: null } });
+    expect(rc.ringOuts).toHaveLength(ringOuts); // the panel dials, not RingOut
+
+    expect(support.expectStatus(await sales.client.post(`/calls/${started.call.id}/browser-status`, { status: "in_progress" }), 201).body.status).toBe("in_progress");
+    const ended = support.expectStatus(await sales.client.post(`/calls/${started.call.id}/browser-status`, { status: "completed" }), 201).body;
+    expect(ended).toMatchObject({ status: "completed" });
+    expect(ended.answeredAt).not.toBeNull();
+    // A repeated report changes nothing.
+    support.expectStatus(await sales.client.post(`/calls/${started.call.id}/browser-status`, { status: "no_answer" }), 201);
+    const timeline = await callTimeline(oppId);
+    expect(timeline).toHaveLength(1);
+    expect(timeline[0].body).toMatch(/^Outbound call to \+353871234567 · Connected/);
+    expect((await t.prisma.opportunity.findUniqueOrThrow({ where: { id: oppId } })).firstContactAt).not.toBeNull();
+
+    rc.logCall({ direction: "Outbound", from: "+35315551234", to: "+353871234567", extensionId: "101", duration: 75, startTime: new Date() });
+    expect(await calls.syncCallLog()).toMatchObject({ matched: 1, imported: 0 });
+    expect((await t.prisma.callLog.findUniqueOrThrow({ where: { id: started.call.id } })).durationSec).toBe(75);
+    expect(await callTimeline(oppId)).toHaveLength(1);
+  });
+
+  it("counts hanging up before the customer answers as no answer", async () => {
+    const oppId = await opportunityWithContact();
+    const s = support.expectStatus(await sales.client.post(`/opportunities/${oppId}/calls`, { number: "086 555 0101", via: "browser" }), 201).body;
+    expect(support.expectStatus(await sales.client.post(`/calls/${s.call.id}/browser-status`, { status: "completed" }), 201).body.status).toBe("no_answer");
+    expect((await t.prisma.opportunity.findUniqueOrThrow({ where: { id: oppId } })).firstContactAt).toBeNull();
+  });
+
+  it("settles a panel call whose tab closed mid-call from the call log", async () => {
+    const oppId = await opportunityWithContact();
+    const s = support.expectStatus(await sales.client.post(`/opportunities/${oppId}/calls`, { number: "086 555 0101", via: "browser" }), 201).body;
+    rc.logCall({ direction: "Outbound", from: "+35315551234", to: "+353865550101", extensionId: "101", duration: 50, startTime: new Date() });
+    await calls.syncCallLog();
+    expect(await t.prisma.callLog.findUniqueOrThrow({ where: { id: s.call.id } })).toMatchObject({ status: "completed", durationSec: 50 });
+    const timeline = await callTimeline(oppId);
+    expect(timeline).toHaveLength(1);
+    expect(timeline[0].body).toBe("Outbound call to +353865550101 · Connected · 50 s.");
+  });
+
+  it("only takes reports for the user's own panel calls", async () => {
+    const oppId = await opportunityWithContact();
+    const s = support.expectStatus(await sales.client.post(`/opportunities/${oppId}/calls`, { number: "086 555 0101", via: "browser" }), 201).body;
+    support.expectStatus(await other.client.post(`/calls/${s.call.id}/browser-status`, { status: "completed" }), 403);
+    support.expectStatus(await sales.client.post(`/calls/${s.call.id}/browser-status`, { status: "ringing_agent" }), 400);
+    rc.script(["InProgress", "InProgress"]);
+    const ringOut = support.expectStatus(await sales.client.post(`/opportunities/${oppId}/calls`, { number: "086 555 0101" }), 201).body;
+    expect(support.expectStatus(await sales.client.post(`/calls/${ringOut.call.id}/browser-status`, { status: "completed" }), 422).body.message).toBe("This call wasn't dialled from the CRM phone panel.");
   });
 });
 

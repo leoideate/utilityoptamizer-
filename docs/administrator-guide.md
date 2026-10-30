@@ -76,6 +76,14 @@ Only numbers saved on the opportunity, its customer or its contacts can be diall
 
 **Incoming-call pop-ups.** When a customer calls someone's RingCentral extension, the CRM can show them who it is (the customer, the contact and their open deals) while the phone rings, with a button to open the deal. Set `RINGCENTRAL_WEBHOOK_TOKEN` to 16–64 random characters and give the app the **Webhook Subscriptions** permission. The worker then subscribes RingCentral to the company's call events, delivered to `{WEB_ORIGIN}/api/webhooks/ringcentral` (set `RINGCENTRAL_WEBHOOK_URL` if RingCentral must use a different address), and renews the subscription every few hours. That address must be reachable from the internet over HTTPS. Each event must carry the token, and the pop-up only shows customers and deals the person could see anyway. Extensions are matched to people by email, as for the call log.
 
+**Headset calls in the CRM (phone panel).** Salespeople can call and answer from inside the CRM with a headset and microphone, using RingCentral's browser phone (RingCentral Embeddable 3.0.0). It needs a second RingCentral app:
+
+1. In the Developer Console, **Register App** → **REST API App** → auth **3-legged OAuth flow authorization code**, app type **Client-side web app**, OAuth redirect URI `https://apps.ringcentral.com/integration/ringcentral-embeddable/3.0.0/redirect.html` (it must match that version exactly), private to your account.
+2. Give it the permissions **VoIP Calling**, **Call Control**, **Read Accounts**, **Read Call Log**, **Read Presence**, **Edit Presence**, **RingOut** and **WebSocketSubscription**.
+3. Set `RINGCENTRAL_BROWSER_CLIENT_ID` to that app's Client ID (it isn't a secret; the browser app has none) and redeploy.
+
+A **Phone** button then appears at the top of every page. Each person opens it once and signs in with their own RingCentral login; RingCentral keeps them signed in. The panel stays loaded while they move around the CRM, rings for incoming calls, and **Call** on a deal dials from it ("Call with headset") instead of ringing their phone first. The call is logged to the deal when it ends, and the call log adds its exact length; a call whose tab was closed mid-call is settled from the call log. Texts, faxes, meetings and team messaging stay off in the panel. The panel runs in a frame on RingCentral's own address, which is the only outside address the CRM's security policy lets it load, and the only one allowed to use the microphone. Without the setting, **Call** keeps ringing the person's own phone first.
+
 Without RingCentral (`TELEPHONY_PROVIDER=manual`, the default), **Call** opens the device's dialler (`tel:` link) and then asks the user for the outcome, length and notes.
 
 ## Internal chat

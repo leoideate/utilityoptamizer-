@@ -284,6 +284,27 @@
         "tags": [
           "documents"
         ]
+      },
+      "delete": {
+        "operationId": "DocumentsController_deleteItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "documents"
+        ]
       }
     },
     "/api/documents/{id}/versions": {
@@ -324,6 +345,29 @@
         ],
         "responses": {
           "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/document-versions/{id}/remove": {
+      "post": {
+        "operationId": "DocumentsController_removeVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
             "description": ""
           }
         },
@@ -1251,6 +1295,29 @@
     "/api/sites/{id}": {
       "patch": {
         "operationId": "EnergyController_updateSite",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "energy"
+        ]
+      }
+    },
+    "/api/sites/{id}/remove": {
+      "post": {
+        "operationId": "EnergyController_removeSite",
         "parameters": [
           {
             "name": "id",
@@ -3352,6 +3419,163 @@
         ]
       }
     },
+    "/api/document-versions/{id}/read-bill": {
+      "post": {
+        "operationId": "BillReadingController_read",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/assistant/messages": {
+      "post": {
+        "operationId": "AssistantController_ask",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/api/assistant/messages/upload": {
+      "post": {
+        "operationId": "AssistantController_askWithFile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/api/assistant/conversations/{id}/messages": {
+      "get": {
+        "operationId": "AssistantController_messages",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/api/assistant/messages/{id}/feedback": {
+      "post": {
+        "operationId": "AssistantController_feedback",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/api/assistant/actions/{id}/confirm": {
+      "post": {
+        "operationId": "AssistantController_confirm",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/api/assistant/actions/{id}/dismiss": {
+      "post": {
+        "operationId": "AssistantController_dismiss",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/api/assistant/feedback": {
+      "get": {
+        "operationId": "AssistantController_unhelpful",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
     "/api/business-cards": {
       "post": {
         "operationId": "OcrController_upload",
@@ -3949,6 +4173,46 @@
         ]
       }
     },
+    "/api/attention": {
+      "get": {
+        "operationId": "AttentionController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "attention"
+        ]
+      }
+    },
+    "/api/attention/morning-summary": {
+      "get": {
+        "operationId": "AttentionController_morningSummary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "attention"
+        ]
+      },
+      "put": {
+        "operationId": "AttentionController_setMorningSummary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "attention"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "HealthController_check",
@@ -4087,6 +4351,29 @@
         ],
         "responses": {
           "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "calls"
+        ]
+      }
+    },
+    "/api/calls/{id}/browser-status": {
+      "post": {
+        "operationId": "CallsController_browserStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
             "description": ""
           }
         },
@@ -4581,6 +4868,78 @@
         },
         "tags": [
           "chat"
+        ]
+      }
+    },
+    "/api/admin/imports": {
+      "get": {
+        "operationId": "ImportRunsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "operationId": "ImportRunsController_dryRun",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/imports/{id}": {
+      "get": {
+        "operationId": "ImportRunsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/imports/{id}/import": {
+      "post": {
+        "operationId": "ImportRunsController_commit",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
         ]
       }
     }

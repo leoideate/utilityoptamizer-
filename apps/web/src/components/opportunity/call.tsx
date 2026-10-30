@@ -8,15 +8,11 @@ import { CALL_OUTCOMES } from "@uo/shared";
 import { Dialog } from "@/components/ui/overlays";
 import { Badge, Button, Field, Input, IssueList, Select, Textarea } from "@/components/ui/primitives";
 import { type ApiError, api } from "@/lib/api";
+import { type PanelCallEvent, useBrowserPhone, useTelephony } from "@/lib/browser-phone";
 import { useRealtimeConnected } from "@/lib/realtime";
 import type { Workspace } from "@/lib/types";
 import { useRefreshOpportunity } from "./common";
 
-interface Telephony {
-  provider: "manual" | "ringcentral";
-  bridged: boolean;
-  myPhone: string | null;
-}
 interface Call {
   id: string;
   status: string;
@@ -48,7 +44,7 @@ const STATUS_TEXT: Record<string, string> = {
 };
 const FINAL = ["completed", "no_answer", "busy", "failed", "canceled"];
 
-/** "Call" button: rings the user's phone via RingCentral, or opens the dialler and records the outcome. */
+/** "Call" button: dials from the CRM phone panel (headset), rings the user's phone via RingCentral, or opens the dialler and records the outcome. */
 export function CallButton({ opp }: { opp: Workspace }) {
   const [open, setOpen] = useState(false);
   if (!opp.permissions.write) return null;
@@ -66,7 +62,10 @@ function CallDialog({ opp, onClose }: { opp: Workspace; onClose: () => void }) {
   const live = useRealtimeConnected();
   const refresh = useRefreshOpportunity(opp.id);
   const qc = useQueryClient();
-  const tel = useQuery({ queryKey: ["telephony"], queryFn: () => api.get<Telephony>("/telephony") });
+  const tel = useTelephony();
+  const phone = useBrowserPhone();
+  // Signed in to the phone panel: dial from it and talk on the headset.
+  const viaBrowser = phone.ready;
   const numbers = useQuery({ queryKey: ["call-numbers", opp.id], queryFn: () => api.get<{ number: string; label: string; contactId: string | null }[]>(`/opportunities/${opp.id}/call-numbers`) });
   const [number, setNumber] = useState("");
   const [callId, setCallId] = useState<string | null>(null);
@@ -84,14 +83,21 @@ function CallDialog({ opp, onClose }: { opp: Workspace; onClose: () => void }) {
   });
   const start = useMutation({
     meta: { silent: true },
-    mutationFn: () => api.post<{ call: Call; mode: "manual" | "bridged"; telUri?: string }>(`/opportunities/${opp.id}/calls`, { number }),
+    mutationFn: () => api.post<{ call: Call; mode: "manual" | "bridged" | "browser"; telUri?: string }>(`/opportunities/${opp.id}/calls`, { number, ...(viaBrowser ? { via: "browser" } : {}) }),
     onSuccess: (r) => {
       setIssues([]);
       setCallId(r.call.id);
       qc.setQueryData(["call", r.call.id], r.call);
       if (r.mode === "manual" && r.telUri) window.location.href = r.telUri;
+      if (r.mode === "browser") phone.dial(r.call.toNumber, (e) => report.mutate({ id: r.call.id, e }));
     },
     onError: (e) => setIssues((e as ApiError).issues?.length ? (e as ApiError).issues : [(e as ApiError).message]),
+  });
+  // The panel says the customer answered, or the call ended: the CRM logs it (the call log confirms the length later).
+  const report = useMutation({
+    meta: { silent: true },
+    mutationFn: ({ id, e }: { id: string; e: PanelCallEvent }) => api.post<Call>(`/calls/${id}/browser-status`, { status: e === "answered" ? "in_progress" : "completed" }),
+    onSuccess: (c) => qc.setQueryData(["call", c.id], c),
   });
   const cancel = useMutation({ mutationFn: () => api.post(`/calls/${callId}/cancel`), onSuccess: () => call.refetch() });
 
@@ -104,7 +110,7 @@ function CallDialog({ opp, onClose }: { opp: Workspace; onClose: () => void }) {
   };
 
   return (
-    <Dialog open onOpenChange={(o) => !o && close()} title={`Call ${opp.customer?.legalName ?? opp.companyName ?? opp.name}`} description={tel.data?.bridged ? "We'll ring your phone first, then connect you to the customer." : "Your phone will dial the number. Afterwards, record how it went."}>
+    <Dialog open onOpenChange={(o) => !o && close()} title={`Call ${opp.customer?.legalName ?? opp.companyName ?? opp.name}`} description={viaBrowser ? "We'll dial from the phone panel. Talk using your headset." : tel.data?.bridged ? "We'll ring your phone first, then connect you to the customer." : "Your phone will dial the number. Afterwards, record how it went."}>
       {!callId ? (
         <div className="space-y-4">
           {!numbers.data?.length ? (
@@ -122,7 +128,16 @@ function CallDialog({ opp, onClose }: { opp: Workspace; onClose: () => void }) {
               )}
             </Field>
           )}
-          {tel.data?.bridged && (
+          {phone.available && !viaBrowser && (
+            <p className="text-sm">
+              To call with your headset,{" "}
+              <button type="button" className="text-primary underline" onClick={() => phone.setOpen(true)}>
+                open the phone panel
+              </button>{" "}
+              and sign in to RingCentral.
+            </p>
+          )}
+          {tel.data?.bridged && !viaBrowser && (
             <p className="text-sm">
               {tel.data.myPhone ? (
                 <>
@@ -143,8 +158,8 @@ function CallDialog({ opp, onClose }: { opp: Workspace; onClose: () => void }) {
           )}
           <IssueList issues={issues} title="Can't call yet:" />
           <div className="flex justify-end">
-            <Button onClick={() => start.mutate()} loading={start.isPending} disabled={!number || (tel.data?.bridged && !tel.data.myPhone)}>
-              <Phone /> {manual ? "Dial on my phone" : "Call now"}
+            <Button onClick={() => start.mutate()} loading={start.isPending} disabled={!number || (tel.data?.bridged && !viaBrowser && !tel.data.myPhone)}>
+              <Phone /> {manual ? "Dial on my phone" : viaBrowser ? "Call with headset" : "Call now"}
             </Button>
           </div>
         </div>
