@@ -133,6 +133,25 @@ describe("Flogas electricity: the address the CRM already knows", () => {
     await t.prisma.opportunity.update({ where: { id: oppId }, data: { nextAction: "Category: Takeaway · Address: 33 Benbulbin rd Drimnagh Dublin 12 D12 CT98, Co. Dublin · Area: Dublin 12 · Opening hours: 12:30-14:00" } });
     const energy = expectStatus(await team.sales.get(`/opportunities/${oppId}/energy`), 200).body;
     expect(energy.suggestedSite).toEqual({ address: { line1: "33 Benbulbin rd Drimnagh", line2: null, city: "Dublin 12", county: "Co. Dublin", postcode: "D12 CT98" }, customerSector: "Takeaway" });
+
+    // Creating the customer keeps them, so the Flogas form and a site it creates have them too.
+    const customerId = expectStatus(await team.sales.post(`/opportunities/${oppId}/customer/create`), 201).body.customerId as string;
+    const customer = await t.prisma.customer.findUniqueOrThrow({ where: { id: customerId }, include: { addresses: true } });
+    expect(customer.businessType).toBe("Takeaway");
+    expect(customer.addresses).toMatchObject([{ kind: "trading", line1: "33 Benbulbin rd Drimnagh", city: "Dublin 12", postcode: "D12 CT98" }]);
+    const s = await supplier(t, "Flogas");
+    expectStatus(await team.sales.patch(`/opportunities/${oppId}`, { selectedSupplierId: s.id }), 204);
+    expect(expectStatus(await team.sales.get(base(oppId)), 200).body.data).toMatchObject({ businessType: "Takeaway", supplyAddress: { line1: "33 Benbulbin rd Drimnagh", postcode: "D12 CT98" } });
+    expectStatus(await team.sales.put(base(oppId), { meters: [{ mprn: "10055667788" }] }), 200);
+    expect(await t.prisma.supplySite.findFirstOrThrow({ where: { opportunityId: oppId } })).toMatchObject({ line1: "33 Benbulbin rd Drimnagh", customerSector: "Takeaway" });
+  });
+
+  it("a lead with only a business type still gets it on the customer and the Flogas form", async () => {
+    const oppId = await createOpportunity(team.sales, "electricity", { productInterest: ["electricity"] });
+    await t.prisma.opportunity.update({ where: { id: oppId }, data: { nextAction: "Category: Salon · Opening hours: 09:00-18:00" } });
+    const customerId = expectStatus(await team.sales.post(`/opportunities/${oppId}/customer/create`), 201).body.customerId as string;
+    const customer = await t.prisma.customer.findUniqueOrThrow({ where: { id: customerId }, include: { addresses: true } });
+    expect(customer).toMatchObject({ businessType: "Salon", addresses: [] });
   });
 });
 

@@ -19,11 +19,13 @@ export function parseIrishAddress(text: string, area?: string): Address | null {
   rest = rest.replace(/\bCo\.?\s+[A-Za-z]+/i, " ");
   const district = /\bDublin\s+(\d{1,2}w?)\b/i.exec(rest);
   rest = rest.replace(/\bDublin\s+\d{1,2}w?\b/i, " ");
+  const city = area?.trim() || (district ? `Dublin ${district[1].toUpperCase()}` : undefined);
+  // A part that only repeats the town ("…, Howth, …" with Area Howth) goes in the town field once.
   const parts = rest
     .split(",")
     .map((x) => x.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-  const city = area?.trim() || (district ? `Dublin ${district[1].toUpperCase()}` : undefined);
+    .filter(Boolean)
+    .filter((x, i) => i === 0 || !city || x.toLowerCase() !== city.toLowerCase());
   return {
     kind: "trading",
     line1: parts[0] ?? city ?? text.trim(),
@@ -67,9 +69,16 @@ export function knownSupplyAddress(opp: { nextAction?: string | null; notes?: st
   return null;
 }
 
-/** The business type, from the customer or the "Category:" an older lead import left in the deal's text. */
-export function knownBusinessType(opp: { nextAction?: string | null; notes?: string | null }, customer?: { businessType: string | null } | null): string | null {
+/** A deal's business category as a form's "type of business" ("Other" says nothing, so it's left out). */
+const CATEGORY_TYPE: Record<string, string> = { restaurant: "Restaurant", cafe: "Café", salon: "Salon", mobile_shop: "Mobile shop", takeaway: "Takeaway" };
+
+/**
+ * The business type: the customer's own, else the deal's business category, else the "Category:"
+ * an older lead import left in the deal's text.
+ */
+export function knownBusinessType(opp: { nextAction?: string | null; notes?: string | null; businessCategory?: string | null }, customer?: { businessType: string | null } | null): string | null {
   if (customer?.businessType) return customer.businessType;
+  if (opp.businessCategory && CATEGORY_TYPE[opp.businessCategory]) return CATEGORY_TYPE[opp.businessCategory];
   for (const text of [opp.nextAction, opp.notes]) {
     const category = text ? field(text, "Category") : undefined;
     if (category) return category;

@@ -182,7 +182,12 @@ describe("CSV lead import parsing", () => {
     expect(knownSupplyAddress({}, addresses.slice(0, 2))).toMatchObject({ line1: "Registered office" });
     expect(knownSupplyAddress({}, addresses.slice(0, 1))).toBeNull();
     expect(knownBusinessType(imported, { businessType: "Restaurant" })).toBe("Restaurant");
+    // The deal's business category comes before the imported text; "Other" says nothing.
+    expect(knownBusinessType({ ...imported, businessCategory: "cafe" })).toBe("Café");
+    expect(knownBusinessType({ ...imported, businessCategory: "other" })).toBe("Takeaway");
     expect(knownSupplyAddress({ nextAction: "Call back Tuesday", notes: null })).toBeNull();
+    // A town that's also the Area appears once, as the town.
+    expect(knownSupplyAddress({ nextAction: "Category: Cafe · Address: 12 Harbour Road, Howth, Co. Dublin D13 X2Y3 · Area: Howth" })).toEqual({ line1: "12 Harbour Road", line2: null, city: "Howth", county: "Co. Dublin", postcode: "D13 X2Y3" });
   });
 
   it("separates a contact's role in brackets", () => {

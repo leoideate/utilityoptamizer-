@@ -25,7 +25,7 @@ import { AuditService } from "../../audit/audit.service";
 import { type Actor, actorRef } from "../../common/actor";
 import { CryptoService } from "../../common/crypto.service";
 import { Forbidden, RuleViolation } from "../../common/errors";
-import { knownSupplyAddress } from "../../common/irish-address";
+import { knownBusinessType, knownSupplyAddress } from "../../common/irish-address";
 import { PrismaService } from "../../common/prisma.service";
 import { dateOnly, isoDay, num, phoneKey } from "../../common/values";
 import { fillPdf } from "../../forms/pdf";
@@ -200,7 +200,7 @@ export class FlogasElectricityService {
       vatExempt: c?.vatExempt ?? null,
       vatExemptNumber: c?.vatExemptNumber ?? null,
       priorityCustomer: c?.priorityCustomer ?? null,
-      businessType: c?.businessType ?? null,
+      businessType: knownBusinessType(opp, c),
       companyRegNumber: c?.companyRegNumber ?? null,
       vatNumber: c?.vatNumber ?? null,
       contactFirstName: contact?.firstName ?? (contact ? null : opp.contactName),
@@ -416,7 +416,7 @@ export class FlogasElectricityService {
     }
     if (!data.line1) throw new RuleViolation(["Enter the supply address first."]);
     const created = await tx.supplySite.create({
-      data: { ...(data as { line1: string }), opportunityId: ctx.opp.id, customerId: ctx.opp.customerId, serviceType: ctx.opp.serviceType === "dual_fuel" ? "dual_fuel" : "electricity" },
+      data: { ...(data as { line1: string }), customerSector: knownBusinessType(ctx.opp, ctx.customer), opportunityId: ctx.opp.id, customerId: ctx.opp.customerId, serviceType: ctx.opp.serviceType === "dual_fuel" ? "dual_fuel" : "electricity" },
     });
     return created.id;
   }

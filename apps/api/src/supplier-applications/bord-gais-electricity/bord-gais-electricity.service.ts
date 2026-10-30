@@ -32,7 +32,7 @@ import { AuditService } from "../../audit/audit.service";
 import { type Actor, actorRef } from "../../common/actor";
 import { CryptoService } from "../../common/crypto.service";
 import { Forbidden, RuleViolation } from "../../common/errors";
-import { knownSupplyAddress } from "../../common/irish-address";
+import { knownBusinessType, knownSupplyAddress } from "../../common/irish-address";
 import { PrismaService } from "../../common/prisma.service";
 import { dateOnly, isoDay, num, phoneKey } from "../../common/values";
 import { fillAcroForm } from "../../forms/acroform";
@@ -223,7 +223,7 @@ export class BordGaisElectricityService {
       tradingName: c?.tradingName ?? null,
       accountHolderName: a.accountHolderName ?? c?.legalName ?? opp.companyName,
       accountAddress,
-      mainActivity: c?.businessType ?? null,
+      mainActivity: knownBusinessType(opp, c),
       dateEstablished: isoDay(c?.incorporationDate),
       organisationType: c?.legalEntity ?? null,
       croNumber: c?.companyRegNumber ?? null,
@@ -465,7 +465,7 @@ export class BordGaisElectricityService {
     }
     if (!data.line1) throw new RuleViolation(["Enter the supply address first."]);
     const created = await tx.supplySite.create({
-      data: { ...(data as Prisma.SupplySiteUncheckedCreateInput), opportunityId: ctx.opp.id, customerId: ctx.opp.customerId, serviceType: ctx.opp.serviceType === "dual_fuel" ? "dual_fuel" : "electricity" },
+      data: { ...(data as Prisma.SupplySiteUncheckedCreateInput), customerSector: knownBusinessType(ctx.opp, ctx.customer), opportunityId: ctx.opp.id, customerId: ctx.opp.customerId, serviceType: ctx.opp.serviceType === "dual_fuel" ? "dual_fuel" : "electricity" },
     });
     return created.id;
   }
