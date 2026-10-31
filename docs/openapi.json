@@ -3719,6 +3719,20 @@
         ]
       }
     },
+    "/api/reports/calls": {
+      "get": {
+        "operationId": "ReportsController_calls",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "reports"
+        ]
+      }
+    },
     "/api/reports/commissions.csv": {
       "get": {
         "operationId": "ReportsController_commissionsCsv",

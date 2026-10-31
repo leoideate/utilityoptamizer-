@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, Download, FileWarning, Plus, RefreshCw, ScanLine } from "lucide-react";
+import { AlertTriangle, ArrowRight, Download, FileWarning, Phone, Plus, RefreshCw, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { LEAD_SOURCE_LABELS, type LeadSource, SELECTABLE_SERVICE_TYPES, SERVICE_TYPE_LABELS, type ServiceType, addDays } from "@uo/shared";
@@ -106,6 +106,8 @@ export default function HomePage() {
       <NeedsAttention />
 
       {can("opportunity.submit") && <WorkQueue />}
+
+      <CallCounts everyone={seesAll} />
 
       <Card className="mb-6 p-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6 [&>*]:min-w-0">
@@ -271,6 +273,87 @@ function WorkQueue() {
         ))}
       </div>
     </Card>
+  );
+}
+
+interface CallCount {
+  made: number;
+  connected: number;
+}
+interface CallCountsReport {
+  rows: { userId: string; name: string; today: CallCount; week: CallCount; month: CallCount }[];
+  totals: { today: CallCount; week: CallCount; month: CallCount };
+}
+const CALL_PERIODS = [
+  { key: "today", label: "Today" },
+  { key: "week", label: "This week" },
+  { key: "month", label: "This month" },
+] as const;
+
+/** Calls made today, this week (from Monday) and this month, Irish time: each salesperson for managers, your own otherwise. */
+function CallCounts({ everyone }: { everyone: boolean }) {
+  const { data } = useQuery({ queryKey: ["reports", "calls"], queryFn: () => api.get<CallCountsReport>("/reports/calls"), refetchInterval: 60_000 });
+  const own = !everyone ? data?.rows[0] : undefined;
+  return (
+    <Card className="mb-6">
+      <CardHeader title={everyone ? "Calls by salesperson" : "My calls"} description="Calls made from the CRM, a desk phone or the RingCentral app. Connected means the customer answered." />
+      {!data ? (
+        <div className="p-5 pt-2">
+          <Skeleton className="h-20" />
+        </div>
+      ) : !everyone ? (
+        <div className="grid grid-cols-1 gap-3 p-5 pt-2 min-[400px]:grid-cols-3">
+          {CALL_PERIODS.map((p) => (
+            <Stat key={p.key} label={p.label} value={num(own?.[p.key].made ?? 0)} sub={`${num(own?.[p.key].connected ?? 0)} connected`} />
+          ))}
+        </div>
+      ) : data.rows.length === 0 ? (
+        <p className="flex items-center gap-2 px-5 pb-5 text-sm text-muted">
+          <Phone className="size-4" aria-hidden /> No calls made this month yet.
+        </p>
+      ) : (
+        <div className="overflow-x-auto" tabIndex={0}>
+          <table className="w-full text-sm">
+            <thead className="text-left text-muted">
+              <tr>
+                <th className="px-5 py-2 font-medium">Salesperson</th>
+                {CALL_PERIODS.map((p) => (
+                  <th key={p.key} className="px-3 py-2 text-right font-medium last:pr-5">
+                    {p.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="tabular">
+              {data.rows.map((r) => (
+                <tr key={r.userId} className="border-t border-border">
+                  <td className="whitespace-nowrap px-5 py-2">{r.name}</td>
+                  {CALL_PERIODS.map((p) => (
+                    <CallCell key={p.key} count={r[p.key]} />
+                  ))}
+                </tr>
+              ))}
+              {data.rows.length > 1 && (
+                <tr className="border-t border-border font-semibold">
+                  <td className="px-5 py-2">Total</td>
+                  {CALL_PERIODS.map((p) => (
+                    <CallCell key={p.key} count={data.totals[p.key]} />
+                  ))}
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function CallCell({ count }: { count: CallCount }) {
+  return (
+    <td className="whitespace-nowrap px-3 py-2 text-right last:pr-5">
+      {num(count.made)} <span className="text-xs font-normal text-muted">({num(count.connected)} connected)</span>
+    </td>
   );
 }
 

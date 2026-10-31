@@ -30,6 +30,12 @@ export class ReportsController {
     return this.reports.dashboard(a, f);
   }
 
+  /** Calls made today, this week and this month: by everyone for report.read roles, otherwise the caller's own. */
+  @Get("reports/calls")
+  calls(@CurrentUser() a: Actor) {
+    return this.reports.callCounts(a);
+  }
+
   @Get("reports/commissions.csv")
   @RequireCapability("commission.read")
   @Header("Content-Type", "text/csv; charset=utf-8")
