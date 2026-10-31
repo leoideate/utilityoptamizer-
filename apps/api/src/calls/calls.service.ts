@@ -404,16 +404,17 @@ export class CallsService {
     const endedAt = new Date(r.startedAt.getTime() + r.durationSec * 1000);
 
     // A click-to-call from the CRM: attach the record (exact duration) instead of logging it again.
-    if (r.direction === "outbound" && userId) {
+    // Any CRM user's call can match: when the team shares one RingCentral line, every record shows
+    // that line's extension, but the call belongs to whoever pressed Call.
+    if (r.direction === "outbound") {
       const key = phoneKey(counterpart);
       const candidates = await this.prisma.callLog.findMany({
-        where: { provider: "ringcentral", rcRecordId: null, userId, direction: "outbound", startedAt: { gte: new Date(r.startedAt.getTime() - RINGOUT_MATCH_MS), lte: new Date(r.startedAt.getTime() + RINGOUT_MATCH_MS) } },
+        where: { provider: "ringcentral", origin: "crm", rcRecordId: null, direction: "outbound", startedAt: { gte: new Date(r.startedAt.getTime() - RINGOUT_MATCH_MS), lte: new Date(r.startedAt.getTime() + RINGOUT_MATCH_MS) } },
         orderBy: { startedAt: "asc" },
       });
-      // Redials to the same number are common: take the click-to-call nearest in time.
-      const same = candidates
-        .filter((c) => phoneKey(c.toNumber) === key)
-        .sort((a, b) => Math.abs(a.startedAt.getTime() - r.startedAt.getTime()) - Math.abs(b.startedAt.getTime() - r.startedAt.getTime()))[0];
+      // Redials to the same number are common: take the click-to-call nearest in time, the extension's own user first.
+      const gap = (c: { startedAt: Date }) => Math.abs(c.startedAt.getTime() - r.startedAt.getTime());
+      const same = candidates.filter((c) => phoneKey(c.toNumber) === key).sort((a, b) => Number(b.userId === userId) - Number(a.userId === userId) || gap(a) - gap(b))[0];
       if (same) {
         // A panel call whose tab was closed mid-call never reported its end: the record settles it.
         const open = !FINAL_STATUSES.includes(same.status);
@@ -444,6 +445,7 @@ export class CallsService {
           toNumber: counterpart,
           agentNumber: r.ourNumber ? (toE164(r.ourNumber) ?? r.ourNumber) : null,
           provider: "ringcentral",
+          origin: "call_log",
           rcRecordId: r.id,
           rcSessionId: r.sessionId,
           status: r.status,

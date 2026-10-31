@@ -232,8 +232,9 @@ export class ReportsService {
   }
 
   /**
-   * Outbound calls each person made today, this week (from Monday) and this month, Irish time:
-   * click-to-calls, headset calls and calls from desk phones or the RingCentral app (call log).
+   * Outbound calls each person started with the CRM's Call button today, this week (from Monday)
+   * and this month, Irish time (ring-my-phone and headset). Calls made outside the CRM aren't counted:
+   * on a RingCentral line the team shares, the call log can't say who was speaking.
    * "Connected" means the customer answered. Everyone gets their own figures (`mine`); report.read
    * roles also get a row for everyone who called.
    */
@@ -245,7 +246,7 @@ export class ReportsService {
     const earliest = from.week < from.month ? from.week : from.month;
     const everyone = can(actor, "report.read");
     const calls = await this.prisma.callLog.findMany({
-      where: { direction: "outbound", userId: everyone ? { not: null } : actor.id, startedAt: { gte: earliest } },
+      where: { direction: "outbound", origin: "crm", userId: everyone ? { not: null } : actor.id, startedAt: { gte: earliest } },
       select: { userId: true, startedAt: true, status: true },
     });
     const users = await this.prisma.user.findMany({ where: { id: { in: [...new Set([...calls.map((c) => c.userId!), actor.id])] } }, select: { id: true, name: true } });

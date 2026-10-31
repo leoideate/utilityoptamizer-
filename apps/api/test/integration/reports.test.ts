@@ -67,6 +67,7 @@ describe("calls made per salesperson", () => {
     await call(salesId, now, { status: "no_answer" });
     await call(salesId, now, { direction: "inbound" }); // received, not made
     await call(salesId, new Date(now.getTime() - 40 * 86_400_000)); // before this month and week
+    await call(salesId, now, { origin: "call_log" }); // made outside the CRM (RingCentral app or desk phone)
 
     const mine = expectStatus(await sales.get("/reports/calls"), 200).body;
     expect(mine.periods.today).toBe(today());

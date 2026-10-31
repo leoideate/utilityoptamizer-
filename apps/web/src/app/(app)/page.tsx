@@ -296,7 +296,7 @@ function CallCounts({ everyone }: { everyone: boolean }) {
   const { data } = useQuery({ queryKey: ["reports", "calls"], queryFn: () => api.get<CallCountsReport>("/reports/calls"), refetchInterval: 60_000 });
   return (
     <Card className="mb-6">
-      <CardHeader title="My calls" description="Calls made from the CRM, a desk phone or the RingCentral app. Connected means the customer answered." />
+      <CardHeader title="My calls" description="Calls started with the Call button in the CRM. Connected means the customer answered." />
       {!data ? (
         <div className="p-5 pt-2">
           <Skeleton className="h-20" />
