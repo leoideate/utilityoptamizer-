@@ -204,6 +204,7 @@ One sale (new or renewal). Permanent: can't be deleted or archived (database tri
 | customer_id | UUID |  |  |
 | contact_name | String |  |  |
 | company_name | String |  |  |
+| business_category | String |  |  |
 | email | String |  |  |
 | phone | String |  |  |
 | phone_key | String |  | phoneKey(phone): matches calls from a lead's number before a customer exists |
@@ -1003,6 +1004,7 @@ Append-only (trigger). Never contains restricted values.
 | contact_id | UUID |  |  |
 | user_id | UUID |  | The staff member on the call; null for calls to a company number nobody in the CRM answered |
 | direction | String | ✓ | inbound | outboun. Default "outbound" |
+| origin | String | ✓ | crm: started with the CRM's Call button (counts for that user); call_log: imported from RingCentral's call log. Default "crm" |
 | to_number | String | ✓ | The customer's number (E.164), whichever way the call went |
 | agent_number | String |  | Our side of the call (E.164): the phone rung first for click-to-call, or the number called for inbound calls |
 | provider | String | ✓ |  |

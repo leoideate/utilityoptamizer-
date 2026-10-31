@@ -8,6 +8,7 @@ import { Suspense, useState } from "react";
 import { BUSINESS_CATEGORY_LABELS, type BusinessCategory, SELECTABLE_SERVICE_TYPES, SERVICE_TYPE_LABELS, STAGES, type ServiceType, type StageKey } from "@uo/shared";
 import { businessCategoryOptions } from "@/components/business-category";
 import { ServiceBadge } from "@/components/domain";
+import { CallIconButton } from "@/components/opportunity/call";
 import { GateIssueList, gateIssueTarget } from "@/components/opportunity/gate-issues";
 import { Dialog, Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from "@/components/ui/overlays";
 import { Badge, Button, IssueList, PageHeader, Select, Skeleton } from "@/components/ui/primitives";
@@ -152,7 +153,12 @@ function PipelineBoard() {
                         <Link href={`/opportunities/${c.id}`} className="-my-0.5 min-w-0 py-0.5 text-sm font-medium hover:underline">
                           {c.name}
                         </Link>
-                        {c.outcome === "open" && <MoveMenu card={c} current={col.stage.key} onMove={(stage) => move.mutate({ id: c.id, stage, name: c.name, serviceType: c.serviceType })} />}
+                        {c.outcome === "open" && (
+                          <div className="flex shrink-0 items-center">
+                            <CallIconButton opp={{ id: c.id, title: c.customer?.legalName ?? c.companyName ?? c.name }} />
+                            <MoveMenu card={c} current={col.stage.key} onMove={(stage) => move.mutate({ id: c.id, stage, name: c.name, serviceType: c.serviceType })} />
+                          </div>
+                        )}
                       </div>
                       <p className="mt-0.5 truncate text-xs text-muted">
                         {ref(c.number)} · {c.customer?.legalName ?? c.companyName ?? "No customer yet"}

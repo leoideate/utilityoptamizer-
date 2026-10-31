@@ -53,12 +53,25 @@ export function CallButton({ opp }: { opp: Workspace }) {
       <Button variant="secondary" onClick={() => setOpen(true)}>
         <Phone /> Call
       </Button>
+      {open && <CallDialog opp={{ id: opp.id, title: opp.customer?.legalName ?? opp.companyName ?? opp.name }} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+/** A small phone button that opens the same Call box, for lists like the Pipeline board. */
+export function CallIconButton({ opp }: { opp: { id: string; title: string } }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button variant="ghost" size="icon" aria-label={`Call ${opp.title}`} title="Call" onClick={() => setOpen(true)}>
+        <Phone />
+      </Button>
       {open && <CallDialog opp={opp} onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-function CallDialog({ opp, onClose }: { opp: Workspace; onClose: () => void }) {
+function CallDialog({ opp, onClose }: { opp: { id: string; title: string }; onClose: () => void }) {
   const live = useRealtimeConnected();
   const refresh = useRefreshOpportunity(opp.id);
   const qc = useQueryClient();
@@ -110,7 +123,7 @@ function CallDialog({ opp, onClose }: { opp: Workspace; onClose: () => void }) {
   };
 
   return (
-    <Dialog open onOpenChange={(o) => !o && close()} title={`Call ${opp.customer?.legalName ?? opp.companyName ?? opp.name}`} description={viaBrowser ? "We'll dial from the phone panel. Talk using your headset." : tel.data?.bridged ? "We'll ring your phone first, then connect you to the customer." : "Your phone will dial the number. Afterwards, record how it went."}>
+    <Dialog open onOpenChange={(o) => !o && close()} title={`Call ${opp.title}`} description={viaBrowser ? "We'll dial from the phone panel. Talk using your headset." : tel.data?.bridged ? "We'll ring your phone first, then connect you to the customer." : "Your phone will dial the number. Afterwards, record how it went."}>
       {!callId ? (
         <div className="space-y-4">
           {!numbers.data?.length ? (

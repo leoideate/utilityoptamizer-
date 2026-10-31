@@ -167,7 +167,7 @@ describe("RingCentral call-log sync", () => {
     expect((await t.prisma.user.findUniqueOrThrow({ where: { id: sales.user.id } })).ringcentralExtensionId).toBe("101");
 
     const call = await t.prisma.callLog.findFirstOrThrow({ where: { opportunityId: d.oppId } });
-    expect(call).toMatchObject({ direction: "inbound", userId: sales.user.id, toNumber: d.e164, agentNumber: "+35315550000", status: "completed", durationSec: 125, provider: "ringcentral" });
+    expect(call).toMatchObject({ direction: "inbound", userId: sales.user.id, toNumber: d.e164, agentNumber: "+35315550000", status: "completed", durationSec: 125, provider: "ringcentral", origin: "call_log" });
     const entries = await callTimeline(d.oppId);
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({ direction: "inbound", actorId: sales.user.id, body: `Inbound call from ${d.e164} · Connected · 2 min 5 s.` });
@@ -204,6 +204,22 @@ describe("RingCentral call-log sync", () => {
     expect(call.durationSec).toBe(42);
     expect(await t.prisma.callLog.count({ where: { opportunityId: oppId } })).toBe(1);
     expect(await callTimeline(oppId)).toHaveLength(1);
+  });
+
+  it("credits a shared line's calls to the CRM user who pressed Call, not the line's owner", async () => {
+    // Sean has no RingCentral extension of his own: his calls go out on Sarah's line (extension 101).
+    const seanOpp = await fx.createOpportunity(other.client, "electricity", { phone: "087 600 1001", companyName: "Shared Line Ltd" });
+    support.expectStatus(await other.client.put("/telephony/my-phone", { phone: "087 600 9999" }), 200);
+    rc.script(["Success", "Success"], ["Success", "Finished", "Success"]);
+    const started = support.expectStatus(await other.client.post(`/opportunities/${seanOpp}/calls`, { number: "087 600 1001" }), 201).body;
+    await followCall(started.call.id);
+
+    rc.logCall({ direction: "Outbound", from: "+35315551234", to: "+353876001001", extensionId: "101", duration: 64, startTime: new Date() });
+    expect(await calls.syncCallLog()).toMatchObject({ matched: 1, imported: 0 });
+    const call = await t.prisma.callLog.findUniqueOrThrow({ where: { id: started.call.id } });
+    expect(call).toMatchObject({ userId: other.user.id, origin: "crm", durationSec: 64 });
+    expect(await t.prisma.callLog.count({ where: { toNumber: "+353876001001" } })).toBe(1);
+    expect(await callTimeline(seanOpp)).toHaveLength(1);
   });
 
   it("links a lead's number to the lead, and keeps calls from unknown numbers off every timeline", async () => {
