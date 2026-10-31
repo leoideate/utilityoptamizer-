@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { STAGES, addDays, can, today } from "@uo/shared";
+import { BUSINESS_TZ, STAGES, addDays, can, today } from "@uo/shared";
 import { z } from "zod";
 import type { Actor } from "../common/actor";
 import { PrismaService } from "../common/prisma.service";
@@ -18,6 +18,18 @@ export const reportFilterSchema = z.object({
 export type ReportFilter = z.infer<typeof reportFilterSchema>;
 
 const pct = (a: number, b: number) => (b === 0 ? null : Math.round((a / b) * 1000) / 10);
+
+/** The moment an Irish calendar day starts (Dublin is UTC or UTC+1, so midnight there is 00:00 or 23:00 UTC). */
+export function dublinDayStart(iso: string): Date {
+  const utcMidnight = new Date(`${iso}T00:00:00Z`);
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: BUSINESS_TZ, hour: "2-digit", hourCycle: "h23" }).format(utcMidnight));
+  return new Date(utcMidnight.getTime() - hour * 3_600_000);
+}
+
+export interface CallCount {
+  made: number;
+  connected: number;
+}
 
 /**
  * Dashboard metrics. Every figure respects the viewer's visibility (salespeople see their own
@@ -217,6 +229,48 @@ export class ReportsService {
     const rows = await this.prisma.commission.groupBy({ by: ["status"], where: { opportunity: this.base(actor, f) }, _sum: { amount: true } });
     const get = (s: string) => Number(rows.find((r) => r.status === s)?._sum.amount ?? 0);
     return { expected: get("expected"), confirmed: get("confirmed"), paid: get("paid"), clawedBack: get("clawed_back") };
+  }
+
+  /**
+   * Outbound calls each person made today, this week (from Monday) and this month, Irish time:
+   * click-to-calls, headset calls and calls from desk phones or the RingCentral app (call log).
+   * "Connected" means the customer answered. Everyone gets their own figures (`mine`); report.read
+   * roles also get a row for everyone who called.
+   */
+  async callCounts(actor: Actor, now = new Date()) {
+    const day = today(now);
+    const weekday = (new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7; // Monday = 0
+    const starts = { today: day, week: addDays(day, -weekday), month: `${day.slice(0, 8)}01` };
+    const from = { today: dublinDayStart(starts.today), week: dublinDayStart(starts.week), month: dublinDayStart(starts.month) };
+    const earliest = from.week < from.month ? from.week : from.month;
+    const everyone = can(actor, "report.read");
+    const calls = await this.prisma.callLog.findMany({
+      where: { direction: "outbound", userId: everyone ? { not: null } : actor.id, startedAt: { gte: earliest } },
+      select: { userId: true, startedAt: true, status: true },
+    });
+    const users = await this.prisma.user.findMany({ where: { id: { in: [...new Set([...calls.map((c) => c.userId!), actor.id])] } }, select: { id: true, name: true } });
+    const zero = (): CallCount => ({ made: 0, connected: 0 });
+    const rows = new Map(users.map((u) => [u.id, { userId: u.id, name: u.name, today: zero(), week: zero(), month: zero() }]));
+    const totals = { today: zero(), week: zero(), month: zero() };
+    for (const c of calls) {
+      const row = rows.get(c.userId!);
+      if (!row) continue;
+      for (const p of ["today", "week", "month"] as const) {
+        if (c.startedAt < from[p]) continue;
+        for (const t of [row[p], totals[p]]) {
+          t.made++;
+          if (c.status === "completed") t.connected++;
+        }
+      }
+    }
+    const mine = rows.get(actor.id)!;
+    return {
+      periods: starts,
+      mine,
+      // The team table lists people who made calls this month; the viewer appears only if they did too.
+      rows: (everyone ? [...rows.values()].filter((r) => r.month.made > 0) : [mine]).sort((a, b) => b.today.made - a.today.made || b.week.made - a.week.made || b.month.made - a.month.made || a.name.localeCompare(b.name)),
+      totals,
+    };
   }
 
   /** Commission export for accounting (CSV). */

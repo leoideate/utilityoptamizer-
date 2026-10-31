@@ -1,6 +1,7 @@
 import { addDays, today } from "@uo/shared";
 import { type Client, type TestApp, createTestApp, expectStatus, userAndClient } from "../support/app";
 import { createOpportunity } from "../support/fixtures";
+import { dublinDayStart } from "../../src/reports/reports.service";
 
 let t: TestApp;
 let sales: Client;
@@ -54,5 +55,38 @@ describe("dashboard figures and the deals behind them", () => {
   it("keeps salespeople to their own deals", async () => {
     expect(await list(other, { ownerId: salesId, dated: "created", ...period })).toMatchObject({ total: 0 });
     expectStatus(await manager.get("/opportunities?dated=won&from=yesterday"), 400);
+  });
+});
+
+describe("calls made per salesperson", () => {
+  it("counts outbound calls today, this week and this month, and which connected", async () => {
+    const call = (userId: string, startedAt: Date, extra: Record<string, unknown> = {}) =>
+      t.prisma.callLog.create({ data: { userId, startedAt, toNumber: "+353871234567", provider: "ringcentral", status: "completed", ...extra } });
+    const now = new Date();
+    await call(salesId, now);
+    await call(salesId, now, { status: "no_answer" });
+    await call(salesId, now, { direction: "inbound" }); // received, not made
+    await call(salesId, new Date(now.getTime() - 40 * 86_400_000)); // before this month and week
+
+    const mine = expectStatus(await sales.get("/reports/calls"), 200).body;
+    expect(mine.periods.today).toBe(today());
+    expect(mine.mine).toMatchObject({ userId: salesId, today: { made: 2, connected: 1 } });
+    expect(mine.rows).toEqual([expect.objectContaining({ userId: salesId, name: "Pat Team", today: { made: 2, connected: 1 }, week: { made: 2, connected: 1 }, month: { made: 2, connected: 1 } })]);
+
+    // A salesperson sees only their own row, even with no calls; a manager sees everyone who called.
+    const theirs = expectStatus(await other.get("/reports/calls"), 200).body;
+    expect(theirs.rows).toHaveLength(1);
+    expect(theirs.rows[0]).toMatchObject({ today: { made: 0, connected: 0 } });
+    expect(theirs.mine).toEqual(theirs.rows[0]);
+    const all = expectStatus(await manager.get("/reports/calls"), 200).body;
+    expect(all.rows.map((r: { userId: string }) => r.userId)).toEqual([salesId]);
+    expect(all.totals.today).toEqual({ made: 2, connected: 1 });
+    // The manager's own figures are there too, even with no calls.
+    expect(all.mine).toMatchObject({ today: { made: 0, connected: 0 }, month: { made: 0, connected: 0 } });
+  });
+
+  it("starts each day at midnight Irish time", () => {
+    expect(dublinDayStart("2026-07-01").toISOString()).toBe("2026-06-30T23:00:00.000Z"); // summer time
+    expect(dublinDayStart("2026-12-01").toISOString()).toBe("2026-12-01T00:00:00.000Z");
   });
 });
