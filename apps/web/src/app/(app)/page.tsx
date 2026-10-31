@@ -281,6 +281,7 @@ interface CallCount {
   connected: number;
 }
 interface CallCountsReport {
+  mine: { userId: string; name: string; today: CallCount; week: CallCount; month: CallCount };
   rows: { userId: string; name: string; today: CallCount; week: CallCount; month: CallCount }[];
   totals: { today: CallCount; week: CallCount; month: CallCount };
 }
@@ -290,24 +291,34 @@ const CALL_PERIODS = [
   { key: "month", label: "This month" },
 ] as const;
 
-/** Calls made today, this week (from Monday) and this month, Irish time: each salesperson for managers, your own otherwise. */
+/** Calls made today, this week (from Monday) and this month, Irish time: your own for everyone, plus each salesperson for managers. */
 function CallCounts({ everyone }: { everyone: boolean }) {
   const { data } = useQuery({ queryKey: ["reports", "calls"], queryFn: () => api.get<CallCountsReport>("/reports/calls"), refetchInterval: 60_000 });
-  const own = !everyone ? data?.rows[0] : undefined;
   return (
     <Card className="mb-6">
-      <CardHeader title={everyone ? "Calls by salesperson" : "My calls"} description="Calls made from the CRM, a desk phone or the RingCentral app. Connected means the customer answered." />
+      <CardHeader title="My calls" description="Calls made from the CRM, a desk phone or the RingCentral app. Connected means the customer answered." />
       {!data ? (
         <div className="p-5 pt-2">
           <Skeleton className="h-20" />
         </div>
-      ) : !everyone ? (
+      ) : (
         <div className="grid grid-cols-1 gap-3 p-5 pt-2 min-[400px]:grid-cols-3">
           {CALL_PERIODS.map((p) => (
-            <Stat key={p.key} label={p.label} value={num(own?.[p.key].made ?? 0)} sub={`${num(own?.[p.key].connected ?? 0)} connected`} />
+            <Stat key={p.key} label={p.label} value={num(data.mine[p.key].made)} sub={`${num(data.mine[p.key].connected)} connected`} />
           ))}
         </div>
-      ) : data.rows.length === 0 ? (
+      )}
+      {data && everyone && <TeamCalls data={data} />}
+    </Card>
+  );
+}
+
+/** Managers: each salesperson who made calls this month, with a total. */
+function TeamCalls({ data }: { data: CallCountsReport }) {
+  return (
+    <>
+      <h3 className="border-t border-border px-5 pb-1 pt-4 text-sm font-medium">Calls by salesperson</h3>
+      {data.rows.length === 0 ? (
         <p className="flex items-center gap-2 px-5 pb-5 text-sm text-muted">
           <Phone className="size-4" aria-hidden /> No calls made this month yet.
         </p>
@@ -345,7 +356,7 @@ function CallCounts({ everyone }: { everyone: boolean }) {
           </table>
         </div>
       )}
-    </Card>
+    </>
   );
 }
 

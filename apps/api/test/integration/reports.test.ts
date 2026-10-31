@@ -70,15 +70,19 @@ describe("calls made per salesperson", () => {
 
     const mine = expectStatus(await sales.get("/reports/calls"), 200).body;
     expect(mine.periods.today).toBe(today());
+    expect(mine.mine).toMatchObject({ userId: salesId, today: { made: 2, connected: 1 } });
     expect(mine.rows).toEqual([expect.objectContaining({ userId: salesId, name: "Pat Team", today: { made: 2, connected: 1 }, week: { made: 2, connected: 1 }, month: { made: 2, connected: 1 } })]);
 
     // A salesperson sees only their own row, even with no calls; a manager sees everyone who called.
     const theirs = expectStatus(await other.get("/reports/calls"), 200).body;
     expect(theirs.rows).toHaveLength(1);
     expect(theirs.rows[0]).toMatchObject({ today: { made: 0, connected: 0 } });
+    expect(theirs.mine).toEqual(theirs.rows[0]);
     const all = expectStatus(await manager.get("/reports/calls"), 200).body;
     expect(all.rows.map((r: { userId: string }) => r.userId)).toEqual([salesId]);
     expect(all.totals.today).toEqual({ made: 2, connected: 1 });
+    // The manager's own figures are there too, even with no calls.
+    expect(all.mine).toMatchObject({ today: { made: 0, connected: 0 }, month: { made: 0, connected: 0 } });
   });
 
   it("starts each day at midnight Irish time", () => {

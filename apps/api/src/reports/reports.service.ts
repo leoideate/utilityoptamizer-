@@ -231,11 +231,11 @@ export class ReportsService {
     return { expected: get("expected"), confirmed: get("confirmed"), paid: get("paid"), clawedBack: get("clawed_back") };
   }
 
-  /** Commission export for accounting (CSV). */
   /**
    * Outbound calls each person made today, this week (from Monday) and this month, Irish time:
    * click-to-calls, headset calls and calls from desk phones or the RingCentral app (call log).
-   * "Connected" means the customer answered. report.read roles see everyone; others see themselves.
+   * "Connected" means the customer answered. Everyone gets their own figures (`mine`); report.read
+   * roles also get a row for everyone who called.
    */
   async callCounts(actor: Actor, now = new Date()) {
     const day = today(now);
@@ -248,7 +248,7 @@ export class ReportsService {
       where: { direction: "outbound", userId: everyone ? { not: null } : actor.id, startedAt: { gte: earliest } },
       select: { userId: true, startedAt: true, status: true },
     });
-    const users = await this.prisma.user.findMany({ where: { id: { in: [...new Set([...calls.map((c) => c.userId!), ...(everyone ? [] : [actor.id])])] } }, select: { id: true, name: true } });
+    const users = await this.prisma.user.findMany({ where: { id: { in: [...new Set([...calls.map((c) => c.userId!), actor.id])] } }, select: { id: true, name: true } });
     const zero = (): CallCount => ({ made: 0, connected: 0 });
     const rows = new Map(users.map((u) => [u.id, { userId: u.id, name: u.name, today: zero(), week: zero(), month: zero() }]));
     const totals = { today: zero(), week: zero(), month: zero() };
@@ -263,13 +263,17 @@ export class ReportsService {
         }
       }
     }
+    const mine = rows.get(actor.id)!;
     return {
       periods: starts,
-      rows: [...rows.values()].sort((a, b) => b.today.made - a.today.made || b.week.made - a.week.made || b.month.made - a.month.made || a.name.localeCompare(b.name)),
+      mine,
+      // The team table lists people who made calls this month; the viewer appears only if they did too.
+      rows: (everyone ? [...rows.values()].filter((r) => r.month.made > 0) : [mine]).sort((a, b) => b.today.made - a.today.made || b.week.made - a.week.made || b.month.made - a.month.made || a.name.localeCompare(b.name)),
       totals,
     };
   }
 
+  /** Commission export for accounting (CSV). */
   async commissionCsv(actor: Actor, f: ReportFilter): Promise<string> {
     const rows = await this.prisma.commission.findMany({
       where: { opportunity: this.base(actor, f) },
